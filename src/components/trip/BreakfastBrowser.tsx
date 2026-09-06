@@ -86,8 +86,8 @@ export function BreakfastBrowser({
         <strong>Where to eat breakfast?</strong>
         <p>
           {nearBase
-            ? 'Tap a place — details open on the left. Then choose one for your itinerary.'
-            : 'No hotel set — browsing the city center. Tap a place for details on the left.'}
+            ? 'Tap a place to open its page, then add it to your trip.'
+            : 'No hotel set — browsing the city center. Tap a place for full details.'}
         </p>
       </div>
 
@@ -177,9 +177,7 @@ export function BreakfastBrowser({
                   )}
                   {selectedId === place.id && <span className="picked">Selected</span>}
                 </div>
-                <span className="breakfast-card-cta">
-                  {isPreview ? 'Showing details ←' : 'View details ←'}
-                </span>
+                <span className="breakfast-card-cta">View details →</span>
               </div>
             </button>
           );

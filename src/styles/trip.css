@@ -160,77 +160,95 @@
 }
 
 .trip-body--browse {
-  grid-template-columns: 1fr 1fr;
-}
-
-.trip-body--detail {
-  grid-template-columns: 1.05fr 0.95fr;
+  grid-template-columns: 1fr;
 }
 
 .trip-body--browse .list-pane {
-  max-width: none;
-  margin: 0;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.detail-placeholder {
+.place-page {
+  min-height: 100vh;
   display: grid;
-  place-content: center;
-  gap: 0.5rem;
-  padding: 2rem;
-  border-right: 1px solid var(--line);
-  background:
-    radial-gradient(600px 300px at 30% 20%, rgba(42, 157, 143, 0.12), transparent 70%),
-    #f7faf9;
-  text-align: center;
-  color: var(--muted);
-}
-
-.detail-placeholder strong {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  color: #14302c;
-}
-
-.place-detail-pane {
-  border-right: 1px solid var(--line);
-  overflow: auto;
+  grid-template-rows: auto auto 1fr auto;
   background: #fbfcfb;
-  min-height: 420px;
 }
 
-.place-detail-pane-top {
+.place-page-top {
   display: flex;
   justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem;
   border-bottom: 1px solid var(--line);
   background: white;
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 3;
 }
 
-.place-detail-hero {
+.place-page-kicker {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.place-page-gallery {
+  background: #dfe8e6;
+}
+
+.place-page-hero {
   width: 100%;
-  height: 220px;
+  height: min(42vh, 360px);
   object-fit: cover;
   display: block;
   background: #dfe8e6;
 }
 
-.place-detail-body {
-  padding: 1.1rem 1.25rem 1.5rem;
+.place-page-content {
+  padding: 1.35rem 1.35rem 1.5rem;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
 }
 
-.place-detail-body h2 {
-  margin: 0.4rem 0 0.4rem;
+.place-page-content h1 {
+  margin: 0.45rem 0 0.5rem;
   font-family: var(--font-display);
-  font-size: 1.55rem;
+  font-size: clamp(1.7rem, 4vw, 2.35rem);
+  line-height: 1.15;
 }
 
-.place-detail-body > p {
-  margin: 0 0 1rem;
+.place-page-lead {
+  margin: 0 0 1.15rem;
   color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.5;
+}
+
+.place-page-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem calc(5.5rem + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -8px 24px rgba(15, 47, 44, 0.06);
+}
+
+.place-page-actions .btn-primary {
+  min-width: 10rem;
+}
+
+.place-page-status {
+  color: var(--sea);
+  font-weight: 600;
+  font-size: 0.92rem;
 }
 
 .breakfast-card.previewing,

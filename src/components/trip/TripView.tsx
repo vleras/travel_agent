@@ -14,7 +14,7 @@ import type { BreakfastPlace } from '../../types/breakfast';
 import { DayMap } from './DayMap';
 import { ItineraryList } from './ItineraryList';
 import {
-  PlaceDetailPane,
+  PlaceDetailPage,
   type DetailTarget,
 } from './PlaceDetailPane';
 import '../../styles/trip.css';
@@ -42,8 +42,6 @@ export function TripView({
   const [selectedBreakfast, setSelectedBreakfast] =
     useState<BreakfastPlace | null>(null);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
-  const [previewStopKey, setPreviewStopKey] = useState<string | null>(null);
-  const [leftMode, setLeftMode] = useState<'map' | 'detail' | 'empty'>('empty');
   const [chatNotes, setChatNotes] = useState<string[]>(initialChatNotes);
 
   useEffect(() => {
@@ -52,7 +50,6 @@ export function TripView({
 
   useEffect(() => {
     setDetail(null);
-    setPreviewStopKey(null);
   }, [activeDay]);
 
   const day = itinerary[activeDay];
@@ -60,10 +57,6 @@ export function TripView({
 
   const browsingBreakfast =
     breakfastTime !== 'skip' && selectedBreakfast == null;
-
-  const showDetail = detail != null && leftMode === 'detail';
-  const showMap = !browsingBreakfast && !showDetail;
-  const showEmptyBrowse = browsingBreakfast && !showDetail;
 
   function applySchedule(
     start: string,
@@ -97,7 +90,6 @@ export function TripView({
     if (breakfast === 'skip') {
       setSelectedBreakfast(null);
       setDetail(null);
-      setLeftMode('map');
       applySchedule(start, 'skip', null);
       return;
     }
@@ -110,23 +102,19 @@ export function TripView({
     applySchedule(start, normalized, selectedBreakfast);
   }
 
-  function handleBreakfastPreview(place: BreakfastPlace) {
-    setDetail({ kind: 'breakfast', place });
-    setPreviewStopKey(null);
-    setLeftMode('detail');
+  function openPlace(target: DetailTarget) {
+    setDetail(target);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function closeDetail() {
+    setDetail(null);
   }
 
   function handleBreakfastSelect(place: BreakfastPlace) {
     setSelectedBreakfast(place);
     applySchedule(dayStartTime, breakfastTime, place);
-    setDetail({ kind: 'breakfast', place });
-    setLeftMode('detail');
-  }
-
-  function handleStopPreview(stop: ItineraryStop, key: string) {
-    setDetail({ kind: 'stop', stop });
-    setPreviewStopKey(key);
-    setLeftMode('detail');
+    setDetail(null);
   }
 
   async function handleAddPlaceFromChat(placeQuery: string): Promise<string> {
@@ -159,15 +147,82 @@ export function TripView({
         );
       }),
     );
-    setDetail({ kind: 'stop', stop });
-    setLeftMode('detail');
+    openPlace({ kind: 'stop', stop });
     setChatNotes((prev) =>
       prev.includes(`Must visit: ${stop.name}`)
         ? prev
         : [...prev, `Must visit: ${stop.name}`],
     );
 
-    return `Added “${stop.name}” to Day ${activeDay + 1}. Details are on the left — switch days with the tabs anytime.`;
+    return `Added “${stop.name}” to Day ${activeDay + 1}. Opened its details page.`;
+  }
+
+  if (detail) {
+    return (
+      <div className="trip-view">
+        <PlaceDetailPage
+          target={detail}
+          city={input.destination_city}
+          hasHotel={Boolean(input.hotel_address)}
+          dayLabel={`Day ${activeDay + 1}`}
+          isBreakfastSelected={
+            detail.kind === 'breakfast' &&
+            selectedBreakfast?.id === detail.place.id
+          }
+          onBack={closeDetail}
+          onAddToTrip={
+            detail.kind === 'breakfast' ? handleBreakfastSelect : undefined
+          }
+        />
+        <TravelChatBot
+          city={input.destination_city}
+          hasTrip
+          onDietary={(label, breakfastHint) => {
+            setBreakfastFood(breakfastHint);
+            setChatNotes((prev) =>
+              prev.includes(`Diet: ${label}`)
+                ? prev
+                : [...prev, `Diet: ${label}`],
+            );
+            applySchedule(
+              dayStartTime,
+              breakfastTime,
+              selectedBreakfast,
+              breakfastHint,
+            );
+          }}
+          onPreference={(note) => {
+            setChatNotes((prev) =>
+              prev.includes(note) ? prev : [...prev, note],
+            );
+          }}
+          onAddPlace={handleAddPlaceFromChat}
+          onSkipBreakfast={() => {
+            setSelectedBreakfast(null);
+            setDetail(null);
+            applySchedule(dayStartTime, 'skip', null);
+            setChatNotes((prev) =>
+              prev.includes('Skip breakfast')
+                ? prev
+                : [...prev, 'Skip breakfast'],
+            );
+            return 'Skipped breakfast for now.';
+          }}
+          onPlanDay={(dayNum) => {
+            const idx = Math.max(0, Math.min(itinerary.length, dayNum) - 1);
+            setActiveDay(idx);
+            setDetail(null);
+            return `Opened Day ${idx + 1}.`;
+          }}
+          onMoveStop={() =>
+            'Go back to the trip list first, then tell me which stop to move.'
+          }
+          onShowOptions={() =>
+            'Go back to the trip list to browse day’s options, or ask to add a place.'
+          }
+        />
+      </div>
+    );
   }
 
   return (
@@ -219,35 +274,9 @@ export function TripView({
       </div>
 
       <div
-        className={`trip-body ${showEmptyBrowse ? 'trip-body--browse' : ''} ${showDetail ? 'trip-body--detail' : ''}`}
+        className={`trip-body ${browsingBreakfast ? 'trip-body--browse' : ''}`}
       >
-        {showDetail && detail && (
-          <PlaceDetailPane
-            target={detail}
-            city={input.destination_city}
-            hasHotel={Boolean(input.hotel_address)}
-            isBreakfastSelected={
-              detail.kind === 'breakfast' &&
-              selectedBreakfast?.id === detail.place.id
-            }
-            onClose={() => {
-              setDetail(null);
-              setPreviewStopKey(null);
-              setLeftMode(browsingBreakfast ? 'empty' : 'map');
-            }}
-            onChooseBreakfast={
-              detail.kind === 'breakfast' ? handleBreakfastSelect : undefined
-            }
-            showMapButton={!browsingBreakfast}
-            onShowMap={() => {
-              setDetail(null);
-              setPreviewStopKey(null);
-              setLeftMode('map');
-            }}
-          />
-        )}
-
-        {showMap && (
+        {!browsingBreakfast && (
           <div className="map-pane">
             <DayMap
               key={`${day.date}-${day.stops.map((s) => `${s.name}-${s.time_slot}`).join('|')}`}
@@ -255,13 +284,6 @@ export function TripView({
               hotelLat={output.metadata.hotel_lat}
               hotelLon={output.metadata.hotel_lon}
             />
-          </div>
-        )}
-
-        {showEmptyBrowse && (
-          <div className="detail-placeholder">
-            <strong>Place details</strong>
-            <p>Click a breakfast spot on the right to preview it here.</p>
           </div>
         )}
 
@@ -277,14 +299,14 @@ export function TripView({
             breakfastTime={breakfastTime}
             breakfastFood={breakfastFood}
             selectedBreakfast={selectedBreakfast}
-            previewBreakfastId={
-              detail?.kind === 'breakfast' ? detail.place.id : null
-            }
-            previewStopKey={previewStopKey}
+            previewBreakfastId={null}
+            previewStopKey={null}
             onScheduleChange={handleScheduleChange}
             onBreakfastFoodChange={setBreakfastFood}
-            onBreakfastPreview={handleBreakfastPreview}
-            onStopPreview={handleStopPreview}
+            onBreakfastPreview={(place) =>
+              openPlace({ kind: 'breakfast', place })
+            }
+            onStopPreview={(stop) => openPlace({ kind: 'stop', stop })}
           />
         </div>
       </div>
@@ -311,25 +333,23 @@ export function TripView({
         onSkipBreakfast={() => {
           setSelectedBreakfast(null);
           setDetail(null);
-          setLeftMode('map');
           applySchedule(dayStartTime, 'skip', null);
           setChatNotes((prev) =>
             prev.includes('Skip breakfast') ? prev : [...prev, 'Skip breakfast'],
           );
-          return 'Skipped breakfast for now. The trip map is back — say “plan day 1” when you’re ready to focus a day.';
+          return 'Skipped breakfast for now. Say “plan day 1” when you’re ready to focus a day.';
         }}
         onPlanDay={(dayNum) => {
           const idx = Math.max(0, Math.min(itinerary.length, dayNum) - 1);
           setActiveDay(idx);
           setDetail(null);
-          setLeftMode(breakfastTime !== 'skip' && !selectedBreakfast ? 'empty' : 'map');
           const stops = itinerary[idx]?.stops ?? [];
           const names = stops
             .filter((s) => !s.is_meal)
             .map((s) => s.name)
             .slice(0, 6);
           return names.length
-            ? `Focusing Day ${idx + 1}. Current stops: ${names.join(', ')}. Tap any stop for details/photos, or tell me to move one (“move ${names[0]} to day ${Math.min(idx + 2, itinerary.length)}”).`
+            ? `Focusing Day ${idx + 1}. Current stops: ${names.join(', ')}. Tap any stop for its page, or tell me to move one.`
             : `Opened Day ${idx + 1}. It’s light so far — ask to add a place or show cafés/parks/nightlife.`;
         }}
         onMoveStop={(stopName, toDay) => {
@@ -378,8 +398,7 @@ export function TripView({
           });
 
           setActiveDay(targetIdx);
-          setDetail({ kind: 'stop', stop: moved });
-          setLeftMode('detail');
+          openPlace({ kind: 'stop', stop: moved });
           return `Moved “${moved.name}” to Day ${toDay}.`;
         }}
         onShowOptions={(category) => {
@@ -400,17 +419,18 @@ export function TripView({
           const matches = day.stops.filter((s) => {
             if (s.is_meal) return false;
             if (!mapped) return true;
-            return s.category.toLowerCase().includes(mapped.toLowerCase()) ||
-              s.name.toLowerCase().includes(cat);
+            return (
+              s.category.toLowerCase().includes(mapped.toLowerCase()) ||
+              s.name.toLowerCase().includes(cat)
+            );
           });
 
           if (!matches.length) {
             return `No ${category} stops on Day ${activeDay + 1} yet. Try “I want to visit …” to add one, or switch days.`;
           }
 
-          setDetail({ kind: 'stop', stop: matches[0] });
-          setLeftMode('detail');
-          return `Here are ${category} options on Day ${activeDay + 1}: ${matches.map((m) => m.name).join(', ')}. I opened “${matches[0].name}” on the left — tap others in the list for more photos/details.`;
+          openPlace({ kind: 'stop', stop: matches[0] });
+          return `Here are ${category} options on Day ${activeDay + 1}: ${matches.map((m) => m.name).join(', ')}. Opened “${matches[0].name}” — tap Back for the list.`;
         }}
       />
     </div>

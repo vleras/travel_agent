@@ -9,15 +9,14 @@ type DetailTarget =
   | { kind: 'breakfast'; place: BreakfastPlace }
   | { kind: 'stop'; stop: ItineraryStop };
 
-interface PlaceDetailPaneProps {
+interface PlaceDetailPageProps {
   target: DetailTarget;
   city: string;
   hasHotel: boolean;
+  dayLabel?: string;
   isBreakfastSelected?: boolean;
-  onClose: () => void;
-  onChooseBreakfast?: (place: BreakfastPlace) => void;
-  onShowMap?: () => void;
-  showMapButton?: boolean;
+  onBack: () => void;
+  onAddToTrip?: (place: BreakfastPlace) => void;
 }
 
 function distanceLabel(km: number | undefined, hasHotel: boolean): string {
@@ -68,7 +67,7 @@ function PhotoGallery({
   if (!photos.length) {
     return (
       <PlaceImage
-        className="place-detail-hero"
+        className="place-page-hero"
         name={name}
         city={city}
         category={category}
@@ -83,9 +82,9 @@ function PhotoGallery({
   }
 
   return (
-    <div className="place-photo-gallery">
+    <div className="place-page-gallery">
       <img
-        className="place-detail-hero"
+        className="place-page-hero"
         src={photos[active]}
         alt={`${name} photo ${active + 1}`}
         referrerPolicy="no-referrer"
@@ -111,32 +110,28 @@ function PhotoGallery({
   );
 }
 
-export function PlaceDetailPane({
+/** Full-page place details (replaces the old split pane). */
+export function PlaceDetailPage({
   target,
   city,
   hasHotel,
+  dayLabel,
   isBreakfastSelected,
-  onClose,
-  onChooseBreakfast,
-  onShowMap,
-  showMapButton,
-}: PlaceDetailPaneProps) {
+  onBack,
+  onAddToTrip,
+}: PlaceDetailPageProps) {
   if (target.kind === 'breakfast') {
     const place = target.place;
     const mapsLink = `https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lon}#map=18/${place.lat}/${place.lon}`;
 
     return (
-      <aside className="place-detail-pane">
-        <div className="place-detail-pane-top">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            ← Back to list
+      <div className="place-page">
+        <header className="place-page-top">
+          <button type="button" className="btn btn-ghost" onClick={onBack}>
+            ← Back
           </button>
-          {showMapButton && onShowMap && (
-            <button type="button" className="btn btn-secondary" onClick={onShowMap}>
-              Trip map
-            </button>
-          )}
-        </div>
+          <span className="place-page-kicker">{city}</span>
+        </header>
 
         <PhotoGallery
           name={place.name}
@@ -150,10 +145,10 @@ export function PlaceDetailPane({
           commonsTag={place.commons_tag}
         />
 
-        <div className="place-detail-body">
+        <div className="place-page-content">
           <span className="category-pill">{place.categoryLabel}</span>
-          <h2>{place.name}</h2>
-          <p>{place.description}</p>
+          <h1>{place.name}</h1>
+          <p className="place-page-lead">{place.description}</p>
 
           <dl className="breakfast-detail-facts">
             <div>
@@ -215,19 +210,23 @@ export function PlaceDetailPane({
               </a>
             )}
           </div>
+        </div>
 
-          {onChooseBreakfast && (
+        <div className="place-page-actions">
+          <button type="button" className="btn btn-ghost" onClick={onBack}>
+            Back
+          </button>
+          {onAddToTrip && (
             <button
               type="button"
               className="btn btn-primary"
-              style={{ width: '100%' }}
-              onClick={() => onChooseBreakfast(place)}
+              onClick={() => onAddToTrip(place)}
             >
-              {isBreakfastSelected ? 'Selected ✓' : 'Choose this place'}
+              {isBreakfastSelected ? 'Added to trip ✓' : 'Add to trip'}
             </button>
           )}
         </div>
-      </aside>
+      </div>
     );
   }
 
@@ -235,12 +234,15 @@ export function PlaceDetailPane({
   const mapsLink = `https://www.openstreetmap.org/?mlat=${stop.lat}&mlon=${stop.lon}#map=18/${stop.lat}/${stop.lon}`;
 
   return (
-    <aside className="place-detail-pane">
-      <div className="place-detail-pane-top">
-        <button type="button" className="btn btn-ghost" onClick={onClose}>
-          ← Back to map
+    <div className="place-page">
+      <header className="place-page-top">
+        <button type="button" className="btn btn-ghost" onClick={onBack}>
+          ← Back
         </button>
-      </div>
+        <span className="place-page-kicker">
+          {dayLabel ? `${dayLabel} · ${city}` : city}
+        </span>
+      </header>
 
       <PhotoGallery
         name={stop.name}
@@ -251,11 +253,11 @@ export function PlaceDetailPane({
         imageUrl={stop.image_url}
       />
 
-      <div className="place-detail-body">
+      <div className="place-page-content">
         <span className="category-pill">{stop.category}</span>
         {stop.is_meal && <span className="category-pill match-pill">Breakfast</span>}
-        <h2>{stop.name}</h2>
-        <p>{stop.description}</p>
+        <h1>{stop.name}</h1>
+        <p className="place-page-lead">{stop.description}</p>
 
         <dl className="breakfast-detail-facts">
           <div>
@@ -287,7 +289,14 @@ export function PlaceDetailPane({
           </a>
         </div>
       </div>
-    </aside>
+
+      <div className="place-page-actions">
+        <button type="button" className="btn btn-ghost" onClick={onBack}>
+          Back
+        </button>
+        <span className="place-page-status">On your itinerary</span>
+      </div>
+    </div>
   );
 }
 

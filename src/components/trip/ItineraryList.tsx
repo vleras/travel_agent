@@ -177,9 +177,7 @@ export function ItineraryList({
                 <span>Next: {stop.distance_to_next_km} km</span>
               )}
             </div>
-            <span className="breakfast-card-cta">
-              {isPreview ? 'Showing details ←' : 'View details ←'}
-            </span>
+            <span className="breakfast-card-cta">View details →</span>
           </button>
         );
       })}
