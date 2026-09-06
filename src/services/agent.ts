@@ -1,0 +1,616 @@
+import { placeImageUrl } from '../data/scheduleOptions';
+import { minutesToTime, parseTimeToMinutes } from '../data/scheduleOptions';
+import { addDays, toISODate } from './geo';
+import {
+  haversineKm,
+  maxAcceptableDistanceKm,
+  paceStopsPerDay,
+} from './geo';
+import { generateAttractions } from './gemini';
+import { geocode } from './nominatim';
+import { routeDistance } from './osrm';
+import type {
+  AgentOutput,
+  AgentProgress,
+  Attraction,
+  BreakfastOption,
+  DayItinerary,
+  ItineraryStop,
+  Pace,
+  Revision,
+  TripInput,
+  TripLocation,
+} from '../types';
+import type { BreakfastPlace } from '../types/breakfast';
+
+type ProgressCb = (progress: AgentProgress) => void;
+
+interface ScoredAttraction extends Attraction {
+  lat: number;
+  lon: number;
+}
+
+function average(nums: number[]): number {
+  if (!nums.length) return 0;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+function dayTotalDistance(
+  stops: { lat: number; lon: number }[],
+  baseLat: number,
+  baseLon: number,
+): number {
+  if (!stops.length) return 0;
+  let total = haversineKm(baseLat, baseLon, stops[0].lat, stops[0].lon);
+  for (let i = 0; i < stops.length - 1; i++) {
+    total += haversineKm(
+      stops[i].lat,
+      stops[i].lon,
+      stops[i + 1].lat,
+      stops[i + 1].lon,
+    );
+  }
+  total += haversineKm(
+    stops[stops.length - 1].lat,
+    stops[stops.length - 1].lon,
+    baseLat,
+    baseLon,
+  );
+  return total;
+}
+
+function compactnessScore(
+  stops: { lat: number; lon: number }[],
+  baseLat: number,
+  baseLon: number,
+  pace: Pace,
+): number {
+  const maxDist = maxAcceptableDistanceKm(pace);
+  const total = dayTotalDistance(stops, baseLat, baseLon);
+  return Math.max(0, Math.min(100, Math.round(100 - (total / maxDist) * 100)));
+}
+
+function toItineraryStop(
+  stop: ScoredAttraction & { is_meal?: boolean },
+  time_slot: string,
+  next?: ScoredAttraction,
+  city?: string,
+): ItineraryStop {
+  return {
+    name: stop.name,
+    category: stop.category,
+    description: stop.description,
+    lat: stop.lat,
+    lon: stop.lon,
+    duration_min: stop.typical_visit_duration_minutes,
+    time_slot,
+    distance_to_next_km: next
+      ? Math.round(haversineKm(stop.lat, stop.lon, next.lat, next.lon) * 10) / 10
+      : undefined,
+    image_url: stop.image_url ?? placeImageUrl(stop.name, city),
+    is_meal: stop.is_meal,
+  };
+}
+
+function makeBreakfastStop(
+  baseLat: number,
+  baseLon: number,
+  city: string,
+  selected?: BreakfastPlace | null,
+  foodWanted?: string | null,
+): ScoredAttraction & { is_meal: boolean } {
+  if (selected) {
+    return {
+      name: selected.name,
+      category: 'Food',
+      description: foodWanted
+        ? `${selected.description} · Looking for: ${foodWanted}`
+        : selected.description,
+      typical_visit_duration_minutes: 45,
+      lat: selected.lat,
+      lon: selected.lon,
+      image_url: placeImageUrl(selected.name, city),
+      is_meal: true,
+    };
+  }
+  return {
+    name: 'Breakfast spot',
+    category: 'Food',
+    description: foodWanted
+      ? `Looking for “${foodWanted}” near your base in ${city} — pick a place from the list.`
+      : `Pick a bakery, café, or coffee shop near your base in ${city}.`,
+    typical_visit_duration_minutes: 45,
+    lat: baseLat,
+    lon: baseLon,
+    image_url: placeImageUrl('breakfast cafe', city),
+    is_meal: true,
+  };
+}
+
+export function assignTimeSlots(
+  attractions: ScoredAttraction[],
+  options: {
+    dayStartTime: string;
+    breakfastTime: BreakfastOption;
+    baseLat: number;
+    baseLon: number;
+    city: string;
+    breakfastPlace?: BreakfastPlace | null;
+    breakfastFood?: string | null;
+  },
+): ItineraryStop[] {
+  const {
+    dayStartTime,
+    breakfastTime,
+    baseLat,
+    baseLon,
+    city,
+    breakfastPlace,
+    breakfastFood,
+  } = options;
+  const dayStartMins = parseTimeToMinutes(dayStartTime);
+  const ordered: (ScoredAttraction & { is_meal?: boolean })[] = [];
+
+  if (breakfastTime !== 'skip') {
+    ordered.push(
+      makeBreakfastStop(baseLat, baseLon, city, breakfastPlace, breakfastFood),
+    );
+  }
+  ordered.push(...attractions);
+
+  let minutes =
+    breakfastTime !== 'skip'
+      ? parseTimeToMinutes(breakfastTime)
+      : dayStartMins;
+
+  return ordered.map((stop, i) => {
+    if (i === 1 && ordered[0]?.is_meal) {
+      const breakfastEnd =
+        parseTimeToMinutes(breakfastTime) +
+        ordered[0].typical_visit_duration_minutes;
+      minutes = Math.max(dayStartMins, breakfastEnd);
+    }
+
+    const time_slot = minutesToTime(minutes);
+    const next = ordered[i + 1];
+    const result = toItineraryStop(stop, time_slot, next, city);
+    minutes += stop.typical_visit_duration_minutes + 30;
+    return result;
+  });
+}
+
+/** Re-slot an existing day's stops after the user changes start/breakfast times. */
+export function rescheduleDayStops(
+  day: DayItinerary,
+  dayStartTime: string,
+  breakfastTime: BreakfastOption,
+  baseLat: number,
+  baseLon: number,
+  city: string,
+  breakfastPlace?: BreakfastPlace | null,
+  breakfastFood?: string | null,
+): DayItinerary {
+  const nonMeals = day.stops.filter((s) => !s.is_meal);
+  const asAttractions: ScoredAttraction[] = nonMeals.map((s) => ({
+    name: s.name,
+    category: s.category,
+    description: s.description,
+    typical_visit_duration_minutes: s.duration_min,
+    lat: s.lat,
+    lon: s.lon,
+    image_url: s.image_url,
+  }));
+  const stops = assignTimeSlots(asAttractions, {
+    dayStartTime,
+    breakfastTime,
+    baseLat,
+    baseLon,
+    city,
+    breakfastPlace,
+    breakfastFood,
+  });
+  return { ...day, stops };
+}
+
+function buildDay(
+  dayNumber: number,
+  date: string,
+  attractions: ScoredAttraction[],
+  baseLat: number,
+  baseLon: number,
+  pace: Pace,
+  schedule: {
+    dayStartTime: string;
+    breakfastTime: BreakfastOption;
+    breakfastFood?: string | null;
+    city: string;
+  },
+): DayItinerary {
+  const stops = assignTimeSlots(attractions, {
+    dayStartTime: schedule.dayStartTime,
+    breakfastTime: schedule.breakfastTime,
+    baseLat,
+    baseLon,
+    city: schedule.city,
+    breakfastFood: schedule.breakfastFood,
+  });
+  const scoredForDistance = stops.filter((s) => !s.is_meal);
+  const total_distance_km =
+    Math.round(
+      dayTotalDistance(scoredForDistance, baseLat, baseLon) * 10,
+    ) / 10;
+  const firstSight = scoredForDistance[0];
+  const hotel_distance_km = firstSight
+    ? Math.round(
+        haversineKm(baseLat, baseLon, firstSight.lat, firstSight.lon) * 10,
+      ) / 10
+    : 0;
+  return {
+    date,
+    day_number: dayNumber,
+    stops,
+    total_distance_km,
+    compactness_score: compactnessScore(
+      scoredForDistance,
+      baseLat,
+      baseLon,
+      pace,
+    ),
+    hotel_distance_km,
+  };
+}
+
+/** Greedy nearest-to-base clustering into day buckets. */
+function clusterByDay(
+  attractions: ScoredAttraction[],
+  days: number,
+  pace: Pace,
+  baseLat: number,
+  baseLon: number,
+): ScoredAttraction[][] {
+  const perDay = paceStopsPerDay(pace);
+  const remaining = [...attractions];
+  const clusters: ScoredAttraction[][] = [];
+
+  for (let d = 0; d < days; d++) {
+    const cluster: ScoredAttraction[] = [];
+    let anchorLat = baseLat;
+    let anchorLon = baseLon;
+
+    while (cluster.length < perDay && remaining.length) {
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < remaining.length; i++) {
+        const dist = haversineKm(
+          anchorLat,
+          anchorLon,
+          remaining[i].lat,
+          remaining[i].lon,
+        );
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = i;
+        }
+      }
+      const [picked] = remaining.splice(bestIdx, 1);
+      cluster.push(picked);
+      anchorLat = picked.lat;
+      anchorLon = picked.lon;
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
+function reviseClusters(
+  clusters: ScoredAttraction[][],
+  baseLat: number,
+  baseLon: number,
+  pace: Pace,
+): { clusters: ScoredAttraction[][]; revisions: Revision[] } {
+  const revisions: Revision[] = [];
+  const next = clusters.map((c) => [...c]);
+  const threshold = 70;
+
+  for (let dayIdx = 0; dayIdx < next.length; dayIdx++) {
+    const score = compactnessScore(next[dayIdx], baseLat, baseLon, pace);
+    if (score >= threshold || next[dayIdx].length < 2) continue;
+
+    // Find farthest stop from day centroid
+    const day = next[dayIdx];
+    const centroidLat = day.reduce((s, a) => s + a.lat, 0) / day.length;
+    const centroidLon = day.reduce((s, a) => s + a.lon, 0) / day.length;
+
+    let farthestIdx = 0;
+    let farthestDist = -1;
+    day.forEach((stop, i) => {
+      const dist = haversineKm(centroidLat, centroidLon, stop.lat, stop.lon);
+      if (dist > farthestDist) {
+        farthestDist = dist;
+        farthestIdx = i;
+      }
+    });
+
+    const candidate = day[farthestIdx];
+    let bestDay = -1;
+    let bestImprovement = 0;
+
+    for (let other = 0; other < next.length; other++) {
+      if (other === dayIdx) continue;
+      if (next[other].length >= paceStopsPerDay(pace) + 1) continue;
+
+      const trialFrom = day.filter((_, i) => i !== farthestIdx);
+      const trialTo = [...next[other], candidate];
+      const before =
+        compactnessScore(day, baseLat, baseLon, pace) +
+        compactnessScore(next[other], baseLat, baseLon, pace);
+      const after =
+        compactnessScore(trialFrom, baseLat, baseLon, pace) +
+        compactnessScore(trialTo, baseLat, baseLon, pace);
+      const improvement = after - before;
+      if (improvement > bestImprovement) {
+        bestImprovement = improvement;
+        bestDay = other;
+      }
+    }
+
+    if (bestDay >= 0 && bestImprovement > 0) {
+      next[dayIdx] = day.filter((_, i) => i !== farthestIdx);
+      next[bestDay].push(candidate);
+      revisions.push({
+        day_from: dayIdx + 1,
+        day_to: bestDay + 1,
+        stop_name: candidate.name,
+        reason: 'too far spread from day cluster',
+      });
+    }
+  }
+
+  return { clusters: next, revisions };
+}
+
+async function ensureCoords(
+  attractions: Attraction[],
+  city: string,
+  onProgress: ProgressCb,
+): Promise<{
+  scored: ScoredAttraction[];
+  nominatimMs: number;
+  apiCalls: number;
+}> {
+  const scored: ScoredAttraction[] = [];
+  let nominatimMs = 0;
+  let apiCalls = 0;
+
+  for (const attraction of attractions) {
+    if (attraction.lat != null && attraction.lon != null) {
+      scored.push({
+        ...attraction,
+        lat: attraction.lat,
+        lon: attraction.lon,
+      });
+      continue;
+    }
+    onProgress({
+      step: 'act',
+      message: 'Geocoding attractions',
+      detail: attraction.name,
+    });
+    const { result, latencyMs } = await geocode(
+      `${attraction.name}, ${city}`,
+    );
+    nominatimMs += latencyMs;
+    apiCalls += 1;
+    if (result) {
+      scored.push({ ...attraction, lat: result.lat, lon: result.lon });
+    }
+  }
+  return { scored, nominatimMs, apiCalls };
+}
+
+export async function runTravelAgent(
+  input: TripInput,
+  onProgress: ProgressCb = () => undefined,
+): Promise<AgentOutput> {
+  const started = performance.now();
+  let apiCalls = 0;
+  let nominatimMs = 0;
+  let osrmMs = 0;
+  let geminiMs = 0;
+
+  // —— REASON ——
+  onProgress({
+    step: 'reason',
+    message: 'Understanding your trip',
+    detail: `Geocoding ${input.destination_city} and base location…`,
+  });
+
+  const destGeo = await geocode(input.destination_city);
+  nominatimMs += destGeo.latencyMs;
+  apiCalls += 1;
+
+  if (!destGeo.result) {
+    throw new Error(`Could not geocode destination: ${input.destination_city}`);
+  }
+
+  let hotelLat: number | null = null;
+  let hotelLon: number | null = null;
+  let hotelName: string | null = null;
+
+  if (input.hotel_address) {
+    const hotelGeo = await geocode(
+      `${input.hotel_address}, ${input.destination_city}`,
+    );
+    nominatimMs += hotelGeo.latencyMs;
+    apiCalls += 1;
+    if (hotelGeo.result) {
+      hotelLat = hotelGeo.result.lat;
+      hotelLon = hotelGeo.result.lon;
+      hotelName = hotelGeo.result.display_name;
+    }
+  }
+
+  const location: TripLocation = {
+    destination_lat: destGeo.result.lat,
+    destination_lon: destGeo.result.lon,
+    destination_name: destGeo.result.display_name,
+    hotel_lat: hotelLat,
+    hotel_lon: hotelLon,
+    hotel_name: hotelName,
+    base_lat: hotelLat ?? destGeo.result.lat,
+    base_lon: hotelLon ?? destGeo.result.lon,
+  };
+
+  // —— ACT ——
+  onProgress({
+    step: 'act',
+    message: 'Generating attractions',
+    detail: 'Asking the travel model for recommendations…',
+  });
+
+  const { attractions, latencyMs, source } = await generateAttractions(
+    input.destination_city,
+    input.interests,
+    input.custom_preferences,
+  );
+  geminiMs += latencyMs;
+  if (source === 'gemini') apiCalls += 1;
+
+  onProgress({
+    step: 'act',
+    message: 'Locating stops on the map',
+    detail:
+      source === 'fallback'
+        ? 'Using curated attractions (no Gemini key or API fallback)'
+        : `Geocoding ${attractions.length} attractions…`,
+  });
+
+  const { scored, nominatimMs: geoMs, apiCalls: geoCalls } = await ensureCoords(
+    attractions,
+    input.destination_city,
+    onProgress,
+  );
+  nominatimMs += geoMs;
+  apiCalls += geoCalls;
+
+  // Sample OSRM for a couple of pairs (thesis metrics) without blocking clustering
+  if (scored.length >= 2) {
+    const sample = await routeDistance(
+      scored[0].lon,
+      scored[0].lat,
+      scored[1].lon,
+      scored[1].lat,
+    );
+    osrmMs += sample.latencyMs;
+    apiCalls += 1;
+  }
+
+  // —— OBSERVE ——
+  onProgress({
+    step: 'observe',
+    message: 'Clustering by day & scoring compactness',
+    detail: `Building ${input.trip_length_days}-day clusters around your base…`,
+  });
+
+  const clusters = clusterByDay(
+    scored,
+    input.trip_length_days,
+    input.pace,
+    location.base_lat,
+    location.base_lon,
+  );
+
+  const startDate = new Date(input.start_date + 'T12:00:00');
+  const schedule = {
+    dayStartTime: input.day_start_time,
+    breakfastTime: input.breakfast_time,
+    breakfastFood: input.breakfast_food,
+    city: input.destination_city,
+  };
+  const beforeDays = clusters.map((c, i) =>
+    buildDay(
+      i + 1,
+      toISODate(addDays(startDate, i)),
+      c,
+      location.base_lat,
+      location.base_lon,
+      input.pace,
+      schedule,
+    ),
+  );
+  const compactnessBefore = average(
+    beforeDays.map((d) => d.compactness_score),
+  );
+
+  // —— REVISE ——
+  onProgress({
+    step: 'revise',
+    message: 'Self-correcting weak days',
+    detail: 'Moving outlier stops if compactness < 70…',
+  });
+
+  const { clusters: revised, revisions } = reviseClusters(
+    clusters,
+    location.base_lat,
+    location.base_lon,
+    input.pace,
+  );
+
+  const itinerary = revised.map((c, i) =>
+    buildDay(
+      i + 1,
+      toISODate(addDays(startDate, i)),
+      c,
+      location.base_lat,
+      location.base_lon,
+      input.pace,
+      schedule,
+    ),
+  );
+
+  const compactnessAfter = average(itinerary.map((d) => d.compactness_score));
+  const totalTripDistance =
+    Math.round(
+      itinerary.reduce((s, d) => s + d.total_distance_km, 0) * 10,
+    ) / 10;
+  const processingMs = Math.round(performance.now() - started);
+
+  const metrics = {
+    agent_processing_time_ms: processingMs,
+    compactness_before_revision: Math.round(compactnessBefore * 10) / 10,
+    compactness_after_revision: Math.round(compactnessAfter * 10) / 10,
+    improvement_delta:
+      Math.round((compactnessAfter - compactnessBefore) * 10) / 10,
+    revision_count: revisions.length,
+    api_calls_total: apiCalls,
+    api_call_latency: {
+      nominatim_ms: nominatimMs,
+      osrm_ms: osrmMs,
+      gemini_ms: geminiMs,
+    },
+  };
+
+  console.log('[TravelAgent metrics]', metrics);
+  console.log('[TravelAgent revisions]', revisions);
+
+  onProgress({
+    step: 'done',
+    message: 'Itinerary ready',
+    detail: `Average compactness ${metrics.compactness_after_revision}/100 · ${revisions.length} revision(s)`,
+  });
+
+  return {
+    itinerary,
+    revisions,
+    metadata: {
+      destination: input.destination_city,
+      hotel_lat: location.base_lat,
+      hotel_lon: location.base_lon,
+      total_trip_distance_km: totalTripDistance,
+      average_compactness: Math.round(compactnessAfter * 10) / 10,
+      agent_revision_count: revisions.length,
+      agent_processing_time_ms: processingMs,
+    },
+    metrics,
+  };
+}
