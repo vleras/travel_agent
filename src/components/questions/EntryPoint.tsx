@@ -1,3 +1,4 @@
+import landingHero from '../../assets/landing-hero.jpg';
 import '../../styles/entry.css';
 
 interface EntryPointProps {
@@ -16,7 +17,11 @@ export function EntryPoint({
         <span>AI itinerary planner</span>
       </nav>
       <section className="entry-hero">
-        <div className="entry-hero-media" aria-hidden />
+        <div
+          className="entry-hero-media"
+          style={{ ['--hero-image' as string]: `url(${landingHero})` }}
+          aria-hidden
+        />
         <div className="entry-copy">
           <div className="brand-mark">Travel Agent</div>
           <h1>Do you have a destination in mind, or would you like some suggestions?</h1>

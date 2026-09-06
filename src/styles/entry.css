@@ -5,21 +5,33 @@
 }
 
 .entry-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.25rem 5vw;
+  padding: 1.35rem 5vw;
+  color: white;
+}
+
+.entry-nav .brand-mark {
+  color: white;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.25);
 }
 
 .entry-nav span {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 0.9rem;
+  letter-spacing: 0.02em;
 }
 
 .entry-hero {
   display: grid;
   place-items: end stretch;
-  min-height: calc(100vh - 72px);
+  min-height: 100vh;
   padding: 0;
   position: relative;
   overflow: hidden;
@@ -29,17 +41,35 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(15, 47, 44, 0.15) 0%, rgba(15, 47, 44, 0.72) 70%, rgba(15, 47, 44, 0.88) 100%),
-    url('https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1600&q=80') center/cover no-repeat;
-  animation: drift 18s ease-in-out infinite alternate;
+    linear-gradient(
+      105deg,
+      rgba(10, 28, 32, 0.72) 0%,
+      rgba(10, 28, 32, 0.45) 42%,
+      rgba(10, 28, 32, 0.2) 68%,
+      rgba(10, 28, 32, 0.55) 100%
+    ),
+    linear-gradient(180deg, rgba(10, 28, 32, 0.2) 0%, rgba(10, 28, 32, 0.75) 100%),
+    var(--hero-image) center/cover no-repeat;
+  animation: drift 22s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+.entry-hero-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 70% 35%, rgba(255, 196, 120, 0.18), transparent 55%),
+    radial-gradient(ellipse 40% 30% at 20% 80%, rgba(42, 157, 143, 0.12), transparent 60%);
+  pointer-events: none;
 }
 
 @keyframes drift {
   from {
-    transform: scale(1.02);
+    transform: scale(1.02) translate3d(0, 0, 0);
   }
   to {
-    transform: scale(1.08);
+    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
   }
 }
 
@@ -47,15 +77,15 @@
   position: relative;
   z-index: 1;
   color: white;
-  padding: 8vh 6vw 10vh;
-  max-width: 760px;
-  animation: rise 700ms ease both;
+  padding: 10vh 6vw 12vh;
+  max-width: 780px;
+  animation: rise 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(22px);
   }
   to {
     opacity: 1;
@@ -64,24 +94,28 @@
 }
 
 .entry-copy .brand-mark {
-  font-size: clamp(2.8rem, 7vw, 5rem);
-  line-height: 0.95;
-  margin-bottom: 1rem;
+  font-size: clamp(3rem, 8vw, 5.4rem);
+  line-height: 0.92;
+  margin-bottom: 1.1rem;
+  color: white;
+  text-shadow: 0 8px 40px rgba(0, 0, 0, 0.35);
 }
 
 .entry-copy h1 {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: clamp(1.4rem, 3vw, 2rem);
-  margin: 0 0 0.75rem;
-  max-width: 18ch;
+  font-size: clamp(1.35rem, 2.8vw, 1.95rem);
+  margin: 0 0 0.85rem;
+  max-width: 20ch;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.3);
 }
 
 .entry-copy p {
-  margin: 0 0 1.75rem;
-  color: rgba(255, 255, 255, 0.82);
-  max-width: 36ch;
+  margin: 0 0 1.85rem;
+  color: rgba(255, 255, 255, 0.86);
+  max-width: 38ch;
   font-size: 1.05rem;
+  line-height: 1.55;
 }
 
 .entry-actions {
@@ -93,15 +127,30 @@
 .entry-actions .btn-primary {
   background: white;
   color: var(--bg-deep);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.entry-actions .btn-primary:hover {
+  background: #f3f7f6;
 }
 
 .entry-actions .btn-ghost {
   color: white;
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(6px);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.entry-actions .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 @media (max-width: 640px) {
   .entry-copy {
-    padding: 6vh 5vw 8vh;
+    padding: 8vh 5vw 9vh;
+  }
+
+  .entry-nav span {
+    display: none;
   }
 }

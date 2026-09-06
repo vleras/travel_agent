@@ -35,7 +35,7 @@ export function TravelChatBot({
   onMoveStop,
   onShowOptions,
 }: TravelChatBotProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -44,21 +44,25 @@ export function TravelChatBot({
       role: 'assistant',
       text: hasTrip
         ? `Direct the plan anytime — skip breakfast, plan a day, browse cafés/parks/nightlife, or move a stop between days.`
-        : 'I’m always here under the screen. Share diet prefs or must-visit places before or during planning.',
+        : 'Share diet prefs or must-visit places before or during planning.',
     },
   ]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const suggestions = hasTrip ? SUGGESTIONS_TRIP : SUGGESTIONS_PRE;
 
   useEffect(() => {
-    if (expanded) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, expanded]);
+    if (open) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      inputRef.current?.focus();
+    }
+  }, [messages, open]);
 
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
 
-    setExpanded(true);
+    setOpen(true);
     setMessages((prev) => [
       ...prev,
       { id: `u-${Date.now()}`, role: 'user', text: trimmed },
@@ -87,13 +91,18 @@ export function TravelChatBot({
   }
 
   return (
-    <div className={`chat-dock ${expanded ? 'chat-dock--open' : ''}`}>
-      {expanded && (
-        <div className="chat-dock-transcript">
-          <div className="chat-dock-transcript-head">
+    <div className={`chat-fab-wrap ${open ? 'chat-fab-wrap--open' : ''}`}>
+      {open && (
+        <div className="chat-panel" role="dialog" aria-label="Travel assistant">
+          <div className="chat-panel-head">
             <strong>Travel assistant</strong>
-            <button type="button" className="btn btn-ghost" onClick={() => setExpanded(false)}>
-              Minimize
+            <button
+              type="button"
+              className="chat-panel-close"
+              aria-label="Close chat"
+              onClick={() => setOpen(false)}
+            >
+              ×
             </button>
           </div>
           <div className="chatbot-messages">
@@ -112,54 +121,67 @@ export function TravelChatBot({
             )}
             <div ref={bottomRef} />
           </div>
+          <div className="chat-panel-suggestions">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="chip"
+                disabled={busy}
+                onClick={() => void send(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <form
+            className="chat-panel-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void send(input);
+            }}
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              placeholder={
+                hasTrip
+                  ? 'e.g. skip breakfast, plan day 1…'
+                  : 'e.g. vegetarian, must visit…'
+              }
+              onChange={(e) => setInput(e.target.value)}
+              disabled={busy}
+            />
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy || !input.trim()}
+            >
+              Send
+            </button>
+          </form>
         </div>
       )}
 
-      <div className="chat-dock-bar">
-        <div className="chat-dock-suggestions">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="chip"
-              disabled={busy}
-              onClick={() => void send(s)}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <form
-          className="chat-dock-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void send(input);
-          }}
-        >
-          <span className="chat-dock-icon" aria-hidden>
-            💬
-          </span>
-          <input
-            type="text"
-            value={input}
-            placeholder={
-              hasTrip
-                ? 'Tell me what to do… e.g. skip breakfast, plan day 1, move Pantheon to day 3'
-                : 'Ask the assistant… e.g. vegetarian, must visit Colosseum'
-            }
-            onChange={(e) => setInput(e.target.value)}
-            onFocus={() => setExpanded(true)}
-            disabled={busy}
-          />
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={busy || !input.trim()}
-          >
-            Send
-          </button>
-        </form>
-      </div>
+      <button
+        type="button"
+        className="chat-fab"
+        aria-label={open ? 'Close chat' : 'Open chat'}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? (
+          <span aria-hidden>×</span>
+        ) : (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H10l-4.2 3.2a.8.8 0 0 1-1.3-.6V16h-.5A2.5 2.5 0 0 1 4 13.5v-7Z"
+              fill="currentColor"
+            />
+          </svg>
+        )}
+      </button>
     </div>
   );
 }

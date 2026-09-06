@@ -1,90 +1,91 @@
-.chat-dock {
+.chat-fab-wrap {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  right: 1.25rem;
+  bottom: 1.25rem;
   z-index: 90;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid var(--line);
-  box-shadow: 0 -8px 30px rgba(15, 47, 44, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
 }
 
-.chat-dock--open .chat-dock-transcript {
+.chat-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--sea);
+  color: white;
   display: grid;
+  place-items: center;
+  box-shadow: 0 12px 28px rgba(15, 47, 44, 0.28);
+  transition: transform 160ms ease, background 160ms ease;
 }
 
-.chat-dock-transcript {
-  display: none;
-  grid-template-rows: auto minmax(120px, 220px);
-  max-width: 960px;
-  margin: 0 auto;
-  width: 100%;
-  border-bottom: 1px solid var(--line);
+.chat-fab:hover {
+  transform: translateY(-2px) scale(1.03);
+  background: var(--sea-bright);
 }
 
-.chat-dock-transcript-head {
+.chat-fab span {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.chat-panel {
+  width: min(360px, calc(100vw - 2rem));
+  max-height: min(520px, calc(100vh - 6.5rem));
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: chat-rise 220ms ease;
+}
+
+@keyframes chat-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.chat-panel-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.55rem 1rem 0.2rem;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--line);
   font-family: var(--font-display);
 }
 
-.chat-dock-bar {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 0.55rem 1rem 0.75rem;
-  width: 100%;
-}
-
-.chat-dock-suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.45rem;
-}
-
-.chat-dock-suggestions .chip {
-  font-size: 0.75rem;
-  padding: 0.35rem 0.7rem;
-}
-
-.chat-dock-form {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.55rem;
-  align-items: center;
-}
-
-.chat-dock-icon {
-  font-size: 1.2rem;
-}
-
-.chat-dock-form input {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.8rem 1rem;
-  outline: none;
-  background: white;
-}
-
-.chat-dock-form input:focus {
-  border-color: var(--sea-bright);
-  box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.15);
+.chat-panel-close {
+  border: none;
+  background: transparent;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--muted);
+  padding: 0.2rem 0.4rem;
 }
 
 .chatbot-messages {
   overflow: auto;
-  padding: 0.5rem 1rem 0.85rem;
+  padding: 0.75rem 0.9rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   background: #fbfcfb;
+  min-height: 160px;
 }
 
 .chatbot-bubble {
-  max-width: 85%;
+  max-width: 88%;
   padding: 0.65rem 0.8rem;
   border-radius: 14px;
   font-size: 0.9rem;
@@ -109,13 +110,42 @@
   font-style: italic;
 }
 
-/* Keep page content above the dock */
-.app-shell,
-.trip-view,
-.questions,
-.entry,
-.processing {
-  padding-bottom: 7.5rem;
+.chat-panel-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.45rem 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.chat-panel-suggestions .chip {
+  font-size: 0.72rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.chat-panel-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.chat-panel-form input {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.7rem 0.95rem;
+  outline: none;
+  background: white;
+}
+
+.chat-panel-form input:focus {
+  border-color: var(--sea-bright);
+  box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.15);
+}
+
+.chat-panel-form .btn {
+  padding: 0.7rem 1rem;
 }
 
 .place-photo-gallery {
@@ -164,11 +194,12 @@
 }
 
 @media (max-width: 640px) {
-  .app-shell,
-  .trip-view,
-  .questions,
-  .entry,
-  .processing {
-    padding-bottom: 9rem;
+  .chat-fab-wrap {
+    right: 0.85rem;
+    bottom: 0.85rem;
+  }
+
+  .chat-panel {
+    width: min(100vw - 1.5rem, 360px);
   }
 }

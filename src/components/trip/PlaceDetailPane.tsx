@@ -29,10 +29,22 @@ function PhotoGallery({
   name,
   city,
   category,
+  lat,
+  lon,
+  imageUrl,
+  wikidataId,
+  wikipediaTag,
+  commonsTag,
 }: {
   name: string;
   city: string;
   category?: string;
+  lat?: number;
+  lon?: number;
+  imageUrl?: string;
+  wikidataId?: string;
+  wikipediaTag?: string;
+  commonsTag?: string;
 }) {
   const [photos, setPhotos] = useState<string[]>([]);
   const [active, setActive] = useState(0);
@@ -40,13 +52,18 @@ function PhotoGallery({
   useEffect(() => {
     let cancelled = false;
     setActive(0);
-    void fetchPlacePhotoUrls(name, city, category).then((urls) => {
-      if (!cancelled) setPhotos(urls.slice(0, 4));
+    void fetchPlacePhotoUrls(name, city, category, lat, lon, {
+      imageUrl,
+      wikidataId,
+      wikipediaTag,
+      commonsTag,
+    }).then((urls) => {
+      if (!cancelled) setPhotos(urls.slice(0, 6));
     });
     return () => {
       cancelled = true;
     };
-  }, [name, city, category]);
+  }, [name, city, category, lat, lon, imageUrl, wikidataId, wikipediaTag, commonsTag]);
 
   if (!photos.length) {
     return (
@@ -55,6 +72,12 @@ function PhotoGallery({
         name={name}
         city={city}
         category={category}
+        lat={lat}
+        lon={lon}
+        imageUrl={imageUrl}
+        wikidataId={wikidataId}
+        wikipediaTag={wikipediaTag}
+        commonsTag={commonsTag}
       />
     );
   }
@@ -119,6 +142,12 @@ export function PlaceDetailPane({
           name={place.name}
           city={city}
           category={place.categoryLabel}
+          lat={place.lat}
+          lon={place.lon}
+          imageUrl={place.image_url}
+          wikidataId={place.wikidata_id}
+          wikipediaTag={place.wikipedia_tag}
+          commonsTag={place.commons_tag}
         />
 
         <div className="place-detail-body">
@@ -213,7 +242,14 @@ export function PlaceDetailPane({
         </button>
       </div>
 
-      <PhotoGallery name={stop.name} city={city} category={stop.category} />
+      <PhotoGallery
+        name={stop.name}
+        city={city}
+        category={stop.category}
+        lat={stop.lat}
+        lon={stop.lon}
+        imageUrl={stop.image_url}
+      />
 
       <div className="place-detail-body">
         <span className="category-pill">{stop.category}</span>

@@ -156,6 +156,10 @@ export function BreakfastBrowser({
                 category={place.categoryLabel}
                 lat={place.lat}
                 lon={place.lon}
+                imageUrl={place.image_url}
+                wikidataId={place.wikidata_id}
+                wikipediaTag={place.wikipedia_tag}
+                commonsTag={place.commons_tag}
               />
               <div className="breakfast-card-body">
                 <span className="category-pill">{place.categoryLabel}</span>

@@ -1,4 +1,5 @@
-import { DAY_START_OPTIONS, parseFlexibleTime } from '../../data/scheduleOptions';
+import { useEffect, useState } from 'react';
+import { parseFlexibleTime } from '../../data/scheduleOptions';
 import { minutesToLabel } from '../../services/geo';
 import type { AgentOutput, DayItinerary, ItineraryStop } from '../../types';
 import type { BreakfastPlace } from '../../types/breakfast';
@@ -45,24 +46,39 @@ export function ItineraryList({
 }: ItineraryListProps) {
   const showBreakfastBrowser = breakfastTime !== 'skip';
   const breakfastInput = breakfastTime === 'skip' ? '' : breakfastTime;
+  const [startDraft, setStartDraft] = useState(dayStartTime);
+
+  useEffect(() => {
+    setStartDraft(dayStartTime);
+  }, [dayStartTime]);
+
+  function commitStart(raw: string) {
+    setStartDraft(raw);
+    const parsed = parseFlexibleTime(raw);
+    if (parsed) onScheduleChange(parsed, breakfastTime);
+  }
 
   return (
     <div>
       <div className="schedule-controls">
         <div className="field">
-          <label>Start sightseeing</label>
-          <div className="chip-row">
-            {DAY_START_OPTIONS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={`chip ${dayStartTime === t ? 'active' : ''}`}
-                onClick={() => onScheduleChange(t, breakfastTime)}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+          <label htmlFor="day-start-live">Start sightseeing</label>
+          <input
+            id="day-start-live"
+            type="text"
+            value={startDraft}
+            placeholder='e.g. 9, "8 thirty", half past eight'
+            onChange={(e) => commitStart(e.target.value)}
+            onBlur={(e) => {
+              const parsed = parseFlexibleTime(e.target.value);
+              if (parsed) setStartDraft(parsed);
+            }}
+          />
+          {startDraft.trim() && parseFlexibleTime(startDraft) == null && (
+            <p className="hint" style={{ margin: 0, color: 'var(--coral)' }}>
+              Try “8 thirty” or “half past eight”.
+            </p>
+          )}
         </div>
         <div className="field">
           <label htmlFor="breakfast-time-live">Breakfast time</label>
@@ -70,7 +86,7 @@ export function ItineraryList({
             id="breakfast-time-live"
             type="text"
             value={breakfastInput}
-            placeholder="e.g. 8:00 — leave empty to skip"
+            placeholder='e.g. 8 thirty — leave empty to skip'
             onChange={(e) => {
               const raw = e.target.value.trim();
               if (!raw) {
@@ -91,7 +107,7 @@ export function ItineraryList({
             }}
           />
           <p className="hint" style={{ margin: 0 }}>
-            Type your own time (e.g. 7:45). Clear the field to skip breakfast.
+            Type freely (e.g. “8 thirty”). Clear the field to skip breakfast.
           </p>
         </div>
       </div>
@@ -140,6 +156,7 @@ export function ItineraryList({
               className="stop-photo"
               name={stop.name}
               city={city}
+              category={stop.category}
               imageUrl={stop.image_url}
               lat={stop.lat}
               lon={stop.lon}

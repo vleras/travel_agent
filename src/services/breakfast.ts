@@ -129,6 +129,10 @@ out center 40;
       website,
       menu_url: menu,
       osm_url: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+      image_url: tags.image?.startsWith('http') ? tags.image : undefined,
+      wikidata_id: tags.wikidata || undefined,
+      wikipedia_tag: tags.wikipedia || undefined,
+      commons_tag: tags.wikimedia_commons || undefined,
       source: 'overpass',
     });
   }

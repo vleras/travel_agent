@@ -69,7 +69,7 @@ export default function App() {
   }
 
   const cityHint = picked?.city ?? input?.destination_city ?? null;
-  const showGlobalChat = screen !== 'trip';
+  const showGlobalChat = screen !== 'entry' && screen !== 'trip';
 
   return (
     <div className="app-shell">

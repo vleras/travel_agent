@@ -169,3 +169,12 @@ img {
   background: rgba(196, 92, 74, 0.15);
   color: #8f3a2e;
 }
+
+@keyframes place-img-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}

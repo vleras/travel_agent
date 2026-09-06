@@ -22,6 +22,11 @@ export interface BreakfastPlace {
   website?: string;
   menu_url?: string;
   osm_url?: string;
+  /** Direct photo from OSM `image=*` when present */
+  image_url?: string;
+  wikidata_id?: string;
+  wikipedia_tag?: string;
+  commons_tag?: string;
   source: 'overpass' | 'curated';
 }
 

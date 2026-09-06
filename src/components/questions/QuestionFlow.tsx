@@ -5,7 +5,6 @@ import {
 } from '../../data/destinations';
 import {
   BREAKFAST_FOOD_SUGGESTIONS,
-  DAY_START_OPTIONS,
   normalizeBreakfastTime,
   parseDaysInput,
   parseFlexibleTime,
@@ -76,9 +75,9 @@ export function QuestionFlow({
   });
   const [customPreferences, setCustomPreferences] = useState('');
   const [pace, setPace] = useState<Pace>('balanced');
-  const [dayStartTime, setDayStartTime] = useState('09:00');
+  const [dayStartInput, setDayStartInput] = useState('9');
   const [wantBreakfast, setWantBreakfast] = useState(true);
-  const [breakfastTimeInput, setBreakfastTimeInput] = useState('08:00');
+  const [breakfastTimeInput, setBreakfastTimeInput] = useState('8 thirty');
   const [breakfastFood, setBreakfastFood] = useState('');
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [hasBeach, setHasBeach] = useState<boolean | null>(
@@ -158,6 +157,7 @@ export function QuestionFlow({
       return interests.length > 0 || customPreferences.trim().length > 0;
     }
     if (step === 'schedule') {
+      if (parseFlexibleTime(dayStartInput) == null) return false;
       if (!wantBreakfast) return true;
       return parseFlexibleTime(breakfastTimeInput) != null;
     }
@@ -166,6 +166,8 @@ export function QuestionFlow({
 
   function finish() {
     if (!parsedDays) return;
+    const startParsed = parseFlexibleTime(dayStartInput);
+    if (!startParsed) return;
     const cleanedInterests = hasBeach
       ? interests
       : interests.filter((i) => i !== 'beach');
@@ -183,7 +185,7 @@ export function QuestionFlow({
       interests: cleanedInterests,
       custom_preferences: customPreferences.trim() || null,
       pace,
-      day_start_time: dayStartTime,
+      day_start_time: startParsed,
       breakfast_time: breakfastTime,
       breakfast_food:
         breakfastTime === 'skip' ? null : breakfastFood.trim() || null,
@@ -443,22 +445,27 @@ export function QuestionFlow({
               Set when sightseeing starts, then tell us when and what you want for breakfast.
             </p>
             <div className="question-body">
-              <div>
-                <p className="hint" style={{ marginBottom: '0.6rem' }}>
-                  Start seeing places at
-                </p>
-                <div className="chip-row">
-                  {DAY_START_OPTIONS.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`chip ${dayStartTime === t ? 'active' : ''}`}
-                      onClick={() => setDayStartTime(t)}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
+              <div className="field">
+                <label htmlFor="day-start">Start seeing places at</label>
+                <input
+                  id="day-start"
+                  type="text"
+                  value={dayStartInput}
+                  placeholder='e.g. 9, 9:30, "8 thirty", half past eight'
+                  onChange={(e) => setDayStartInput(e.target.value)}
+                />
+                {dayStartInput.trim() &&
+                  parseFlexibleTime(dayStartInput) == null && (
+                    <p className="hint" style={{ margin: 0, color: 'var(--coral)' }}>
+                      Try “9”, “8 thirty”, “half past eight”, or “9:30am”.
+                    </p>
+                  )}
+                {parseFlexibleTime(dayStartInput) && (
+                  <p className="hint" style={{ margin: 0 }}>
+                    Sightseeing starts at{' '}
+                    <strong>{parseFlexibleTime(dayStartInput)}</strong>.
+                  </p>
+                )}
               </div>
 
               <label className="toggle-row">
@@ -478,13 +485,13 @@ export function QuestionFlow({
                       id="breakfast-time"
                       type="text"
                       value={breakfastTimeInput}
-                      placeholder="e.g. 8:00, 8:30, 9am"
+                      placeholder='e.g. 8, "8 thirty", half past eight, 9am'
                       onChange={(e) => setBreakfastTimeInput(e.target.value)}
                     />
                     {breakfastTimeInput.trim() &&
                       parseFlexibleTime(breakfastTimeInput) == null && (
                         <p className="hint" style={{ margin: 0, color: 'var(--coral)' }}>
-                          Enter a time like 8:00 or 9:30am.
+                          Try “8 thirty”, “half past eight”, or “9:30am”.
                         </p>
                       )}
                     {parseFlexibleTime(breakfastTimeInput) && (
