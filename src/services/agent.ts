@@ -9,6 +9,7 @@ import {
 import { generateAttractions } from './gemini';
 import { geocode } from './nominatim';
 import { routeDistance } from './osrm';
+import { fetchPlacePhotoUrls } from './placePhotos';
 import type {
   AgentOutput,
   AgentProgress,
@@ -109,7 +110,8 @@ function makeBreakfastStop(
       typical_visit_duration_minutes: 45,
       lat: selected.lat,
       lon: selected.lon,
-      image_url: placeImageUrl(selected.name, city),
+      image_url:
+        selected.image_url ?? placeImageUrl(selected.name, city),
       is_meal: true,
     };
   }
@@ -408,6 +410,55 @@ async function ensureCoords(
   return { scored, nominatimMs, apiCalls };
 }
 
+/** Attach real Wikipedia/Commons/Openverse photos after coords exist. */
+async function attachPlacePhotos(
+  attractions: ScoredAttraction[],
+  city: string,
+  onProgress: ProgressCb,
+): Promise<ScoredAttraction[]> {
+  onProgress({
+    step: 'act',
+    message: 'Fetching place photos',
+    detail: `Looking up real images for ${attractions.length} stops…`,
+  });
+
+  const enriched: ScoredAttraction[] = [];
+  const batchSize = 4;
+
+  for (let i = 0; i < attractions.length; i += batchSize) {
+    const batch = attractions.slice(i, i + batchSize);
+    const results = await Promise.all(
+      batch.map(async (attr) => {
+        const alreadyReal =
+          attr.image_url &&
+          !attr.image_url.includes('loremflickr.com') &&
+          !attr.image_url.includes('picsum.photos');
+        if (alreadyReal) return attr;
+
+        const photoUrls = await fetchPlacePhotoUrls(
+          attr.name,
+          city,
+          attr.category,
+          attr.lat,
+          attr.lon,
+        );
+        return {
+          ...attr,
+          image_url: photoUrls[0] ?? placeImageUrl(attr.name, city),
+        };
+      }),
+    );
+    enriched.push(...results);
+    onProgress({
+      step: 'act',
+      message: 'Fetching place photos',
+      detail: `${Math.min(i + batchSize, attractions.length)}/${attractions.length} places…`,
+    });
+  }
+
+  return enriched;
+}
+
 export async function runTravelAgent(
   input: TripInput,
   onProgress: ProgressCb = () => undefined,
@@ -493,13 +544,19 @@ export async function runTravelAgent(
   nominatimMs += geoMs;
   apiCalls += geoCalls;
 
+  const scoredWithPhotos = await attachPlacePhotos(
+    scored,
+    input.destination_city,
+    onProgress,
+  );
+
   // Sample OSRM for a couple of pairs (thesis metrics) without blocking clustering
-  if (scored.length >= 2) {
+  if (scoredWithPhotos.length >= 2) {
     const sample = await routeDistance(
-      scored[0].lon,
-      scored[0].lat,
-      scored[1].lon,
-      scored[1].lat,
+      scoredWithPhotos[0].lon,
+      scoredWithPhotos[0].lat,
+      scoredWithPhotos[1].lon,
+      scoredWithPhotos[1].lat,
     );
     osrmMs += sample.latencyMs;
     apiCalls += 1;
@@ -513,7 +570,7 @@ export async function runTravelAgent(
   });
 
   const clusters = clusterByDay(
-    scored,
+    scoredWithPhotos,
     input.trip_length_days,
     input.pace,
     location.base_lat,

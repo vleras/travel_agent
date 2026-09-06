@@ -33,6 +33,8 @@ export interface TripInput {
   days_range: [number, number] | null;
   start_date: string;
   end_date: string;
+  /** User skipped picking exact travel dates. */
+  dates_flexible?: boolean;
   hotel_address: string | null;
   suggested_area: string | null;
   interests: Interest[];

@@ -46,7 +46,12 @@ export function formatDayTab(isoDate: string): string {
   });
 }
 
-export function formatTripRange(start: string, end: string): string {
+export function formatTripRange(
+  start: string,
+  end: string,
+  flexible?: boolean,
+): string {
+  if (flexible) return 'Flexible dates';
   const s = new Date(start + 'T12:00:00');
   const e = new Date(end + 'T12:00:00');
   const opts: Intl.DateTimeFormatOptions = { month: 'numeric', day: 'numeric' };

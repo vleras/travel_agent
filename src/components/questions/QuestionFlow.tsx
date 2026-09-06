@@ -64,6 +64,7 @@ export function QuestionFlow({
   const [endDate, setEndDate] = useState(
     toISODate(addDays(weekend, defaultDays - 1)),
   );
+  const [datesFlexible, setDatesFlexible] = useState(false);
   const [hotelAddress, setHotelAddress] = useState('');
   const [notBooked, setNotBooked] = useState(false);
   const [interests, setInterests] = useState<Interest[]>(() => {
@@ -174,12 +175,21 @@ export function QuestionFlow({
     const breakfastTime = wantBreakfast
       ? normalizeBreakfastTime(breakfastTimeInput)
       : 'skip';
+
+    const planningStart = datesFlexible
+      ? toISODate(weekend)
+      : startDate;
+    const planningEnd = datesFlexible
+      ? toISODate(addDays(weekend, parsedDays.days - 1))
+      : endDate;
+
     onComplete({
       destination_city: city.trim(),
       trip_length_days: parsedDays.days,
       days_range: parsedDays.range,
-      start_date: startDate,
-      end_date: endDate,
+      start_date: planningStart,
+      end_date: planningEnd,
+      dates_flexible: datesFlexible,
       hotel_address: notBooked ? null : hotelAddress.trim(),
       suggested_area: notBooked ? 'City Center' : null,
       interests: cleanedInterests,
@@ -298,7 +308,7 @@ export function QuestionFlow({
           <>
             <h2>When do you want to go?</h2>
             <p className="hint">
-              Pick both dates yourself — the end date is not calculated automatically.
+              Pick both dates if you know them — the end date is not calculated automatically.
             </p>
             <div className="question-body">
               <div className="field">
@@ -534,14 +544,31 @@ export function QuestionFlow({
           <button type="button" className="btn btn-secondary" onClick={prev}>
             Back
           </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!canContinue()}
-            onClick={next}
-          >
-            {stepIndex === steps.length - 1 ? 'Build itinerary' : 'Continue'}
-          </button>
+          <div className="question-actions-right">
+            {step === 'dates' && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setDatesFlexible(true);
+                  next();
+                }}
+              >
+                Skip for now
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!canContinue()}
+              onClick={() => {
+                if (step === 'dates') setDatesFlexible(false);
+                next();
+              }}
+            >
+              {stepIndex === steps.length - 1 ? 'Build itinerary' : 'Continue'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

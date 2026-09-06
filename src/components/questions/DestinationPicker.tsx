@@ -19,7 +19,9 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
       </div>
       <div className="question-card" style={{ maxWidth: 980 }}>
         <h2>Where should we take you?</h2>
-        <p className="hint">Five curated cities to start. Pick one to continue planning.</p>
+        <p className="hint">
+          Pick a city to start planning — more options below if you want inspiration.
+        </p>
         <div className="dest-grid">
           {destinationRecommendations.map((dest) => (
             <button

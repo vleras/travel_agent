@@ -238,7 +238,12 @@ export function TripView({
             </div>
             <h1>
               Trip to {input.destination_city} (
-              {formatTripRange(input.start_date, input.end_date)})
+              {formatTripRange(
+                input.start_date,
+                input.end_date,
+                input.dates_flexible,
+              )}
+              )
             </h1>
           </div>
         </div>
