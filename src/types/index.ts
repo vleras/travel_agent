@@ -13,6 +13,12 @@ export type Interest =
 
 export type BreakfastOption = string; // 'skip' or 'HH:MM'
 
+export interface DestinationHighlight {
+  name: string;
+  category: string;
+  description: string;
+}
+
 export interface DestinationCard {
   id: string;
   city: string;
@@ -25,6 +31,8 @@ export interface DestinationCard {
   interests: Interest[];
   /** Whether this destination has a beach / coastline. */
   hasBeach: boolean;
+  /** Places the traveler can visit — shown before planning starts. */
+  highlights: DestinationHighlight[];
 }
 
 export interface TripInput {
