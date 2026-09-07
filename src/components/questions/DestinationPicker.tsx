@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { destinationRecommendations } from '../../data/destinations';
-import type { DestinationCard } from '../../types';
+import { PlaceImage, fetchPlacePhotoUrls } from '../shared/PlaceImage';
+import type { DestinationCard, DestinationHighlight } from '../../types';
 import '../../styles/questions.css';
 
 interface DestinationPickerProps {
@@ -37,8 +38,152 @@ function DestCardImage({
   );
 }
 
+function HighlightGallery({
+  spot,
+  city,
+}: {
+  spot: DestinationHighlight;
+  city: string;
+}) {
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setActive(0);
+    setPhotos([]);
+    void fetchPlacePhotoUrls(spot.name, city, spot.category).then((urls) => {
+      if (!cancelled) {
+        // Already deduped + ranked for beauty in placePhotos
+        setPhotos(urls.slice(0, 5));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spot.name, spot.category, city]);
+
+  if (!photos.length) {
+    return (
+      <PlaceImage
+        className="highlight-detail-hero"
+        name={spot.name}
+        city={city}
+        category={spot.category}
+      />
+    );
+  }
+
+  return (
+    <div className="highlight-detail-gallery">
+      <img
+        className="highlight-detail-hero"
+        src={photos[active]}
+        alt={`${spot.name} photo ${active + 1}`}
+        referrerPolicy="no-referrer"
+        onError={() => {
+          if (active < photos.length - 1) setActive((a) => a + 1);
+        }}
+      />
+      {photos.length > 1 && (
+        <div className="place-photo-thumbs">
+          {photos.map((url, i) => (
+            <button
+              key={url}
+              type="button"
+              className={`place-photo-thumb ${i === active ? 'active' : ''}`}
+              onClick={() => setActive(i)}
+            >
+              <img src={url} alt="" referrerPolicy="no-referrer" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HighlightCard({
+  spot,
+  city,
+  onOpen,
+}: {
+  spot: DestinationHighlight;
+  city: string;
+  onOpen: () => void;
+}) {
+  return (
+    <button type="button" className="dest-highlight-card" onClick={onOpen}>
+      <PlaceImage
+        className="dest-highlight-photo"
+        name={spot.name}
+        city={city}
+        category={spot.category}
+      />
+      <div className="dest-highlight-copy">
+        <div className="dest-highlight-title">
+          <strong>{spot.name}</strong>
+          <span className="category-pill">{spot.category}</span>
+        </div>
+        <p>{spot.description}</p>
+        <span className="breakfast-card-cta">View photos & details →</span>
+      </div>
+    </button>
+  );
+}
+
 export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) {
   const [preview, setPreview] = useState<DestinationCard | null>(null);
+  const [highlight, setHighlight] = useState<DestinationHighlight | null>(null);
+
+  if (preview && highlight) {
+    return (
+      <div className="questions">
+        <div className="questions-header">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              setHighlight(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          >
+            ← Back to {preview.city}
+          </button>
+          <div className="brand-mark">Travel Agent</div>
+        </div>
+
+        <div className="question-card highlight-detail-card">
+          <HighlightGallery spot={highlight} city={preview.city} />
+          <div className="highlight-detail-body">
+            <span className="category-pill">{highlight.category}</span>
+            <h2>{highlight.name}</h2>
+            <p className="highlight-detail-lead">{highlight.description}</p>
+            <p className="hint">
+              In {preview.city}, {preview.country}. When you start planning, stops
+              like this can land on your day-by-day itinerary.
+            </p>
+          </div>
+          <div className="question-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setHighlight(null)}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => onSelect(preview)}
+            >
+              Start planning this trip
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (preview) {
     return (
@@ -58,9 +203,7 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
           <div className="dest-preview-hero">
             <DestCardImage dest={preview} className="dest-preview-img" />
             <div className="dest-preview-hero-copy">
-              <p className="dest-preview-country">
-                {preview.country}
-              </p>
+              <p className="dest-preview-country">{preview.country}</p>
               <h2>{preview.city}</h2>
               <p>{preview.description}</p>
               <div className="tag-row">
@@ -79,19 +222,21 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
           <div className="dest-preview-body">
             <h3>What you can visit</h3>
             <p className="hint">
-              A taste of highlights we’ll plan around — you’ll refine days, pace, and preferences next.
+              Tap a place for photos and more — then start planning when you’re ready.
             </p>
-            <ul className="dest-highlight-list">
+            <div className="dest-highlight-list">
               {preview.highlights.map((spot) => (
-                <li key={spot.name}>
-                  <div>
-                    <strong>{spot.name}</strong>
-                    <span className="category-pill">{spot.category}</span>
-                  </div>
-                  <p>{spot.description}</p>
-                </li>
+                <HighlightCard
+                  key={spot.name}
+                  spot={spot}
+                  city={preview.city}
+                  onOpen={() => {
+                    setHighlight(spot);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
               ))}
-            </ul>
+            </div>
           </div>
 
           <div className="question-actions">
@@ -136,6 +281,7 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
               className="dest-card"
               onClick={() => {
                 setPreview(dest);
+                setHighlight(null);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             >
