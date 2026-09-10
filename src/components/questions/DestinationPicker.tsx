@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { destinationRecommendations } from '../../data/destinations';
 import { PlaceImage, fetchPlacePhotoUrls } from '../shared/PlaceImage';
+import { planStoryPhotos } from '../../services/storyPhotoPlan';
 import {
   clearDestState,
   loadDestState,
@@ -214,8 +215,16 @@ function HighlightStory({
 
   const detailChunks = chunkText(placeDetailCopy(spot, destination), 170);
   const wikiChunks = wiki?.extract ? chunkText(wiki.extract, 190) : [];
-  const [hero, pairA, pairB, splitPhoto, trailing, ...rest] = photos;
-  const extraPhotos = [trailing, ...rest].filter(Boolean) as string[];
+  const plan = planStoryPhotos(photos);
+  const {
+    hero,
+    pair,
+    pairIndices,
+    split,
+    splitIndex,
+    reverseSplit,
+    reverseSplitIndex,
+  } = plan;
 
   return (
     <div className="questions highlight-story">
@@ -227,7 +236,6 @@ function HighlightStory({
       </div>
 
       <article className="highlight-story-card">
-        {/* 1 — full hero image */}
         {loadingPhotos && !hero ? (
           <div className="highlight-story-hero-shot is-loading" aria-hidden />
         ) : hero ? (
@@ -253,7 +261,6 @@ function HighlightStory({
         </header>
 
         <div className="highlight-story-body">
-          {/* Intro text chunks */}
           <section className="highlight-story-section">
             <h2>About this place</h2>
             {detailChunks.map((chunk) => (
@@ -263,38 +270,30 @@ function HighlightStory({
             ))}
           </section>
 
-          {/* 2 — two side by side */}
-          {(pairA || pairB || loadingPhotos) && (
+          {pair && pairIndices && (
             <div className="highlight-story-pair">
-              {loadingPhotos && !pairA && !pairB ? (
-                <>
-                  <div className="highlight-story-shot is-loading" aria-hidden />
-                  <div className="highlight-story-shot is-loading" aria-hidden />
-                </>
-              ) : (
-                <>
-                  {pairA && (
-                    <StoryPhoto
-                      url={pairA}
-                      alt={`${spot.name} photo 2`}
-                      onOpen={() => setLightbox(1)}
-                      onError={() => dropPhoto(pairA)}
-                    />
-                  )}
-                  {pairB && (
-                    <StoryPhoto
-                      url={pairB}
-                      alt={`${spot.name} photo 3`}
-                      onOpen={() => setLightbox(2)}
-                      onError={() => dropPhoto(pairB)}
-                    />
-                  )}
-                </>
-              )}
+              <StoryPhoto
+                url={pair[0]}
+                alt={`${spot.name} photo 2`}
+                onOpen={() => setLightbox(pairIndices[0])}
+                onError={() => dropPhoto(pair[0])}
+              />
+              <StoryPhoto
+                url={pair[1]}
+                alt={`${spot.name} photo 3`}
+                onOpen={() => setLightbox(pairIndices[1])}
+                onError={() => dropPhoto(pair[1])}
+              />
             </div>
           )}
 
-          {/* History chunk */}
+          {loadingPhotos && !pair && photos.length === 0 && (
+            <div className="highlight-story-pair">
+              <div className="highlight-story-shot is-loading" aria-hidden />
+              <div className="highlight-story-shot is-loading" aria-hidden />
+            </div>
+          )}
+
           {wikiChunks[0] && (
             <section className="highlight-story-section">
               <h2>A bit of history</h2>
@@ -305,15 +304,14 @@ function HighlightStory({
             </section>
           )}
 
-          {/* 3 — image left, text right */}
-          {splitPhoto && (
+          {split && splitIndex != null && (
             <section className="highlight-story-split">
               <StoryPhoto
-                url={splitPhoto}
-                alt={`${spot.name} photo 4`}
+                url={split}
+                alt={`${spot.name} photo ${splitIndex + 1}`}
                 className="highlight-story-split-media"
-                onOpen={() => setLightbox(3)}
-                onError={() => dropPhoto(splitPhoto)}
+                onOpen={() => setLightbox(splitIndex)}
+                onError={() => dropPhoto(split)}
               />
               <div className="highlight-story-split-copy">
                 <h2>Looking closer</h2>
@@ -328,7 +326,6 @@ function HighlightStory({
             </section>
           )}
 
-          {/* Remaining wiki chunks */}
           {wikiChunks.length > 4 && (
             <section className="highlight-story-section">
               <h2>Worth knowing</h2>
@@ -340,25 +337,14 @@ function HighlightStory({
             </section>
           )}
 
-          {/* 4+ — full-width solo, then optional reverse split */}
-          {extraPhotos[0] && (
-            <StoryPhoto
-              url={extraPhotos[0]}
-              alt={`${spot.name} photo 5`}
-              className="highlight-story-solo"
-              onOpen={() => setLightbox(4)}
-              onError={() => dropPhoto(extraPhotos[0])}
-            />
-          )}
-
-          {extraPhotos[1] && (
+          {reverseSplit && reverseSplitIndex != null && (
             <section className="highlight-story-split is-reversed">
               <StoryPhoto
-                url={extraPhotos[1]}
-                alt={`${spot.name} photo 6`}
+                url={reverseSplit}
+                alt={`${spot.name} photo ${reverseSplitIndex + 1}`}
                 className="highlight-story-split-media"
-                onOpen={() => setLightbox(5)}
-                onError={() => dropPhoto(extraPhotos[1])}
+                onOpen={() => setLightbox(reverseSplitIndex)}
+                onError={() => dropPhoto(reverseSplit)}
               />
               <div className="highlight-story-split-copy">
                 <h2>On the ground</h2>
@@ -370,17 +356,6 @@ function HighlightStory({
               </div>
             </section>
           )}
-
-          {extraPhotos.slice(2).map((url, i) => (
-            <StoryPhoto
-              key={url}
-              url={url}
-              alt={`${spot.name} photo ${i + 7}`}
-              className="highlight-story-solo"
-              onOpen={() => setLightbox(i + 6)}
-              onError={() => dropPhoto(url)}
-            />
-          ))}
 
           {!loadingPhotos && photos.length > 0 && photos.length < MIN_STORY_PHOTOS && (
             <p className="hint">

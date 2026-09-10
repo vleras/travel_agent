@@ -241,10 +241,6 @@
   border-radius: 16px;
   overflow: hidden;
   background: white;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -258,6 +254,20 @@
   box-shadow: 0 0 0 3px rgba(31, 111, 104, 0.14);
 }
 
+.place-pick-open {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
 .place-pick-photo {
   width: 100%;
   height: 130px;
@@ -267,7 +277,7 @@
 }
 
 .place-pick-copy {
-  padding: 0.75rem 0.85rem 0.9rem;
+  padding: 0.75rem 0.85rem 0.35rem;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -304,9 +314,26 @@
   color: var(--sea);
 }
 
-.place-pick-card:not(.active) .place-pick-status {
-  color: var(--muted);
-  font-weight: 500;
+.place-pick-card-actions {
+  padding: 0.35rem 0.75rem 0.75rem;
+}
+
+.place-pick-add-btn {
+  width: 100%;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.place-pick-detail {
+  margin-top: 0.35rem;
+}
+
+.place-pick-detail-inline-add {
+  margin-top: 0.85rem;
+}
+
+.place-pick-detail-inline-add .btn {
+  width: auto;
 }
 
 .dest-grid {

@@ -26,6 +26,7 @@ import type {
   TripInput,
 } from '../../types';
 import { PlaceImage } from '../shared/PlaceImage';
+import { PlacePickDetail } from './PlacePickDetail';
 import '../../styles/questions.css';
 import '../../styles/chat.css';
 
@@ -114,8 +115,9 @@ function PlacesGuideChat({
         )}
         {phase >= 2 && (
           <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
-            When you’re done choosing, I’ll organize those picks into the days
-            you want — we’ll set your daily schedule after this.
+            Tap a card to open details, or use Add on the card. When you’re done
+            choosing, I’ll organize those picks into the days you want — we’ll
+            set your daily schedule after this.
           </div>
         )}
         {selectedCount > 0 && (
@@ -255,6 +257,9 @@ export function QuestionFlow({
   );
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>(
     () => saved?.selectedPlaces ?? [],
+  );
+  const [viewingPlace, setViewingPlace] = useState<DestinationHighlight | null>(
+    null,
   );
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [hasBeach, setHasBeach] = useState<boolean | null>(
@@ -442,10 +447,15 @@ export function QuestionFlow({
       finish();
       return;
     }
+    setViewingPlace(null);
     setStepIndex((i) => i + 1);
   }
 
   function prev() {
+    if (viewingPlace) {
+      setViewingPlace(null);
+      return;
+    }
     if (stepIndex === 0) {
       onBack();
       return;
@@ -765,11 +775,26 @@ export function QuestionFlow({
           </>
         )}
 
-        {step === 'places' && (
+        {step === 'places' && viewingPlace && (
+          <PlacePickDetail
+            spot={viewingPlace}
+            city={city}
+            country={selectedDestination?.country}
+            selected={selectedPlaces.includes(viewingPlace.name)}
+            onBack={() => {
+              setViewingPlace(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onToggleAdd={() => togglePlace(viewingPlace.name)}
+          />
+        )}
+
+        {step === 'places' && !viewingPlace && (
           <>
             <h2>Places to visit</h2>
             <p className="hint">
-              Tap places you care about in {city || 'your destination'}. We’ll fold them into your days.
+              Open a place to learn more, or add it straight from the card. We’ll
+              fold your picks into your days.
             </p>
             <PlacesGuideChat city={city} selectedCount={selectedPlaces.length} />
             <div className="question-body">
@@ -782,30 +807,46 @@ export function QuestionFlow({
                   {placesForCity(city, selectedDestination).map((spot) => {
                     const active = selectedPlaces.includes(spot.name);
                     return (
-                      <button
+                      <div
                         key={spot.name}
-                        type="button"
                         className={`place-pick-card ${active ? 'active' : ''}`}
-                        onClick={() => togglePlace(spot.name)}
-                        aria-pressed={active}
                       >
-                        <PlaceImage
-                          className="place-pick-photo"
-                          name={spot.name}
-                          city={city}
-                          category={spot.category}
-                        />
-                        <div className="place-pick-copy">
-                          <div className="place-pick-title">
-                            <strong>{spot.name}</strong>
-                            <span className="category-pill">{spot.category}</span>
+                        <button
+                          type="button"
+                          className="place-pick-open"
+                          onClick={() => {
+                            setViewingPlace(spot);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                        >
+                          <PlaceImage
+                            className="place-pick-photo"
+                            name={spot.name}
+                            city={city}
+                            category={spot.category}
+                          />
+                          <div className="place-pick-copy">
+                            <div className="place-pick-title">
+                              <strong>{spot.name}</strong>
+                              <span className="category-pill">{spot.category}</span>
+                            </div>
+                            <p>{spot.description}</p>
+                            <span className="place-pick-status">
+                              View details →
+                            </span>
                           </div>
-                          <p>{spot.description}</p>
-                          <span className="place-pick-status">
-                            {active ? 'Selected ✓' : 'Tap to select'}
-                          </span>
+                        </button>
+                        <div className="place-pick-card-actions">
+                          <button
+                            type="button"
+                            className={`btn ${active ? 'btn-secondary' : 'btn-primary'} place-pick-add-btn`}
+                            onClick={() => togglePlace(spot.name)}
+                            aria-pressed={active}
+                          >
+                            {active ? 'Added ✓' : 'Add'}
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -814,6 +855,7 @@ export function QuestionFlow({
           </>
         )}
 
+        {!(step === 'places' && viewingPlace) && (
         <div className="question-actions">
           <button type="button" className="btn btn-secondary" onClick={prev}>
             Back
@@ -858,6 +900,7 @@ export function QuestionFlow({
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

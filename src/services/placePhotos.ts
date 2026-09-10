@@ -20,6 +20,7 @@ interface ScoredPhoto {
   url: string;
   score: number;
   source: 'known' | 'wiki' | 'commons' | 'nearby' | 'openverse' | 'nominatim';
+  titleHint: string;
 }
 
 const resultCache = new Map<string, string[]>();
@@ -29,7 +30,7 @@ const claimedFingerprints = new Map<string, string>();
 
 function cacheKey(q: PlacePhotoQuery): string {
   return [
-    'v4',
+    'v5',
     q.name,
     q.city ?? '',
     q.lat?.toFixed(4) ?? '',
@@ -231,6 +232,7 @@ function pushScored(
       existing.score = nextScore;
       existing.source = source;
       existing.url = canonical;
+      existing.titleHint = titleHint || existing.titleHint;
     }
     return;
   }
@@ -238,7 +240,59 @@ function pushScored(
     url: canonical,
     score: baseScore + beautyBonus(`${titleHint} ${canonical}`),
     source,
+    titleHint,
   });
+}
+
+/** Rough scene tags so we don't fill a gallery with six night shots. */
+function photoSceneTags(url: string, titleHint = ''): string[] {
+  const hay = `${normalizeFileKey(titleHint)} ${normalizeFileKey(url)}`;
+  const tags: string[] = [];
+  if (/\b(night|nocturne|evening|dusk|illuminat|lights)\b/.test(hay)) {
+    tags.push('night');
+  }
+  if (/\b(day|morning|noon|afternoon|sunny|daytime)\b/.test(hay)) {
+    tags.push('day');
+  }
+  if (/\b(interior|inside|innen|interno|indoors)\b/.test(hay)) {
+    tags.push('interior');
+  }
+  if (/\b(exterior|outside|facade|façade|front|entrance)\b/.test(hay)) {
+    tags.push('exterior');
+  }
+  if (/\b(aerial|drone|bird.?s.?eye|from above)\b/.test(hay)) {
+    tags.push('aerial');
+  }
+  if (/\b(detail|close.?up|sculpture|statue|fresco|mosaic)\b/.test(hay)) {
+    tags.push('detail');
+  }
+  if (/\b(crowd|people|tourist)\b/.test(hay)) tags.push('people');
+  return tags.length ? tags : ['general'];
+}
+
+function titleTokenOverlap(a: string, b: string): number {
+  const ta = new Set(nameTokens(a));
+  const tb = new Set(nameTokens(b));
+  if (!ta.size || !tb.size) return 0;
+  let hits = 0;
+  for (const t of ta) if (tb.has(t)) hits += 1;
+  return hits / Math.max(ta.size, tb.size);
+}
+
+function looksTooSimilar(a: ScoredPhoto, b: ScoredPhoto): boolean {
+  const tagsA = photoSceneTags(a.url, a.titleHint);
+  const tagsB = photoSceneTags(b.url, b.titleHint);
+  const sharedScene = tagsA.some(
+    (t) => t !== 'general' && tagsB.includes(t),
+  );
+  const overlap = titleTokenOverlap(
+    `${a.titleHint} ${a.url}`,
+    `${b.titleHint} ${b.url}`,
+  );
+  // Same angle (e.g. both night) or very similar filenames/titles
+  if (sharedScene && overlap >= 0.35) return true;
+  if (overlap >= 0.55) return true;
+  return false;
 }
 
 function finalizePhotos(
@@ -249,12 +303,18 @@ function finalizePhotos(
   scored.sort((a, b) => b.score - a.score);
 
   const placeKey = placeName.toLowerCase();
-  const out: string[] = [];
+  const out: ScoredPhoto[] = [];
   const seen = new Set<string>();
+  const usedScenes = new Set<string>();
 
-  // Prefer curated wiki/commons before openverse/nearby
   const ranked = [
-    ...scored.filter((s) => s.source === 'known' || s.source === 'wiki' || s.source === 'commons' || s.source === 'nominatim'),
+    ...scored.filter(
+      (s) =>
+        s.source === 'known' ||
+        s.source === 'wiki' ||
+        s.source === 'commons' ||
+        s.source === 'nominatim',
+    ),
     ...scored.filter((s) => s.source === 'nearby' || s.source === 'openverse'),
   ];
 
@@ -262,10 +322,9 @@ function finalizePhotos(
     if (item.score < 0.45) continue;
 
     const curatedCount = out.filter((u) =>
-      /wikimedia\.org|wikipedia\.org|commons\.wikimedia/i.test(u),
+      /wikimedia\.org|wikipedia\.org|commons\.wikimedia/i.test(u.url),
     ).length;
 
-    // Prefer curated shots, but allow Openverse/nearby to fill until we hit the limit
     if (
       (item.source === 'openverse' || item.source === 'nearby') &&
       curatedCount >= limit
@@ -279,13 +338,49 @@ function finalizePhotos(
     const owner = claimedFingerprints.get(fp);
     if (owner && owner !== placeKey) continue;
 
+    if (out.some((picked) => looksTooSimilar(picked, item))) continue;
+
+    const scenes = photoSceneTags(item.url, item.titleHint);
+    const primary = scenes.find((s) => s !== 'general') ?? 'general';
+    // Allow at most one photo per non-general scene tag
+    if (primary !== 'general' && usedScenes.has(primary)) continue;
+
     seen.add(fp);
     claimedFingerprints.set(fp, placeKey);
-    out.push(item.url);
+    if (primary !== 'general') usedScenes.add(primary);
+    out.push(item);
     if (out.length >= limit) break;
   }
 
-  return out;
+  // If diversity was too strict and we have fewer than needed, fill with
+  // non-exact-duplicates we previously skipped for scene/title similarity
+  if (out.length < Math.min(limit, 4)) {
+    for (const item of ranked) {
+      if (out.length >= limit) break;
+      const fp = imageFingerprint(item.url);
+      if (seen.has(fp)) continue;
+      if (item.score < 0.45) continue;
+      const owner = claimedFingerprints.get(fp);
+      if (owner && owner !== placeKey) continue;
+      // Still skip near-identical titles
+      if (
+        out.some(
+          (picked) =>
+            titleTokenOverlap(
+              `${picked.titleHint} ${picked.url}`,
+              `${item.titleHint} ${item.url}`,
+            ) >= 0.7,
+        )
+      ) {
+        continue;
+      }
+      seen.add(fp);
+      claimedFingerprints.set(fp, placeKey);
+      out.push(item);
+    }
+  }
+
+  return out.map((p) => p.url);
 }
 
 async function fromWikidata(id: string): Promise<string | null> {
@@ -501,7 +596,9 @@ async function searchCommonsByName(
     [core, city].filter(Boolean).join(' '),
     `${core} exterior ${city ?? ''}`.trim(),
     `${core} interior ${city ?? ''}`.trim(),
-    `${core} ${city ?? ''} view`.trim(),
+    `${core} ${city ?? ''} daytime`.trim(),
+    `${core} night ${city ?? ''}`.trim(),
+    `${core} ${city ?? ''} panorama`.trim(),
   ].filter((q, i, arr) => q.length > 3 && arr.indexOf(q) === i);
 
   const scored: ScoredPhoto[] = [];
