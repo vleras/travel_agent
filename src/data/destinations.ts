@@ -8,11 +8,14 @@ function commons(file: string): string {
 
 function fromFallback(cityKey: string): DestinationHighlight[] {
   const list = fallbackAttractions[cityKey] ?? [];
-  return list.slice(0, 8).map((a) => ({
-    name: a.name,
-    category: a.category,
-    description: a.description,
-  }));
+  return list
+    .filter((a) => a.category.toLowerCase() !== 'food')
+    .slice(0, 8)
+    .map((a) => ({
+      name: a.name,
+      category: a.category,
+      description: a.description,
+    }));
 }
 
 export const destinationRecommendations: DestinationCard[] = [
@@ -98,8 +101,7 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Belém Tower', category: 'Architecture', description: 'Manueline riverside fortress and UNESCO landmark.' },
       { name: 'Jerónimos Monastery', category: 'Architecture', description: 'Ornate monastery celebrating Portugal’s Age of Discovery.' },
       { name: 'Tram 28 ride', category: 'Photography', description: 'Classic yellow tram through Alfama’s hills and viewpoints.' },
-      { name: 'LX Factory', category: 'Art', description: 'Creative hub of shops, street art, and cafés.' },
-      { name: 'Time Out Market', category: 'Food', description: 'Food hall of top Portuguese chefs under one roof.' },
+      { name: 'LX Factory', category: 'Art', description: 'Creative hub of shops, galleries, and street art.' },
       { name: 'São Jorge Castle', category: 'Museums', description: 'Hilltop castle with sweeping city and river views.' },
       { name: 'Cascais day trip', category: 'Beach', description: 'Coastal town beaches a short train ride away.' },
       { name: 'Pink Street nightlife', category: 'Nightlife', description: 'Bars and late-night energy in Cais do Sodré.' },
@@ -121,9 +123,8 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Van Gogh Museum', category: 'Art', description: 'The world’s largest Van Gogh collection.' },
       { name: 'Canal belt cruise', category: 'Photography', description: 'See the UNESCO canals from the water.' },
       { name: 'Anne Frank House', category: 'Museums', description: 'Moving WWII history in the secret annex.' },
-      { name: 'Jordaan stroll', category: 'Food', description: 'Cafés, courtyards, and brown-bar culture.' },
+      { name: 'Jordaan stroll', category: 'Photography', description: 'Courtyards, canals, and quiet neighborhood streets.' },
       { name: 'Vondelpark', category: 'Nature', description: 'City park for picnics, bikes, and open-air vibes.' },
-      { name: 'Albert Cuyp Market', category: 'Food', description: 'Street food and local stalls in De Pijp.' },
       { name: 'Leidseplein nightlife', category: 'Nightlife', description: 'Theatres, clubs, and late bars.' },
     ],
   },
@@ -142,10 +143,9 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'British Museum', category: 'Museums', description: 'Global antiquities under a soaring glass roof.' },
       { name: 'Tower of London', category: 'Architecture', description: 'Crown Jewels and nearly a thousand years of history.' },
       { name: 'West End theatre', category: 'Art', description: 'World-class shows in the theatre district.' },
-      { name: 'Borough Market', category: 'Food', description: 'Historic food market by London Bridge.' },
       { name: 'South Bank walk', category: 'Photography', description: 'Thames views from Westminster to Tower Bridge.' },
       { name: 'Hyde Park & Kensington', category: 'Nature', description: 'Royal parks and museum quarter.' },
-      { name: 'Shoreditch & Brick Lane', category: 'Food', description: 'Street art, curry houses, and indie shops.' },
+      { name: 'Shoreditch & Brick Lane', category: 'Art', description: 'Street art, murals, and indie shops.' },
       { name: 'Soho nightlife', category: 'Nightlife', description: 'Bars, jazz, and late-night energy.' },
     ],
   },
@@ -169,7 +169,6 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Brooklyn Bridge walk', category: 'Architecture', description: 'Classic skyline crossing into Brooklyn.' },
       { name: 'High Line', category: 'Nature', description: 'Elevated park through Chelsea’s galleries.' },
       { name: 'Times Square & Broadway', category: 'Art', description: 'Neon lights and theatre marquees.' },
-      { name: 'Chelsea Market & Food Tour', category: 'Food', description: 'Markets, pizza, and neighborhood bites.' },
       { name: 'Lower East Side nightlife', category: 'Nightlife', description: 'Bars and music venues east of downtown.' },
     ],
   },
@@ -190,7 +189,6 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Grand Bazaar', category: 'Shopping', description: 'Labyrinth of carpets, spices, and crafts.' },
       { name: 'Topkapi Palace', category: 'Museums', description: 'Ottoman court overlooking the Golden Horn.' },
       { name: 'Bosphorus cruise', category: 'Photography', description: 'Strait views between Europe and Asia.' },
-      { name: 'Spice Bazaar & Eminönü', category: 'Food', description: 'Turkish delight, fish sandwiches, and tea.' },
       { name: 'Basilica Cistern', category: 'Architecture', description: 'Underground forest of columns and water.' },
       { name: 'Galata & Karaköy nightlife', category: 'Nightlife', description: 'Rooftop bars with skyline views.' },
     ],
@@ -212,7 +210,6 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Old Town Square', category: 'Architecture', description: 'Astronomical Clock and pastel façades.' },
       { name: 'Jewish Quarter', category: 'Museums', description: 'Synagogues and centuries of local history.' },
       { name: 'Vyšehrad', category: 'Nature', description: 'Quiet fortress park above the Vltava.' },
-      { name: 'Beer hall evening', category: 'Food', description: 'Czech pilsner, dumplings, and goulash.' },
       { name: 'Petřín Hill', category: 'Nature', description: 'Gardens and tower views over the city.' },
       { name: 'Cross Club / nightlife', category: 'Nightlife', description: 'Steampunk clubs and riverside bars.' },
     ],
@@ -233,8 +230,7 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Acropolis Museum', category: 'Museums', description: 'Sculptures and finds from the sacred rock.' },
       { name: 'Plaka & Anafiotika', category: 'Photography', description: 'Whitewashed lanes under the Acropolis.' },
       { name: 'Ancient Agora', category: 'Museums', description: 'Marketplace ruins of democratic Athens.' },
-      { name: 'Monastiraki flea market', category: 'Shopping', description: 'Antiques, street food, and views.' },
-      { name: 'Mezze dinner in Psyrri', category: 'Food', description: 'Small plates, ouzo, and lively tavernas.' },
+      { name: 'Monastiraki flea market', category: 'Shopping', description: 'Antiques, crafts, and Acropolis views.' },
       { name: 'Glyfada / Vouliagmeni', category: 'Beach', description: 'City beaches and a thermal lake.' },
       { name: 'Rooftop nightlife', category: 'Nightlife', description: 'Bars with floodlit Acropolis views.' },
     ],
@@ -251,13 +247,12 @@ export const destinationRecommendations: DestinationCard[] = [
     interests: ['food', 'shopping', 'photography'],
     hasBeach: false,
     highlights: [
-      { name: 'Jemaa el-Fnaa', category: 'Photography', description: 'Square of storytellers, juice stalls, and dusk energy.' },
+      { name: 'Jemaa el-Fnaa', category: 'Photography', description: 'Square of storytellers, performers, and dusk energy.' },
       { name: 'Medina souks', category: 'Shopping', description: 'Lanterns, leather, spices, and carpet alleys.' },
       { name: 'Bahia Palace', category: 'Architecture', description: 'Intricate courtyards and painted ceilings.' },
       { name: 'Majorelle Garden', category: 'Nature', description: 'Cobalt-blue villa and cactus gardens.' },
       { name: 'Koutoubia Mosque', category: 'Architecture', description: 'Landmark minaret of the medina skyline.' },
       { name: 'Hammam & riad afternoon', category: 'Art', description: 'Traditional steam bath and courtyard calm.' },
-      { name: 'Tagine & mint tea', category: 'Food', description: 'Moroccan classics in a rooftop café.' },
       { name: 'Atlas foothills day trip', category: 'Nature', description: 'Villages and mountain air beyond the city.' },
     ],
   },
@@ -278,10 +273,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Sydney Opera House', category: 'Architecture', description: 'Harbour icon for tours and performances.' },
       { name: 'Harbour Bridge climb / walk', category: 'Photography', description: 'Pylon views or the bridge climb.' },
       { name: 'Bondi to Coogee walk', category: 'Beach', description: 'Cliff-top coastal path between beaches.' },
-      { name: 'The Rocks', category: 'Food', description: 'Historic lanes, markets, and pubs.' },
+      { name: 'The Rocks', category: 'Architecture', description: 'Historic sandstone lanes by the harbour.' },
       { name: 'Royal Botanic Garden', category: 'Nature', description: 'Harbour-edge gardens near the Opera House.' },
       { name: 'Manly ferry', category: 'Beach', description: 'Classic ferry ride to a beach suburb.' },
-      { name: 'Barangaroo & dining', category: 'Food', description: 'Waterfront restaurants and skyline walks.' },
+      { name: 'Barangaroo waterfront', category: 'Photography', description: 'Harbour promenade and skyline walks.' },
       { name: 'Surry Hills nightlife', category: 'Nightlife', description: 'Bars and live music inland from the CBD.' },
     ],
   },
@@ -299,8 +294,7 @@ export const destinationRecommendations: DestinationCard[] = [
     highlights: [
       { name: 'Gyeongbokgung Palace', category: 'Architecture', description: 'Grand Joseon palace with changing of the guard.' },
       { name: 'Bukchon Hanok Village', category: 'Photography', description: 'Traditional houses and hillside alleys.' },
-      { name: 'Insadong & tea houses', category: 'Art', description: 'Craft shops and quiet courtyards.' },
-      { name: 'Gwangjang Market', category: 'Food', description: 'Bindaetteok, mayak gimbap, and street stalls.' },
+      { name: 'Insadong', category: 'Art', description: 'Craft shops, galleries, and quiet courtyards.' },
       { name: 'Hongdae', category: 'Nightlife', description: 'Street performers, clubs, and indie energy.' },
       { name: 'N Seoul Tower', category: 'Photography', description: 'City panorama from Namsan.' },
       { name: 'Gangnam & COEX', category: 'Shopping', description: 'Malls, K-beauty, and neon avenues.' },
