@@ -12,6 +12,10 @@ import {
 import { cityHasBeach } from '../../services/beachCheck';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
 import { autocompletePlaces, type GeocodeResult } from '../../services/nominatim';
+import {
+  loadQuestionState,
+  saveQuestionState,
+} from '../../services/sessionState';
 import type {
   DestinationCard,
   Interest,
@@ -53,38 +57,102 @@ export function QuestionFlow({
   onComplete,
 }: QuestionFlowProps) {
   const steps = path === 'A' ? STEPS_A : STEPS_B;
-  const [stepIndex, setStepIndex] = useState(0);
-  const step = steps[stepIndex];
-
+  const saved = useMemo(() => loadQuestionState(path), [path]);
   const weekend = useMemo(() => nextWeekendStart(), []);
   const defaultDays = selectedDestination?.suggestedDays ?? 4;
-  const [city, setCity] = useState(selectedDestination?.city ?? '');
-  const [daysText, setDaysText] = useState(String(defaultDays));
-  const [startDate, setStartDate] = useState(toISODate(weekend));
-  const [endDate, setEndDate] = useState(
-    toISODate(addDays(weekend, defaultDays - 1)),
+
+  const [stepIndex, setStepIndex] = useState(() =>
+    Math.min(saved?.stepIndex ?? 0, steps.length - 1),
   );
-  const [datesFlexible, setDatesFlexible] = useState(false);
-  const [hotelAddress, setHotelAddress] = useState('');
-  const [notBooked, setNotBooked] = useState(false);
+  const step = steps[stepIndex];
+
+  const [city, setCity] = useState(
+    () => saved?.city ?? selectedDestination?.city ?? '',
+  );
+  const [daysText, setDaysText] = useState(
+    () => saved?.daysText ?? String(defaultDays),
+  );
+  const [startDate, setStartDate] = useState(
+    () => saved?.startDate ?? toISODate(weekend),
+  );
+  const [endDate, setEndDate] = useState(
+    () =>
+      saved?.endDate ?? toISODate(addDays(weekend, defaultDays - 1)),
+  );
+  const [datesFlexible, setDatesFlexible] = useState(
+    () => saved?.datesFlexible ?? false,
+  );
+  const [hotelAddress, setHotelAddress] = useState(
+    () => saved?.hotelAddress ?? '',
+  );
+  const [notBooked, setNotBooked] = useState(() => saved?.notBooked ?? false);
   const [interests, setInterests] = useState<Interest[]>(() => {
+    if (saved?.interests) return saved.interests;
     const initial = selectedDestination?.interests ?? [];
     if (selectedDestination && !selectedDestination.hasBeach) {
       return initial.filter((i) => i !== 'beach');
     }
     return initial;
   });
-  const [customPreferences, setCustomPreferences] = useState('');
-  const [pace, setPace] = useState<Pace>('balanced');
-  const [dayStartInput, setDayStartInput] = useState('9');
-  const [wantBreakfast, setWantBreakfast] = useState(true);
-  const [breakfastTimeInput, setBreakfastTimeInput] = useState('8 thirty');
-  const [breakfastFood, setBreakfastFood] = useState('');
+  const [customPreferences, setCustomPreferences] = useState(
+    () => saved?.customPreferences ?? '',
+  );
+  const [pace, setPace] = useState<Pace>(() => saved?.pace ?? 'balanced');
+  const [dayStartInput, setDayStartInput] = useState(
+    () => saved?.dayStartInput ?? '9',
+  );
+  const [wantBreakfast, setWantBreakfast] = useState(
+    () => saved?.wantBreakfast ?? true,
+  );
+  const [breakfastTimeInput, setBreakfastTimeInput] = useState(
+    () => saved?.breakfastTimeInput ?? '8 thirty',
+  );
+  const [breakfastFood, setBreakfastFood] = useState(
+    () => saved?.breakfastFood ?? '',
+  );
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [hasBeach, setHasBeach] = useState<boolean | null>(
     selectedDestination ? selectedDestination.hasBeach : null,
   );
   const [beachChecking, setBeachChecking] = useState(false);
+
+  useEffect(() => {
+    saveQuestionState({
+      path,
+      stepIndex,
+      city,
+      daysText,
+      startDate,
+      endDate,
+      datesFlexible,
+      hotelAddress,
+      notBooked,
+      interests,
+      customPreferences,
+      pace,
+      dayStartInput,
+      wantBreakfast,
+      breakfastTimeInput,
+      breakfastFood,
+    });
+  }, [
+    path,
+    stepIndex,
+    city,
+    daysText,
+    startDate,
+    endDate,
+    datesFlexible,
+    hotelAddress,
+    notBooked,
+    interests,
+    customPreferences,
+    pace,
+    dayStartInput,
+    wantBreakfast,
+    breakfastTimeInput,
+    breakfastFood,
+  ]);
 
   const parsedDays = parseDaysInput(daysText);
   const interestOptions = availableInterestOptions(hasBeach === true);

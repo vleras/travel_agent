@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { TravelChatBot } from './components/chat/TravelChatBot';
 import { DestinationPicker } from './components/questions/DestinationPicker';
 import { EntryPoint } from './components/questions/EntryPoint';
@@ -6,6 +6,14 @@ import { QuestionFlow } from './components/questions/QuestionFlow';
 import { AgentProcessing } from './components/trip/AgentProcessing';
 import { TripView } from './components/trip/TripView';
 import { runTravelAgent } from './services/agent';
+import {
+  clearAllSessionState,
+  clearDestState,
+  clearQuestionState,
+  loadAppState,
+  saveAppState,
+  type Path,
+} from './services/sessionState';
 import type {
   AgentOutput,
   AgentProgress,
@@ -15,22 +23,46 @@ import type {
 } from './types';
 import './styles/global.css';
 
-type Path = 'A' | 'B' | null;
+function initialApp() {
+  return (
+    loadAppState() ?? {
+      screen: 'entry' as AppScreen,
+      path: null as Path,
+      picked: null as DestinationCard | null,
+      input: null as TripInput | null,
+      output: null as AgentOutput | null,
+      chatNotes: [] as string[],
+    }
+  );
+}
 
 export default function App() {
-  const [screen, setScreen] = useState<AppScreen>('entry');
-  const [path, setPath] = useState<Path>(null);
-  const [picked, setPicked] = useState<DestinationCard | null>(null);
-  const [input, setInput] = useState<TripInput | null>(null);
-  const [output, setOutput] = useState<AgentOutput | null>(null);
+  const boot = initialApp();
+  const [screen, setScreen] = useState<AppScreen>(boot.screen);
+  const [path, setPath] = useState<Path>(boot.path);
+  const [picked, setPicked] = useState<DestinationCard | null>(boot.picked);
+  const [input, setInput] = useState<TripInput | null>(boot.input);
+  const [output, setOutput] = useState<AgentOutput | null>(boot.output);
   const [progress, setProgress] = useState<AgentProgress>({
     step: 'idle',
     message: '',
   });
   const [error, setError] = useState<string | null>(null);
-  const [chatNotes, setChatNotes] = useState<string[]>([]);
+  const [chatNotes, setChatNotes] = useState<string[]>(boot.chatNotes);
+
+  useEffect(() => {
+    saveAppState({
+      screen,
+      path,
+      picked,
+      input,
+      output,
+      chatNotes,
+    });
+  }, [screen, path, picked, input, output, chatNotes]);
 
   const resetToEntry = useCallback(() => {
+    clearAllSessionState();
     setScreen('entry');
     setPath(null);
     setPicked(null);
@@ -61,6 +93,8 @@ export default function App() {
     try {
       const result = await runTravelAgent(withChat, setProgress);
       setOutput(result);
+      clearQuestionState();
+      clearDestState();
       setScreen('trip');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Agent failed');
@@ -141,7 +175,15 @@ export default function App() {
             setChatNotes((prev) => {
               const diet = `Diet: ${label}`;
               const food = `Breakfast: ${breakfastHint}`;
-              return [...new Set([...prev.filter((n) => !n.startsWith('Diet:') && !n.startsWith('Breakfast:')), diet, food])];
+              return [
+                ...new Set([
+                  ...prev.filter(
+                    (n) => !n.startsWith('Diet:') && !n.startsWith('Breakfast:'),
+                  ),
+                  diet,
+                  food,
+                ]),
+              ];
             });
           }}
           onPreference={(note) => {

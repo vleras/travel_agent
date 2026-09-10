@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { destinationRecommendations } from '../../data/destinations';
 import { PlaceImage, fetchPlacePhotoUrls } from '../shared/PlaceImage';
+import {
+  clearDestState,
+  loadDestState,
+  saveDestState,
+} from '../../services/sessionState';
 import type { DestinationCard, DestinationHighlight } from '../../types';
 import '../../styles/questions.css';
 
@@ -133,8 +138,30 @@ function HighlightCard({
 }
 
 export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) {
-  const [preview, setPreview] = useState<DestinationCard | null>(null);
-  const [highlight, setHighlight] = useState<DestinationHighlight | null>(null);
+  const [preview, setPreview] = useState<DestinationCard | null>(() => {
+    const saved = loadDestState();
+    if (!saved?.previewId) return null;
+    return (
+      destinationRecommendations.find((d) => d.id === saved.previewId) ?? null
+    );
+  });
+  const [highlight, setHighlight] = useState<DestinationHighlight | null>(() => {
+    const saved = loadDestState();
+    if (!saved?.previewId || !saved.highlightName) return null;
+    const dest = destinationRecommendations.find((d) => d.id === saved.previewId);
+    return dest?.highlights.find((h) => h.name === saved.highlightName) ?? null;
+  });
+
+  useEffect(() => {
+    if (!preview) {
+      clearDestState();
+      return;
+    }
+    saveDestState({
+      previewId: preview.id,
+      highlightName: highlight?.name ?? null,
+    });
+  }, [preview, highlight]);
 
   if (preview && highlight) {
     return (
@@ -213,9 +240,6 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
                   </span>
                 ))}
               </div>
-              <p className="dest-meta">
-                Suggested trip: {preview.suggestedDays} days
-              </p>
             </div>
           </div>
 
@@ -307,9 +331,6 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
                       #{tag}
                     </span>
                   ))}
-                </div>
-                <div className="dest-meta">
-                  Suggested trip: {dest.suggestedDays} days
                 </div>
                 <span className="breakfast-card-cta">See places to visit →</span>
               </div>
