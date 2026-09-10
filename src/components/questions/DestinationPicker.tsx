@@ -214,7 +214,7 @@ function HighlightStory({
     setPhotos((prev) => prev.filter((u) => u !== url));
 
   const detailChunks = chunkText(placeDetailCopy(spot, destination), 170);
-  const wikiChunks = wiki?.extract ? chunkText(wiki.extract, 190) : [];
+  const wikiChunks = wiki?.extract ? chunkText(wiki.extract, 220) : [];
   const plan = planStoryPhotos(photos);
   const {
     hero,
@@ -268,6 +268,12 @@ function HighlightStory({
                 {chunk}
               </p>
             ))}
+            {wikiChunks[0] && (
+              <p className="highlight-story-detail">{wikiChunks[0]}</p>
+            )}
+            {wikiChunks[1] && (
+              <p className="highlight-story-detail">{wikiChunks[1]}</p>
+            )}
           </section>
 
           {pair && pairIndices && (
@@ -294,12 +300,12 @@ function HighlightStory({
             </div>
           )}
 
-          {wikiChunks[0] && (
+          {wikiChunks[2] && (
             <section className="highlight-story-section">
               <h2>A bit of history</h2>
-              <p className="highlight-story-detail">{wikiChunks[0]}</p>
-              {wikiChunks[1] && (
-                <p className="highlight-story-detail">{wikiChunks[1]}</p>
+              <p className="highlight-story-detail">{wikiChunks[2]}</p>
+              {wikiChunks[3] && (
+                <p className="highlight-story-detail">{wikiChunks[3]}</p>
               )}
             </section>
           )}
@@ -316,20 +322,20 @@ function HighlightStory({
               <div className="highlight-story-split-copy">
                 <h2>Looking closer</h2>
                 <p className="highlight-story-detail">
-                  {wikiChunks[2] ??
+                  {wikiChunks[4] ??
                     `Wander around ${spot.name} and take in the details — the scale, materials, and how it sits in ${destination.city}.`}
                 </p>
-                {wikiChunks[3] && (
-                  <p className="highlight-story-detail">{wikiChunks[3]}</p>
+                {wikiChunks[5] && (
+                  <p className="highlight-story-detail">{wikiChunks[5]}</p>
                 )}
               </div>
             </section>
           )}
 
-          {wikiChunks.length > 4 && (
+          {wikiChunks.length > 6 && (
             <section className="highlight-story-section">
               <h2>Worth knowing</h2>
-              {wikiChunks.slice(4).map((chunk) => (
+              {wikiChunks.slice(6).map((chunk) => (
                 <p key={chunk} className="highlight-story-detail">
                   {chunk}
                 </p>

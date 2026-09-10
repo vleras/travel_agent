@@ -144,7 +144,7 @@ export function PlacePickDetail({
   const dropPhoto = (url: string) =>
     setPhotos((prev) => prev.filter((u) => u !== url));
 
-  const wikiChunks = wiki?.extract ? chunkText(wiki.extract, 190) : [];
+  const wikiChunks = wiki?.extract ? chunkText(wiki.extract, 220) : [];
   const plan = planStoryPhotos(photos);
   const {
     hero,
@@ -205,10 +205,17 @@ export function PlacePickDetail({
         <section className="highlight-story-section">
           <h2>About this place</h2>
           <p className="highlight-story-detail">
-            {spot.name} is a standout stop in {city}. Browse the photos, then
-            add it if you want it on your itinerary — we’ll place your picks
-            into the days you choose.
+            {spot.name} sits in {city}
+            {country ? `, ${country}` : ''} as a {spot.category.toLowerCase()}{' '}
+            stop. {spot.description} Add it if you want it on your plan — we’ll
+            place your picks into the days you choose.
           </p>
+          {wikiChunks[0] && (
+            <p className="highlight-story-detail">{wikiChunks[0]}</p>
+          )}
+          {wikiChunks[1] && (
+            <p className="highlight-story-detail">{wikiChunks[1]}</p>
+          )}
         </section>
 
         {pair && pairIndices && (
@@ -235,12 +242,12 @@ export function PlacePickDetail({
           </div>
         )}
 
-        {wikiChunks[0] && (
+        {wikiChunks[2] && (
           <section className="highlight-story-section">
             <h2>A bit of history</h2>
-            <p className="highlight-story-detail">{wikiChunks[0]}</p>
-            {wikiChunks[1] && (
-              <p className="highlight-story-detail">{wikiChunks[1]}</p>
+            <p className="highlight-story-detail">{wikiChunks[2]}</p>
+            {wikiChunks[3] && (
+              <p className="highlight-story-detail">{wikiChunks[3]}</p>
             )}
           </section>
         )}
@@ -257,21 +264,21 @@ export function PlacePickDetail({
             <div className="highlight-story-split-copy">
               <h2>Add it to your trip?</h2>
               <p className="highlight-story-detail">
-                {wikiChunks[2] ??
+                {wikiChunks[4] ??
                   `If ${spot.name} is on your must-see list, add it here. You can always remove it before building the itinerary.`}
               </p>
-              {wikiChunks[3] && (
-                <p className="highlight-story-detail">{wikiChunks[3]}</p>
+              {wikiChunks[5] && (
+                <p className="highlight-story-detail">{wikiChunks[5]}</p>
               )}
               <div className="place-pick-detail-inline-add">{addButton}</div>
             </div>
           </section>
         )}
 
-        {wikiChunks.length > 4 && (
+        {wikiChunks.length > 6 && (
           <section className="highlight-story-section">
             <h2>Worth knowing</h2>
-            {wikiChunks.slice(4).map((chunk) => (
+            {wikiChunks.slice(6).map((chunk) => (
               <p key={chunk} className="highlight-story-detail">
                 {chunk}
               </p>

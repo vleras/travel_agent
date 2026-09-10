@@ -475,7 +475,7 @@ export function QuestionFlow({
         <div className="progress-fill" style={{ width: `${progress}%` }} />
       </div>
 
-      <div className="question-card" key={step}>
+      <div className={`question-card${viewingPlace ? ' question-card--story' : ''}`} key={step}>
         {step === 'destination' && (
           <>
             <h2>Where are you going?</h2>

@@ -26,6 +26,7 @@
 
 .question-card {
   max-width: 760px;
+  width: 100%;
   margin: 0 auto;
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(12px);
@@ -34,6 +35,16 @@
   padding: 2rem;
   box-shadow: var(--shadow);
   animation: cardIn 380ms ease both;
+}
+
+.question-card--story {
+  max-width: min(1180px, 96vw);
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  animation: none;
 }
 
 @keyframes cardIn {
@@ -584,7 +595,7 @@
 }
 
 .highlight-story-card {
-  max-width: 880px;
+  max-width: min(1120px, 100%);
   margin: 0 auto;
   background: white;
   border: 1px solid var(--line);
@@ -650,17 +661,17 @@
 
 .highlight-story-hero-shot {
   border-radius: 0;
-  aspect-ratio: 16 / 10;
-  min-height: 220px;
-  max-height: min(52vh, 420px);
+  aspect-ratio: 21 / 10;
+  min-height: 260px;
+  max-height: min(48vh, 480px);
 }
 
 .highlight-story-hero-shot img {
-  max-height: min(52vh, 420px);
+  max-height: min(48vh, 480px);
 }
 
 .highlight-story-titlebar {
-  padding: 1.25rem 1.4rem 0.35rem;
+  padding: 1.35rem 1.75rem 0.35rem;
 }
 
 .highlight-story-titlebar h1 {
@@ -678,7 +689,7 @@
 }
 
 .highlight-story-body {
-  padding: 0.85rem 1.4rem 0.5rem;
+  padding: 0.85rem 1.75rem 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 1.35rem;
