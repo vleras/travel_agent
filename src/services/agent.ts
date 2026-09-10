@@ -1,5 +1,6 @@
 import { placeImageUrl } from '../data/scheduleOptions';
 import { minutesToTime, parseTimeToMinutes } from '../data/scheduleOptions';
+import { getFallbackAttractions } from '../data/fallbackAttractions';
 import { addDays, toISODate } from './geo';
 import {
   haversineKm,
@@ -34,6 +35,195 @@ interface ScoredAttraction extends Attraction {
 function average(nums: number[]): number {
   if (!nums.length) return 0;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+function namesMatch(a: string, b: string): boolean {
+  const left = a.trim().toLowerCase();
+  const right = b.trim().toLowerCase();
+  return (
+    left === right || left.includes(right) || right.includes(left)
+  );
+}
+
+/** Build Attraction records for the places the traveler picked. */
+function resolveMustVisitAttractions(
+  city: string,
+  names: string[],
+): Attraction[] {
+  if (!names.length) return [];
+  const curated = getFallbackAttractions(city);
+  return names.map((name) => {
+    const match = curated.find((a) => namesMatch(a.name, name));
+    if (match) return { ...match, name: match.name };
+    return {
+      name,
+      category: 'Sightseeing',
+      description: `A must-visit stop in ${city}.`,
+      typical_visit_duration_minutes: 75,
+    };
+  });
+}
+
+function mergeAttractions(
+  priority: Attraction[],
+  extras: Attraction[],
+): Attraction[] {
+  const seen = new Set(priority.map((a) => a.name.trim().toLowerCase()));
+  const merged = [...priority];
+  for (const attraction of extras) {
+    const key = attraction.name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    // Also skip near-duplicate names against priority list
+    if ([...seen].some((existing) => namesMatch(existing, key))) continue;
+    seen.add(key);
+    merged.push(attraction);
+  }
+  return merged;
+}
+
+function clusterCentroid(
+  stops: ScoredAttraction[],
+): { lat: number; lon: number } | null {
+  if (!stops.length) return null;
+  return {
+    lat: stops.reduce((sum, s) => sum + s.lat, 0) / stops.length,
+    lon: stops.reduce((sum, s) => sum + s.lon, 0) / stops.length,
+  };
+}
+
+/** Nearest-neighbor tour starting from an anchor (usually hotel/base). */
+function orderByNearestNeighbor(
+  stops: ScoredAttraction[],
+  startLat: number,
+  startLon: number,
+): ScoredAttraction[] {
+  const remaining = [...stops];
+  const ordered: ScoredAttraction[] = [];
+  let lat = startLat;
+  let lon = startLon;
+
+  while (remaining.length) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const dist = haversineKm(lat, lon, remaining[i].lat, remaining[i].lon);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+    const [picked] = remaining.splice(bestIdx, 1);
+    ordered.push(picked);
+    lat = picked.lat;
+    lon = picked.lon;
+  }
+  return ordered;
+}
+
+/**
+ * Group nearby places onto the same day.
+ * Seeds days with spatially spread anchors, then assigns each stop to the
+ * nearest neighborhood cluster and walks a short route within each day.
+ */
+function clusterByProximity(
+  attractions: ScoredAttraction[],
+  days: number,
+  pace: Pace,
+  baseLat: number,
+  baseLon: number,
+): ScoredAttraction[][] {
+  if (days <= 0) return [];
+  if (!attractions.length) return Array.from({ length: days }, () => []);
+
+  const perDay = paceStopsPerDay(pace);
+  // Never drop places when the traveler picked more than the pace budget.
+  const softCap = Math.max(perDay, Math.ceil(attractions.length / days));
+
+  const remaining = [...attractions];
+  const seeds: ScoredAttraction[] = [];
+
+  // First seed: farthest from base (starts a distinct neighborhood).
+  {
+    let bestIdx = 0;
+    let bestDist = -1;
+    for (let i = 0; i < remaining.length; i++) {
+      const dist = haversineKm(
+        baseLat,
+        baseLon,
+        remaining[i].lat,
+        remaining[i].lon,
+      );
+      if (dist > bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+    seeds.push(remaining.splice(bestIdx, 1)[0]);
+  }
+
+  // More seeds: farthest from already chosen seeds (max-min distance).
+  while (seeds.length < Math.min(days, attractions.length) && remaining.length) {
+    let bestIdx = 0;
+    let bestDist = -1;
+    for (let i = 0; i < remaining.length; i++) {
+      const minToSeeds = Math.min(
+        ...seeds.map((seed) =>
+          haversineKm(seed.lat, seed.lon, remaining[i].lat, remaining[i].lon),
+        ),
+      );
+      if (minToSeeds > bestDist) {
+        bestDist = minToSeeds;
+        bestIdx = i;
+      }
+    }
+    seeds.push(remaining.splice(bestIdx, 1)[0]);
+  }
+
+  const clusters: ScoredAttraction[][] = seeds.map((seed) => [seed]);
+  while (clusters.length < days) clusters.push([]);
+
+  // Assign remaining stops to the nearest under-capacity neighborhood.
+  for (const place of remaining) {
+    let bestDay = 0;
+    let bestDist = Infinity;
+
+    for (let d = 0; d < days; d++) {
+      const cluster = clusters[d];
+      if (
+        cluster.length >= softCap &&
+        clusters.some((c, i) => i !== d && c.length < softCap)
+      ) {
+        continue;
+      }
+      const centroid = clusterCentroid(cluster);
+      const dist = centroid
+        ? haversineKm(centroid.lat, centroid.lon, place.lat, place.lon)
+        : haversineKm(baseLat, baseLon, place.lat, place.lon);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestDay = d;
+      }
+    }
+    clusters[bestDay].push(place);
+  }
+
+  // Order days by neighborhood distance from the hotel/base.
+  const orderedDays = [...clusters].sort((a, b) => {
+    const ca = clusterCentroid(a);
+    const cb = clusterCentroid(b);
+    if (!ca && !cb) return 0;
+    if (!ca) return 1;
+    if (!cb) return -1;
+    return (
+      haversineKm(baseLat, baseLon, ca.lat, ca.lon) -
+      haversineKm(baseLat, baseLon, cb.lat, cb.lon)
+    );
+  });
+
+  // Compact walking order within each day.
+  return orderedDays.map((day) =>
+    orderByNearestNeighbor(day, baseLat, baseLon),
+  );
 }
 
 function dayTotalDistance(
@@ -262,48 +452,6 @@ function buildDay(
   };
 }
 
-/** Greedy nearest-to-base clustering into day buckets. */
-function clusterByDay(
-  attractions: ScoredAttraction[],
-  days: number,
-  pace: Pace,
-  baseLat: number,
-  baseLon: number,
-): ScoredAttraction[][] {
-  const perDay = paceStopsPerDay(pace);
-  const remaining = [...attractions];
-  const clusters: ScoredAttraction[][] = [];
-
-  for (let d = 0; d < days; d++) {
-    const cluster: ScoredAttraction[] = [];
-    let anchorLat = baseLat;
-    let anchorLon = baseLon;
-
-    while (cluster.length < perDay && remaining.length) {
-      let bestIdx = 0;
-      let bestDist = Infinity;
-      for (let i = 0; i < remaining.length; i++) {
-        const dist = haversineKm(
-          anchorLat,
-          anchorLon,
-          remaining[i].lat,
-          remaining[i].lon,
-        );
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestIdx = i;
-        }
-      }
-      const [picked] = remaining.splice(bestIdx, 1);
-      cluster.push(picked);
-      anchorLat = picked.lat;
-      anchorLon = picked.lon;
-    }
-    clusters.push(cluster);
-  }
-  return clusters;
-}
-
 function reviseClusters(
   clusters: ScoredAttraction[][],
   baseLat: number,
@@ -527,17 +675,25 @@ export async function runTravelAgent(
   geminiMs += latencyMs;
   if (source === 'gemini') apiCalls += 1;
 
+  const mustVisitNames = (input.must_visit_places ?? []).filter(Boolean);
+  const mustVisitAttractions = resolveMustVisitAttractions(
+    input.destination_city,
+    mustVisitNames,
+  );
+  const mergedAttractions = mergeAttractions(mustVisitAttractions, attractions);
+
   onProgress({
     step: 'act',
     message: 'Locating stops on the map',
-    detail:
-      source === 'fallback'
+    detail: mustVisitNames.length
+      ? `Pinning your ${mustVisitNames.length} picks, then geocoding nearby options…`
+      : source === 'fallback'
         ? 'Using curated attractions (no Gemini key or API fallback)'
-        : `Geocoding ${attractions.length} attractions…`,
+        : `Geocoding ${mergedAttractions.length} attractions…`,
   });
 
   const { scored, nominatimMs: geoMs, apiCalls: geoCalls } = await ensureCoords(
-    attractions,
+    mergedAttractions,
     input.destination_city,
     onProgress,
   );
@@ -550,13 +706,36 @@ export async function runTravelAgent(
     onProgress,
   );
 
+  // Prefer the traveler's picks; fill remaining day capacity with extras.
+  const mustNameSet = new Set(
+    mustVisitNames.map((name) => name.trim().toLowerCase()),
+  );
+  const mustScored = scoredWithPhotos.filter((a) =>
+    [...mustNameSet].some((picked) => namesMatch(picked, a.name)),
+  );
+  const fillerScored = scoredWithPhotos.filter(
+    (a) => ![...mustNameSet].some((picked) => namesMatch(picked, a.name)),
+  );
+  const maxStops =
+    input.trip_length_days * paceStopsPerDay(input.pace);
+  const planningPool =
+    mustScored.length > 0
+      ? [
+          ...mustScored,
+          ...fillerScored.slice(
+            0,
+            Math.max(0, maxStops - mustScored.length),
+          ),
+        ]
+      : scoredWithPhotos.slice(0, maxStops);
+
   // Sample OSRM for a couple of pairs (thesis metrics) without blocking clustering
-  if (scoredWithPhotos.length >= 2) {
+  if (planningPool.length >= 2) {
     const sample = await routeDistance(
-      scoredWithPhotos[0].lon,
-      scoredWithPhotos[0].lat,
-      scoredWithPhotos[1].lon,
-      scoredWithPhotos[1].lat,
+      planningPool[0].lon,
+      planningPool[0].lat,
+      planningPool[1].lon,
+      planningPool[1].lat,
     );
     osrmMs += sample.latencyMs;
     apiCalls += 1;
@@ -565,12 +744,14 @@ export async function runTravelAgent(
   // —— OBSERVE ——
   onProgress({
     step: 'observe',
-    message: 'Clustering by day & scoring compactness',
-    detail: `Building ${input.trip_length_days}-day clusters around your base…`,
+    message: 'Grouping nearby places into days',
+    detail: mustScored.length
+      ? `Clustering your ${mustScored.length} picks by proximity across ${input.trip_length_days} days…`
+      : `Building ${input.trip_length_days}-day neighborhoods around your base…`,
   });
 
-  const clusters = clusterByDay(
-    scoredWithPhotos,
+  const clusters = clusterByProximity(
+    planningPool,
     input.trip_length_days,
     input.pace,
     location.base_lat,

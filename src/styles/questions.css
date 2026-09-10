@@ -47,6 +47,10 @@
   animation: none;
 }
 
+.question-card--places {
+  max-width: min(1120px, 96vw);
+}
+
 @keyframes cardIn {
   from {
     opacity: 0;
@@ -244,8 +248,14 @@
 
 .place-pick-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 0.85rem;
+}
+
+@media (min-width: 900px) {
+  .question-card--places .place-pick-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .place-pick-card {

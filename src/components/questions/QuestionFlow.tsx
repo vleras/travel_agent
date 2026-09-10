@@ -2,14 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   availableInterestOptions,
   destinationRecommendations,
-  PACE_OPTIONS,
 } from '../../data/destinations';
-import {
-  BREAKFAST_FOOD_SUGGESTIONS,
-  normalizeBreakfastTime,
-  parseDaysInput,
-  parseFlexibleTime,
-} from '../../data/scheduleOptions';
+import { parseDaysInput } from '../../data/scheduleOptions';
 import { cityHasBeach } from '../../services/beachCheck';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
 import { autocompletePlaces, type GeocodeResult } from '../../services/nominatim';
@@ -21,7 +15,6 @@ import type {
   DestinationCard,
   DestinationHighlight,
   Interest,
-  Pace,
   QuestionStep,
   TripInput,
 } from '../../types';
@@ -43,19 +36,17 @@ const STEPS_A: QuestionStep[] = [
   'dates',
   'hotel',
   'interests',
-  'pace',
   'places',
-  'schedule',
 ];
 const STEPS_B: QuestionStep[] = [
   'days',
   'dates',
   'hotel',
   'interests',
-  'pace',
   'places',
-  'schedule',
 ];
+
+const DEFAULT_PACE = 'balanced' as const;
 
 function placesForCity(
   city: string,
@@ -116,78 +107,13 @@ function PlacesGuideChat({
         {phase >= 2 && (
           <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
             Tap a card to open details, or use Add on the card. When you’re done
-            choosing, I’ll organize those picks into the days you want — we’ll
-            set your daily schedule after this.
+            choosing, I’ll organize those picks into your days.
           </div>
         )}
         {selectedCount > 0 && (
           <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
             Nice — {selectedCount} place{selectedCount === 1 ? '' : 's'} selected.
-            Keep tapping to add more, then continue to set your schedule.
-          </div>
-        )}
-      </div>
-    </aside>
-  );
-}
-
-function ScheduleGuideChat({
-  city,
-  selectedCount,
-}: {
-  city: string;
-  selectedCount: number;
-}) {
-  const [phase, setPhase] = useState(0);
-  const placeLabel = city.trim() || 'your destination';
-
-  useEffect(() => {
-    setPhase(0);
-    const t1 = window.setTimeout(() => setPhase(1), 450);
-    const t2 = window.setTimeout(() => setPhase(2), 1400);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [city, selectedCount]);
-
-  return (
-    <aside className="schedule-guide-chat" aria-live="polite">
-      <div className="schedule-guide-chat-head">
-        <span className="schedule-guide-avatar" aria-hidden>
-          ✈
-        </span>
-        <div>
-          <strong>Travel Agent</strong>
-          <p>Daily schedule</p>
-        </div>
-      </div>
-      <div className="schedule-guide-messages chatbot-messages">
-        {phase === 0 && (
-          <div className="chatbot-bubble chatbot-bubble--assistant chatbot-typing">
-            Typing…
-          </div>
-        )}
-        {phase >= 1 && (
-          <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
-            {selectedCount > 0 ? (
-              <>
-                Great — you’ve picked {selectedCount} place
-                {selectedCount === 1 ? '' : 's'} in <strong>{placeLabel}</strong>.
-                Now tell me when your days should start
-                {selectedCount > 0 ? ' and about breakfast' : ''}.
-              </>
-            ) : (
-              <>
-                Last step for <strong>{placeLabel}</strong>: set when sightseeing
-                starts and whether you want breakfast on the plan.
-              </>
-            )}
-          </div>
-        )}
-        {phase >= 2 && (
-          <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
-            After this, I’ll arrange your chosen places into the days you want.
+            Keep tapping to add more, then continue to build your itinerary.
           </div>
         )}
       </div>
@@ -242,19 +168,6 @@ export function QuestionFlow({
   const [customPreferences, setCustomPreferences] = useState(
     () => saved?.customPreferences ?? '',
   );
-  const [pace, setPace] = useState<Pace>(() => saved?.pace ?? 'balanced');
-  const [dayStartInput, setDayStartInput] = useState(
-    () => saved?.dayStartInput ?? '9',
-  );
-  const [wantBreakfast, setWantBreakfast] = useState(
-    () => saved?.wantBreakfast ?? true,
-  );
-  const [breakfastTimeInput, setBreakfastTimeInput] = useState(
-    () => saved?.breakfastTimeInput ?? '8 thirty',
-  );
-  const [breakfastFood, setBreakfastFood] = useState(
-    () => saved?.breakfastFood ?? '',
-  );
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>(
     () => saved?.selectedPlaces ?? [],
   );
@@ -280,11 +193,6 @@ export function QuestionFlow({
       notBooked,
       interests,
       customPreferences,
-      pace,
-      dayStartInput,
-      wantBreakfast,
-      breakfastTimeInput,
-      breakfastFood,
       selectedPlaces,
     });
   }, [
@@ -299,11 +207,6 @@ export function QuestionFlow({
     notBooked,
     interests,
     customPreferences,
-    pace,
-    dayStartInput,
-    wantBreakfast,
-    breakfastTimeInput,
-    breakfastFood,
     selectedPlaces,
   ]);
 
@@ -378,11 +281,6 @@ export function QuestionFlow({
     if (step === 'interests') {
       return interests.length > 0 || customPreferences.trim().length > 0;
     }
-    if (step === 'schedule') {
-      if (parseFlexibleTime(dayStartInput) == null) return false;
-      if (!wantBreakfast) return true;
-      return parseFlexibleTime(breakfastTimeInput) != null;
-    }
     if (step === 'places') {
       const list = placesForCity(city, selectedDestination);
       if (list.length === 0) return true;
@@ -415,15 +313,9 @@ export function QuestionFlow({
 
   function finish() {
     if (!parsedDays) return;
-    const startParsed = parseFlexibleTime(dayStartInput);
-    if (!startParsed) return;
     const cleanedInterests = hasBeach
       ? interests
       : interests.filter((i) => i !== 'beach');
-    const breakfastTime = wantBreakfast
-      ? normalizeBreakfastTime(breakfastTimeInput)
-      : 'skip';
-
     const planningStart = datesFlexible
       ? toISODate(weekend)
       : startDate;
@@ -450,11 +342,11 @@ export function QuestionFlow({
       suggested_area: notBooked ? 'City Center' : null,
       interests: cleanedInterests,
       custom_preferences: prefs || null,
-      pace,
-      day_start_time: startParsed,
-      breakfast_time: breakfastTime,
-      breakfast_food:
-        breakfastTime === 'skip' ? null : breakfastFood.trim() || null,
+      must_visit_places: selectedPlaces,
+      pace: DEFAULT_PACE,
+      day_start_time: '09:00',
+      breakfast_time: 'skip',
+      breakfast_food: null,
     });
   }
 
@@ -491,7 +383,16 @@ export function QuestionFlow({
         <div className="progress-fill" style={{ width: `${progress}%` }} />
       </div>
 
-      <div className={`question-card${viewingPlace ? ' question-card--story' : ''}`} key={step}>
+      <div
+        className={`question-card${
+          viewingPlace
+            ? ' question-card--story'
+            : step === 'places'
+              ? ' question-card--places'
+              : ''
+        }`}
+        key={step}
+      >
         {step === 'destination' && (
           <>
             <h2>Where are you going?</h2>
@@ -670,123 +571,6 @@ export function QuestionFlow({
                   onChange={(e) => setCustomPreferences(e.target.value)}
                 />
               </div>
-            </div>
-          </>
-        )}
-
-        {step === 'pace' && (
-          <>
-            <h2>Trip pace?</h2>
-            <p className="hint">Optional — Balanced is a solid default for most cities.</p>
-            <div className="question-body">
-              <div className="radio-stack">
-                {PACE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={`radio-option ${pace === opt.id ? 'active' : ''}`}
-                    onClick={() => setPace(opt.id)}
-                  >
-                    <div>
-                      <strong>{opt.label}</strong>
-                      <span>{opt.description}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {step === 'schedule' && (
-          <>
-            <h2>Daily schedule</h2>
-            <p className="hint">
-              Set when sightseeing starts, then tell us when and what you want for breakfast.
-            </p>
-            <ScheduleGuideChat city={city} selectedCount={selectedPlaces.length} />
-            <div className="question-body">
-              <div className="field">
-                <label htmlFor="day-start">Start seeing places at</label>
-                <input
-                  id="day-start"
-                  type="text"
-                  value={dayStartInput}
-                  placeholder='e.g. 9, 9:30, "8 thirty", half past eight'
-                  onChange={(e) => setDayStartInput(e.target.value)}
-                />
-                {dayStartInput.trim() &&
-                  parseFlexibleTime(dayStartInput) == null && (
-                    <p className="hint" style={{ margin: 0, color: 'var(--coral)' }}>
-                      Try “9”, “8 thirty”, “half past eight”, or “9:30am”.
-                    </p>
-                  )}
-                {parseFlexibleTime(dayStartInput) && (
-                  <p className="hint" style={{ margin: 0 }}>
-                    Sightseeing starts at{' '}
-                    <strong>{parseFlexibleTime(dayStartInput)}</strong>.
-                  </p>
-                )}
-              </div>
-
-              <label className="toggle-row">
-                <input
-                  type="checkbox"
-                  checked={wantBreakfast}
-                  onChange={(e) => setWantBreakfast(e.target.checked)}
-                />
-                Include breakfast in the itinerary
-              </label>
-
-              {wantBreakfast && (
-                <>
-                  <div className="field">
-                    <label htmlFor="breakfast-time">What time do you want to eat?</label>
-                    <input
-                      id="breakfast-time"
-                      type="text"
-                      value={breakfastTimeInput}
-                      placeholder='e.g. 8, "8 thirty", half past eight, 9am'
-                      onChange={(e) => setBreakfastTimeInput(e.target.value)}
-                    />
-                    {breakfastTimeInput.trim() &&
-                      parseFlexibleTime(breakfastTimeInput) == null && (
-                        <p className="hint" style={{ margin: 0, color: 'var(--coral)' }}>
-                          Try “8 thirty”, “half past eight”, or “9:30am”.
-                        </p>
-                      )}
-                    {parseFlexibleTime(breakfastTimeInput) && (
-                      <p className="hint" style={{ margin: 0 }}>
-                        We’ll schedule breakfast at{' '}
-                        <strong>{parseFlexibleTime(breakfastTimeInput)}</strong>.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="field">
-                    <label htmlFor="breakfast-food">What do you want to eat?</label>
-                    <input
-                      id="breakfast-food"
-                      type="text"
-                      value={breakfastFood}
-                      placeholder="e.g. croissants, eggs, coffee, hotel buffet…"
-                      onChange={(e) => setBreakfastFood(e.target.value)}
-                    />
-                  </div>
-                  <div className="chip-row">
-                    {BREAKFAST_FOOD_SUGGESTIONS.map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        className={`chip ${breakfastFood === suggestion ? 'active' : ''}`}
-                        onClick={() => setBreakfastFood(suggestion)}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
             </div>
           </>
         )}

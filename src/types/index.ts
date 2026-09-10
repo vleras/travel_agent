@@ -47,6 +47,8 @@ export interface TripInput {
   suggested_area: string | null;
   interests: Interest[];
   custom_preferences: string | null;
+  /** Places the traveler explicitly picked to visit. */
+  must_visit_places?: string[];
   pace: Pace;
   day_start_time: string;
   breakfast_time: BreakfastOption;
@@ -156,6 +158,4 @@ export type QuestionStep =
   | 'dates'
   | 'hotel'
   | 'interests'
-  | 'pace'
-  | 'schedule'
   | 'places';

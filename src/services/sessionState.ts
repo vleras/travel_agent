@@ -3,7 +3,6 @@ import type {
   AppScreen,
   DestinationCard,
   Interest,
-  Pace,
   TripInput,
 } from '../types';
 
@@ -39,11 +38,6 @@ export interface PersistedQuestionState {
   notBooked: boolean;
   interests: Interest[];
   customPreferences: string;
-  pace: Pace;
-  dayStartInput: string;
-  wantBreakfast: boolean;
-  breakfastTimeInput: string;
-  breakfastFood: string;
   selectedPlaces: string[];
 }
 
