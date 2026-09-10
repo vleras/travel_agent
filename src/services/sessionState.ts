@@ -2,7 +2,6 @@ import type {
   AgentOutput,
   AppScreen,
   DestinationCard,
-  Interest,
   TripInput,
 } from '../types';
 
@@ -31,13 +30,8 @@ export interface PersistedQuestionState {
   stepIndex: number;
   city: string;
   daysText: string;
-  startDate: string;
-  endDate: string;
-  datesFlexible: boolean;
   hotelAddress: string;
   notBooked: boolean;
-  interests: Interest[];
-  customPreferences: string;
   selectedPlaces: string[];
 }
 

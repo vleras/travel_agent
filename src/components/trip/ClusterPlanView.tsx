@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { formatTripRange, haversineKm, minutesToLabel } from '../../services/geo';
+import { haversineKm, minutesToLabel } from '../../services/geo';
 import type {
   AgentOutput,
   DayItinerary,
@@ -114,14 +114,6 @@ export function ClusterPlanView({
             <h1>
               Nearby groups in {input.destination_city}
             </h1>
-            <p className="cluster-plan-sub">
-              {formatTripRange(
-                input.start_date,
-                input.end_date,
-                input.dates_flexible,
-              )}{' '}
-              · Places close together are grouped for easier days
-            </p>
           </div>
         </div>
         <div className="trip-topbar-right">

@@ -8,14 +8,12 @@ function commons(file: string): string {
 
 function fromFallback(cityKey: string): DestinationHighlight[] {
   const list = fallbackAttractions[cityKey] ?? [];
-  return list
-    .filter((a) => a.category.toLowerCase() !== 'food')
-    .slice(0, 8)
-    .map((a) => ({
-      name: a.name,
-      category: a.category,
-      description: a.description,
-    }));
+  // Include sights, cafés, and restaurants — at least a full picker set.
+  return list.slice(0, 16).map((a) => ({
+    name: a.name,
+    category: a.category,
+    description: a.description,
+  }));
 }
 
 export const destinationRecommendations: DestinationCard[] = [
@@ -105,6 +103,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'São Jorge Castle', category: 'Museums', description: 'Hilltop castle with sweeping city and river views.' },
       { name: 'Cascais day trip', category: 'Beach', description: 'Coastal town beaches a short train ride away.' },
       { name: 'Pink Street nightlife', category: 'Nightlife', description: 'Bars and late-night energy in Cais do Sodré.' },
+      { name: 'Pastéis de Belém', category: 'Food', description: 'The original bakery for Portugal’s famous custard tarts.' },
+      { name: 'Time Out Market', category: 'Food', description: 'Food hall of top Lisbon chefs under one roof.' },
+      { name: 'A Brasileira café', category: 'Food', description: 'Historic Chiado café tied to Fernando Pessoa and espresso culture.' },
+      { name: 'Miradouro da Senhora do Monte', category: 'Photography', description: 'One of Lisbon’s best sunset viewpoints.' },
     ],
   },
   {
@@ -126,6 +128,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Jordaan stroll', category: 'Photography', description: 'Courtyards, canals, and quiet neighborhood streets.' },
       { name: 'Vondelpark', category: 'Nature', description: 'City park for picnics, bikes, and open-air vibes.' },
       { name: 'Leidseplein nightlife', category: 'Nightlife', description: 'Theatres, clubs, and late bars.' },
+      { name: 'Café Winkel 43', category: 'Food', description: 'Cult spot for Dutch apple pie by the Noordermarkt.' },
+      { name: 'Foodhallen', category: 'Food', description: 'Indoor market of local bites, coffee, and street food.' },
+      { name: 'De Pijp & Albert Cuyp Market', category: 'Food', description: 'Market stalls, cafés, and neighborhood energy.' },
+      { name: 'Brown café hop', category: 'Food', description: 'Classic Dutch pubs for beer and gezelligheid.' },
     ],
   },
   {
@@ -147,6 +153,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Hyde Park & Kensington', category: 'Nature', description: 'Royal parks and museum quarter.' },
       { name: 'Shoreditch & Brick Lane', category: 'Art', description: 'Street art, murals, and indie shops.' },
       { name: 'Soho nightlife', category: 'Nightlife', description: 'Bars, jazz, and late-night energy.' },
+      { name: 'Borough Market', category: 'Food', description: 'Historic food market for street eats and coffee.' },
+      { name: 'Dishoom Covent Garden', category: 'Food', description: 'Beloved Bombay-style café for breakfast and chai.' },
+      { name: 'Monmouth Coffee', category: 'Food', description: 'Cult London coffee roaster near Borough Market.' },
+      { name: 'Neal’s Yard', category: 'Photography', description: 'Colorful courtyard cafés in Covent Garden.' },
     ],
   },
   {
@@ -170,6 +180,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'High Line', category: 'Nature', description: 'Elevated park through Chelsea’s galleries.' },
       { name: 'Times Square & Broadway', category: 'Art', description: 'Neon lights and theatre marquees.' },
       { name: 'Lower East Side nightlife', category: 'Nightlife', description: 'Bars and music venues east of downtown.' },
+      { name: 'Katz’s Delicatessen', category: 'Food', description: 'Legendary pastrami institution on the Lower East Side.' },
+      { name: 'Joe’s Pizza', category: 'Food', description: 'Classic New York slice stop in Greenwich Village.' },
+      { name: 'Chelsea Market', category: 'Food', description: 'Food hall under the High Line for bites and coffee.' },
+      { name: 'Brooklyn coffee crawl', category: 'Food', description: 'Independent cafés around DUMBO and Williamsburg.' },
     ],
   },
   {
@@ -191,6 +205,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Bosphorus cruise', category: 'Photography', description: 'Strait views between Europe and Asia.' },
       { name: 'Basilica Cistern', category: 'Architecture', description: 'Underground forest of columns and water.' },
       { name: 'Galata & Karaköy nightlife', category: 'Nightlife', description: 'Rooftop bars with skyline views.' },
+      { name: 'Karaköy breakfast street', category: 'Food', description: 'Famous kahvaltı spots and waterfront cafés.' },
+      { name: 'Spice Bazaar snacks', category: 'Food', description: 'Lokum, börek, and Turkish coffee by the bazaar.' },
+      { name: 'Çiya Sofrası', category: 'Food', description: 'Celebrated Anatolian restaurant across the Bosphorus.' },
+      { name: 'Balat café walk', category: 'Food', description: 'Colorful streets with indie cafés and tea gardens.' },
     ],
   },
   {
@@ -212,6 +230,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Vyšehrad', category: 'Nature', description: 'Quiet fortress park above the Vltava.' },
       { name: 'Petřín Hill', category: 'Nature', description: 'Gardens and tower views over the city.' },
       { name: 'Cross Club / nightlife', category: 'Nightlife', description: 'Steampunk clubs and riverside bars.' },
+      { name: 'Café Louvre', category: 'Food', description: 'Grand historic café once favored by Kafka and Einstein.' },
+      { name: 'Lokál beer hall', category: 'Food', description: 'Fresh Czech lager and classic pub food.' },
+      { name: 'Havelská Market snacks', category: 'Food', description: 'Open-air stalls for trdelník and street bites.' },
+      { name: 'Letná beer garden', category: 'Food', description: 'Hilltop garden with city views and cold pilsner.' },
     ],
   },
   {
@@ -233,6 +255,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Monastiraki flea market', category: 'Shopping', description: 'Antiques, crafts, and Acropolis views.' },
       { name: 'Glyfada / Vouliagmeni', category: 'Beach', description: 'City beaches and a thermal lake.' },
       { name: 'Rooftop nightlife', category: 'Nightlife', description: 'Bars with floodlit Acropolis views.' },
+      { name: 'Loukoumades stall', category: 'Food', description: 'Honey-soaked doughnuts from a classic Athenian stand.' },
+      { name: 'Varvakios Market lunch', category: 'Food', description: 'Central market for fresh seafood and mezze.' },
+      { name: 'Brettos bar', category: 'Food', description: 'Colorful bottle-lined bar for ouzo in Plaka.' },
+      { name: 'Kafeneio hop in Psyrri', category: 'Food', description: 'Traditional coffee houses and street mezze.' },
     ],
   },
   {
@@ -254,6 +280,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Koutoubia Mosque', category: 'Architecture', description: 'Landmark minaret of the medina skyline.' },
       { name: 'Hammam & riad afternoon', category: 'Art', description: 'Traditional steam bath and courtyard calm.' },
       { name: 'Atlas foothills day trip', category: 'Nature', description: 'Villages and mountain air beyond the city.' },
+      { name: 'Café des Épices', category: 'Food', description: 'Rooftop café overlooking the spice market.' },
+      { name: 'Nomad restaurant', category: 'Food', description: 'Modern Moroccan plates with medina views.' },
+      { name: 'Orange juice stalls', category: 'Food', description: 'Fresh-squeezed juice stands on Jemaa el-Fnaa.' },
+      { name: 'Street mint tea', category: 'Food', description: 'Classic Moroccan tea stops in the souks.' },
     ],
   },
   {
@@ -278,6 +308,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'Manly ferry', category: 'Beach', description: 'Classic ferry ride to a beach suburb.' },
       { name: 'Barangaroo waterfront', category: 'Photography', description: 'Harbour promenade and skyline walks.' },
       { name: 'Surry Hills nightlife', category: 'Nightlife', description: 'Bars and live music inland from the CBD.' },
+      { name: 'Bills Surry Hills', category: 'Food', description: 'Famous café for ricotta hotcakes and easy brunch.' },
+      { name: 'Fish Market lunch', category: 'Food', description: 'Fresh seafood counters by the harbour.' },
+      { name: 'Pablo & Rusty’s', category: 'Food', description: 'Specialty coffee institution in the CBD.' },
+      { name: 'Bondi Icebergs café', category: 'Food', description: 'Ocean-pool views with coffee or a long lunch.' },
     ],
   },
   {
@@ -299,6 +333,10 @@ export const destinationRecommendations: DestinationCard[] = [
       { name: 'N Seoul Tower', category: 'Photography', description: 'City panorama from Namsan.' },
       { name: 'Gangnam & COEX', category: 'Shopping', description: 'Malls, K-beauty, and neon avenues.' },
       { name: 'DMZ day trip', category: 'Museums', description: 'History-focused excursion north of the city.' },
+      { name: 'Gwangjang Market', category: 'Food', description: 'Bindaetteok, mayak gimbap, and classic street eats.' },
+      { name: 'Myeongdong food alleys', category: 'Food', description: 'Hotteok, tteokbokki, and neon snack stalls.' },
+      { name: 'Ikseon-dong cafés', category: 'Food', description: 'Hanok alley full of specialty coffee and dessert cafés.' },
+      { name: 'Tongin Market rice box', category: 'Food', description: 'Fill a brass lunchbox with market bites near the palace.' },
     ],
   },
 ];

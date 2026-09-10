@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  availableInterestOptions,
-  destinationRecommendations,
-} from '../../data/destinations';
+import { destinationRecommendations } from '../../data/destinations';
+import { fallbackAttractions } from '../../data/fallbackAttractions';
 import { parseDaysInput } from '../../data/scheduleOptions';
-import { cityHasBeach } from '../../services/beachCheck';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
 import { autocompletePlaces, type GeocodeResult } from '../../services/nominatim';
 import {
@@ -12,9 +9,9 @@ import {
   saveQuestionState,
 } from '../../services/sessionState';
 import type {
+  Attraction,
   DestinationCard,
   DestinationHighlight,
-  Interest,
   QuestionStep,
   TripInput,
 } from '../../types';
@@ -33,32 +30,66 @@ interface QuestionFlowProps {
 const STEPS_A: QuestionStep[] = [
   'destination',
   'days',
-  'dates',
   'hotel',
-  'interests',
   'places',
 ];
 const STEPS_B: QuestionStep[] = [
   'days',
-  'dates',
   'hotel',
-  'interests',
   'places',
 ];
 
 const DEFAULT_PACE = 'balanced' as const;
+const MIN_PLACE_OPTIONS = 10;
+
+function attractionToHighlight(a: Attraction): DestinationHighlight {
+  return {
+    name: a.name,
+    category: a.category,
+    description: a.description,
+  };
+}
+
+function curatedPlacesForCity(city: string): DestinationHighlight[] {
+  const key = city.toLowerCase().trim();
+  const match = Object.keys(fallbackAttractions).find(
+    (k) => key.includes(k) || k.includes(key),
+  );
+  if (!match) return [];
+  return fallbackAttractions[match].map(attractionToHighlight);
+}
+
+function mergePlaceLists(
+  primary: DestinationHighlight[],
+  extras: DestinationHighlight[],
+): DestinationHighlight[] {
+  const seen = new Set(primary.map((p) => p.name.trim().toLowerCase()));
+  const merged = [...primary];
+  for (const place of extras) {
+    const key = place.name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(place);
+  }
+  return merged;
+}
 
 function placesForCity(
   city: string,
   selectedDestination?: DestinationCard | null,
 ): DestinationHighlight[] {
-  if (selectedDestination?.highlights?.length) {
-    return selectedDestination.highlights;
+  const curated = curatedPlacesForCity(city);
+  if (curated.length >= MIN_PLACE_OPTIONS) {
+    return curated;
   }
-  const match = destinationRecommendations.find(
-    (d) => d.city.toLowerCase() === city.trim().toLowerCase(),
-  );
-  return match?.highlights ?? [];
+
+  const fromCard = selectedDestination?.highlights?.length
+    ? selectedDestination.highlights
+    : destinationRecommendations.find(
+        (d) => d.city.toLowerCase() === city.trim().toLowerCase(),
+      )?.highlights ?? [];
+
+  return mergePlaceLists(fromCard, curated);
 }
 
 function PlacesGuideChat({
@@ -143,31 +174,10 @@ export function QuestionFlow({
   const [daysText, setDaysText] = useState(
     () => saved?.daysText ?? String(defaultDays),
   );
-  const [startDate, setStartDate] = useState(
-    () => saved?.startDate ?? toISODate(weekend),
-  );
-  const [endDate, setEndDate] = useState(
-    () =>
-      saved?.endDate ?? toISODate(addDays(weekend, defaultDays - 1)),
-  );
-  const [datesFlexible, setDatesFlexible] = useState(
-    () => saved?.datesFlexible ?? false,
-  );
   const [hotelAddress, setHotelAddress] = useState(
     () => saved?.hotelAddress ?? '',
   );
   const [notBooked, setNotBooked] = useState(() => saved?.notBooked ?? false);
-  const [interests, setInterests] = useState<Interest[]>(() => {
-    if (saved?.interests) return saved.interests;
-    const initial = selectedDestination?.interests ?? [];
-    if (selectedDestination && !selectedDestination.hasBeach) {
-      return initial.filter((i) => i !== 'beach');
-    }
-    return initial;
-  });
-  const [customPreferences, setCustomPreferences] = useState(
-    () => saved?.customPreferences ?? '',
-  );
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>(
     () => saved?.selectedPlaces ?? [],
   );
@@ -175,9 +185,6 @@ export function QuestionFlow({
     null,
   );
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
-  const [hasBeach, setHasBeach] = useState<boolean | null>(
-    selectedDestination ? selectedDestination.hasBeach : null,
-  );
 
   useEffect(() => {
     saveQuestionState({
@@ -185,13 +192,8 @@ export function QuestionFlow({
       stepIndex,
       city,
       daysText,
-      startDate,
-      endDate,
-      datesFlexible,
       hotelAddress,
       notBooked,
-      interests,
-      customPreferences,
       selectedPlaces,
     });
   }, [
@@ -199,21 +201,12 @@ export function QuestionFlow({
     stepIndex,
     city,
     daysText,
-    startDate,
-    endDate,
-    datesFlexible,
     hotelAddress,
     notBooked,
-    interests,
-    customPreferences,
     selectedPlaces,
   ]);
 
   const parsedDays = parseDaysInput(daysText);
-  const interestOptions = availableInterestOptions(hasBeach === true);
-  const allSelected =
-    interestOptions.length > 0 &&
-    interestOptions.every((opt) => interests.includes(opt.id));
 
   useEffect(() => {
     if (step !== 'destination' || city.trim().length < 2) {
@@ -226,58 +219,12 @@ export function QuestionFlow({
     return () => window.clearTimeout(handle);
   }, [city, step]);
 
-  useEffect(() => {
-    if (!city.trim()) {
-      setHasBeach(null);
-      return;
-    }
-    if (selectedDestination && selectedDestination.city === city) {
-      setHasBeach(selectedDestination.hasBeach);
-      if (!selectedDestination.hasBeach) {
-        setInterests((prev) => prev.filter((i) => i !== 'beach'));
-      }
-      return;
-    }
-
-    let cancelled = false;
-    void cityHasBeach(city).then((result) => {
-      if (cancelled) return;
-      setHasBeach(result);
-      if (!result) {
-        setInterests((prev) => prev.filter((i) => i !== 'beach'));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [city, selectedDestination]);
-
   const progress = ((stepIndex + 1) / steps.length) * 100;
-
-  function toggleInterest(id: Interest) {
-    setInterests((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }
-
-  function toggleSelectAll() {
-    if (allSelected) {
-      setInterests([]);
-      return;
-    }
-    setInterests(interestOptions.map((opt) => opt.id));
-  }
 
   function canContinue(): boolean {
     if (step === 'destination') return city.trim().length > 1;
     if (step === 'days') return parsedDays != null;
-    if (step === 'dates') {
-      return Boolean(startDate && endDate && endDate >= startDate);
-    }
     if (step === 'hotel') return hotelAddress.trim().length > 3;
-    if (step === 'interests') {
-      return interests.length > 0 || customPreferences.trim().length > 0;
-    }
     if (step === 'places') {
       const list = placesForCity(city, selectedDestination);
       if (list.length === 0) return true;
@@ -310,23 +257,13 @@ export function QuestionFlow({
 
   function finish() {
     if (!parsedDays) return;
-    const cleanedInterests = hasBeach
-      ? interests
-      : interests.filter((i) => i !== 'beach');
-    const planningStart = datesFlexible
-      ? toISODate(weekend)
-      : startDate;
-    const planningEnd = datesFlexible
-      ? toISODate(addDays(weekend, parsedDays.days - 1))
-      : endDate;
+    const planningStart = toISODate(weekend);
+    const planningEnd = toISODate(addDays(weekend, parsedDays.days - 1));
 
     const placeNote =
       selectedPlaces.length > 0
         ? `Must-visit places: ${selectedPlaces.join(', ')}`
         : null;
-    const prefs = [customPreferences.trim() || null, placeNote]
-      .filter(Boolean)
-      .join('; ');
 
     onComplete({
       destination_city: city.trim(),
@@ -334,11 +271,11 @@ export function QuestionFlow({
       days_range: parsedDays.range,
       start_date: planningStart,
       end_date: planningEnd,
-      dates_flexible: datesFlexible,
+      dates_flexible: true,
       hotel_address: notBooked ? null : hotelAddress.trim(),
       suggested_area: notBooked ? 'City Center' : null,
-      interests: cleanedInterests,
-      custom_preferences: prefs || null,
+      interests: selectedDestination?.interests ?? [],
+      custom_preferences: placeNote,
       must_visit_places: selectedPlaces,
       pace: DEFAULT_PACE,
       day_start_time: '09:00',
@@ -463,41 +400,6 @@ export function QuestionFlow({
           </>
         )}
 
-        {step === 'dates' && (
-          <>
-            <h2>When do you want to go?</h2>
-            <p className="hint">
-              Pick both dates if you know them — the end date is not calculated automatically.
-            </p>
-            <div className="question-body">
-              <div className="field">
-                <label htmlFor="start">Start date</label>
-                <input
-                  id="start"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="end">End date</label>
-                <input
-                  id="end"
-                  type="date"
-                  value={endDate}
-                  min={startDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-              {endDate && startDate && endDate < startDate && (
-                <p className="hint" style={{ margin: 0, color: 'var(--coral)' }}>
-                  End date should be on or after the start date.
-                </p>
-              )}
-            </div>
-          </>
-        )}
-
         {step === 'hotel' && (
           <>
             <h2>Where are you staying?</h2>
@@ -516,46 +418,6 @@ export function QuestionFlow({
                     setNotBooked(false);
                     setHotelAddress(e.target.value);
                   }}
-                />
-              </div>
-            </div>
-          </>
-        )}
-
-        {step === 'interests' && (
-          <>
-            <h2>What interests you?</h2>
-            <p className="hint">
-              Select preferences for {city || 'your trip'} — or choose all, and add anything extra below.
-            </p>
-            <div className="question-body">
-              <div className="chip-row">
-                <button
-                  type="button"
-                  className={`chip ${allSelected ? 'active' : ''}`}
-                  onClick={toggleSelectAll}
-                >
-                  {allSelected ? 'Clear all' : 'Select all'}
-                </button>
-                {interestOptions.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={`chip ${interests.includes(opt.id) ? 'active' : ''}`}
-                    onClick={() => toggleInterest(opt.id)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <div className="field">
-                <label htmlFor="custom-pref">Anything else? (optional)</label>
-                <input
-                  id="custom-pref"
-                  type="text"
-                  value={customPreferences}
-                  placeholder="e.g. kid-friendly, gelato, rooftop views, quiet parks…"
-                  onChange={(e) => setCustomPreferences(e.target.value)}
                 />
               </div>
             </div>
@@ -664,18 +526,6 @@ export function QuestionFlow({
             Back
           </button>
           <div className="question-actions-right">
-            {step === 'dates' && (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => {
-                  setDatesFlexible(true);
-                  next();
-                }}
-              >
-                Skip for now
-              </button>
-            )}
             {step === 'hotel' && (
               <button
                 type="button"
@@ -694,7 +544,6 @@ export function QuestionFlow({
               className="btn btn-primary"
               disabled={!canContinue()}
               onClick={() => {
-                if (step === 'dates') setDatesFlexible(false);
                 if (step === 'hotel') setNotBooked(false);
                 next();
               }}

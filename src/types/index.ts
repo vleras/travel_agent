@@ -155,7 +155,5 @@ export type AppScreen = 'entry' | 'questions' | 'processing' | 'trip';
 export type QuestionStep =
   | 'destination'
   | 'days'
-  | 'dates'
   | 'hotel'
-  | 'interests'
   | 'places';
