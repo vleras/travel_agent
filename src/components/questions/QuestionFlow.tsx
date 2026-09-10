@@ -397,6 +397,22 @@ export function QuestionFlow({
     );
   }
 
+  const availablePlaces = useMemo(
+    () => placesForCity(city, selectedDestination),
+    [city, selectedDestination],
+  );
+  const allPlacesSelected =
+    availablePlaces.length > 0 &&
+    availablePlaces.every((p) => selectedPlaces.includes(p.name));
+
+  function toggleSelectAllPlaces() {
+    if (allPlacesSelected) {
+      setSelectedPlaces([]);
+      return;
+    }
+    setSelectedPlaces(availablePlaces.map((p) => p.name));
+  }
+
   function finish() {
     if (!parsedDays) return;
     const startParsed = parseFlexibleTime(dayStartInput);
@@ -798,58 +814,74 @@ export function QuestionFlow({
             </p>
             <PlacesGuideChat city={city} selectedCount={selectedPlaces.length} />
             <div className="question-body">
-              {placesForCity(city, selectedDestination).length === 0 ? (
+              {availablePlaces.length === 0 ? (
                 <p className="hint" style={{ margin: 0 }}>
                   No curated list for this city yet — add must-visits in chat after planning, or go back and pick a suggested destination.
                 </p>
               ) : (
-                <div className="place-pick-grid">
-                  {placesForCity(city, selectedDestination).map((spot) => {
-                    const active = selectedPlaces.includes(spot.name);
-                    return (
-                      <div
-                        key={spot.name}
-                        className={`place-pick-card ${active ? 'active' : ''}`}
-                      >
-                        <button
-                          type="button"
-                          className="place-pick-open"
-                          onClick={() => {
-                            setViewingPlace(spot);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
+                <>
+                  <div className="chip-row place-pick-toolbar">
+                    <button
+                      type="button"
+                      className={`chip ${allPlacesSelected ? 'active' : ''}`}
+                      onClick={toggleSelectAllPlaces}
+                    >
+                      {allPlacesSelected ? 'Clear all' : 'Select all'}
+                    </button>
+                    {selectedPlaces.length > 0 && (
+                      <span className="hint" style={{ margin: 0 }}>
+                        {selectedPlaces.length} selected
+                      </span>
+                    )}
+                  </div>
+                  <div className="place-pick-grid">
+                    {availablePlaces.map((spot) => {
+                      const active = selectedPlaces.includes(spot.name);
+                      return (
+                        <div
+                          key={spot.name}
+                          className={`place-pick-card ${active ? 'active' : ''}`}
                         >
-                          <PlaceImage
-                            className="place-pick-photo"
-                            name={spot.name}
-                            city={city}
-                            category={spot.category}
-                          />
-                          <div className="place-pick-copy">
-                            <div className="place-pick-title">
-                              <strong>{spot.name}</strong>
-                              <span className="category-pill">{spot.category}</span>
-                            </div>
-                            <p>{spot.description}</p>
-                            <span className="place-pick-status">
-                              View details →
-                            </span>
-                          </div>
-                        </button>
-                        <div className="place-pick-card-actions">
                           <button
                             type="button"
-                            className={`btn ${active ? 'btn-secondary' : 'btn-primary'} place-pick-add-btn`}
-                            onClick={() => togglePlace(spot.name)}
-                            aria-pressed={active}
+                            className="place-pick-open"
+                            onClick={() => {
+                              setViewingPlace(spot);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
                           >
-                            {active ? 'Added ✓' : 'Add'}
+                            <PlaceImage
+                              className="place-pick-photo"
+                              name={spot.name}
+                              city={city}
+                              category={spot.category}
+                            />
+                            <div className="place-pick-copy">
+                              <div className="place-pick-title">
+                                <strong>{spot.name}</strong>
+                                <span className="category-pill">{spot.category}</span>
+                              </div>
+                              <p>{spot.description}</p>
+                              <span className="place-pick-status">
+                                View details →
+                              </span>
+                            </div>
                           </button>
+                          <div className="place-pick-card-actions">
+                            <button
+                              type="button"
+                              className={`btn ${active ? 'btn-secondary' : 'btn-primary'} place-pick-add-btn`}
+                              onClick={() => togglePlace(spot.name)}
+                              aria-pressed={active}
+                            >
+                              {active ? 'Added ✓' : 'Add'}
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           </>

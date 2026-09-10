@@ -237,6 +237,11 @@
   animation-delay: 80ms;
 }
 
+.place-pick-toolbar {
+  align-items: center;
+  margin-bottom: 0.15rem;
+}
+
 .place-pick-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -252,6 +257,7 @@
   border-radius: 16px;
   overflow: hidden;
   background: white;
+  min-width: 0;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
