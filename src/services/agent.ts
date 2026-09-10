@@ -64,23 +64,6 @@ function resolveMustVisitAttractions(
   });
 }
 
-function mergeAttractions(
-  priority: Attraction[],
-  extras: Attraction[],
-): Attraction[] {
-  const seen = new Set(priority.map((a) => a.name.trim().toLowerCase()));
-  const merged = [...priority];
-  for (const attraction of extras) {
-    const key = attraction.name.trim().toLowerCase();
-    if (seen.has(key)) continue;
-    // Also skip near-duplicate names against priority list
-    if ([...seen].some((existing) => namesMatch(existing, key))) continue;
-    seen.add(key);
-    merged.push(attraction);
-  }
-  return merged;
-}
-
 function clusterCentroid(
   stops: ScoredAttraction[],
 ): { lat: number; lon: number } | null {
@@ -136,8 +119,11 @@ function clusterByProximity(
   if (!attractions.length) return Array.from({ length: days }, () => []);
 
   const perDay = paceStopsPerDay(pace);
-  // Never drop places when the traveler picked more than the pace budget.
-  const softCap = Math.max(perDay, Math.ceil(attractions.length / days));
+  // Keep each neighborhood walkable: typically 2–4 nearby stops.
+  const softCap = Math.min(
+    4,
+    Math.max(2, Math.min(perDay, Math.ceil(attractions.length / days))),
+  );
 
   const remaining = [...attractions];
   const seeds: ScoredAttraction[] = [];
@@ -543,7 +529,7 @@ async function ensureCoords(
     }
     onProgress({
       step: 'act',
-      message: 'Geocoding attractions',
+      message: 'Locating places',
       detail: attraction.name,
     });
     const { result, latencyMs } = await geocode(
@@ -566,8 +552,8 @@ async function attachPlacePhotos(
 ): Promise<ScoredAttraction[]> {
   onProgress({
     step: 'act',
-    message: 'Fetching place photos',
-    detail: `Looking up real images for ${attractions.length} stops…`,
+    message: 'Loading photos',
+    detail: `Fetching images for ${attractions.length} places…`,
   });
 
   const enriched: ScoredAttraction[] = [];
@@ -620,8 +606,10 @@ export async function runTravelAgent(
   // —— REASON ——
   onProgress({
     step: 'reason',
-    message: 'Understanding your trip',
-    detail: `Geocoding ${input.destination_city} and base location…`,
+    message: 'Finding your base',
+    detail: input.hotel_address
+      ? 'Locating your stay…'
+      : `Locating ${input.destination_city}…`,
   });
 
   const destGeo = await geocode(input.destination_city);
@@ -663,33 +651,49 @@ export async function runTravelAgent(
   // —— ACT ——
   onProgress({
     step: 'act',
-    message: 'Generating attractions',
-    detail: 'Asking the travel model for recommendations…',
+    message: 'Organizing your places',
+    detail: 'Finding nearby spots and grouping them…',
   });
-
-  const { attractions, latencyMs, source } = await generateAttractions(
-    input.destination_city,
-    input.interests,
-    input.custom_preferences,
-  );
-  geminiMs += latencyMs;
-  if (source === 'gemini') apiCalls += 1;
 
   const mustVisitNames = (input.must_visit_places ?? []).filter(Boolean);
   const mustVisitAttractions = resolveMustVisitAttractions(
     input.destination_city,
     mustVisitNames,
   );
-  const mergedAttractions = mergeAttractions(mustVisitAttractions, attractions);
+
+  let attractions: Attraction[] = [];
+  let source: 'gemini' | 'fallback' | 'picks' = 'picks';
+
+  if (mustVisitAttractions.length > 0) {
+    // Traveler picks drive the plan — skip filler recommendations.
+    attractions = mustVisitAttractions;
+    source = 'picks';
+  } else {
+    const generated = await generateAttractions(
+      input.destination_city,
+      input.interests,
+      input.custom_preferences,
+    );
+    attractions = generated.attractions;
+    geminiMs += generated.latencyMs;
+    if (generated.source === 'gemini') apiCalls += 1;
+    source = generated.source === 'gemini' ? 'gemini' : 'fallback';
+  }
+
+  const mergedAttractions =
+    mustVisitAttractions.length > 0
+      ? mustVisitAttractions
+      : attractions;
 
   onProgress({
     step: 'act',
-    message: 'Locating stops on the map',
-    detail: mustVisitNames.length
-      ? `Pinning your ${mustVisitNames.length} picks, then geocoding nearby options…`
-      : source === 'fallback'
-        ? 'Using curated attractions (no Gemini key or API fallback)'
-        : `Geocoding ${mergedAttractions.length} attractions…`,
+    message: 'Locating places',
+    detail:
+      source === 'picks'
+        ? `Pinning your ${mergedAttractions.length} picks on the map…`
+        : source === 'fallback'
+          ? 'Using curated attractions…'
+          : `Geocoding ${mergedAttractions.length} places…`,
   });
 
   const { scored, nominatimMs: geoMs, apiCalls: geoCalls } = await ensureCoords(
@@ -706,28 +710,7 @@ export async function runTravelAgent(
     onProgress,
   );
 
-  // Prefer the traveler's picks; fill remaining day capacity with extras.
-  const mustNameSet = new Set(
-    mustVisitNames.map((name) => name.trim().toLowerCase()),
-  );
-  const mustScored = scoredWithPhotos.filter((a) =>
-    [...mustNameSet].some((picked) => namesMatch(picked, a.name)),
-  );
-  const fillerScored = scoredWithPhotos.filter(
-    (a) => ![...mustNameSet].some((picked) => namesMatch(picked, a.name)),
-  );
-  const maxStops =
-    input.trip_length_days * paceStopsPerDay(input.pace);
-  const planningPool =
-    mustScored.length > 0
-      ? [
-          ...mustScored,
-          ...fillerScored.slice(
-            0,
-            Math.max(0, maxStops - mustScored.length),
-          ),
-        ]
-      : scoredWithPhotos.slice(0, maxStops);
+  const planningPool = scoredWithPhotos;
 
   // Sample OSRM for a couple of pairs (thesis metrics) without blocking clustering
   if (planningPool.length >= 2) {
@@ -742,17 +725,23 @@ export async function runTravelAgent(
   }
 
   // —— OBSERVE ——
+  const dayCount = Math.max(
+    1,
+    Math.min(
+      input.trip_length_days,
+      Math.max(1, Math.ceil(planningPool.length / 2)),
+    ),
+  );
+
   onProgress({
     step: 'observe',
-    message: 'Grouping nearby places into days',
-    detail: mustScored.length
-      ? `Clustering your ${mustScored.length} picks by proximity across ${input.trip_length_days} days…`
-      : `Building ${input.trip_length_days}-day neighborhoods around your base…`,
+    message: 'Grouping nearby places',
+    detail: `Clustering into walkable groups of 2–4 across ${dayCount} areas…`,
   });
 
   const clusters = clusterByProximity(
     planningPool,
-    input.trip_length_days,
+    dayCount,
     input.pace,
     location.base_lat,
     location.base_lon,
@@ -783,8 +772,8 @@ export async function runTravelAgent(
   // —— REVISE ——
   onProgress({
     step: 'revise',
-    message: 'Self-correcting weak days',
-    detail: 'Moving outlier stops if compactness < 70…',
+    message: 'Tightening groups',
+    detail: 'Moving outliers into closer neighborhoods…',
   });
 
   const { clusters: revised, revisions } = reviseClusters(
@@ -833,8 +822,8 @@ export async function runTravelAgent(
 
   onProgress({
     step: 'done',
-    message: 'Itinerary ready',
-    detail: `Average compactness ${metrics.compactness_after_revision}/100 · ${revisions.length} revision(s)`,
+    message: 'Groups ready',
+    detail: `${itinerary.length} nearby group${itinerary.length === 1 ? '' : 's'} from your picks`,
   });
 
   return {

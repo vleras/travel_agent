@@ -178,7 +178,6 @@ export function QuestionFlow({
   const [hasBeach, setHasBeach] = useState<boolean | null>(
     selectedDestination ? selectedDestination.hasBeach : null,
   );
-  const [beachChecking, setBeachChecking] = useState(false);
 
   useEffect(() => {
     saveQuestionState({
@@ -241,11 +240,9 @@ export function QuestionFlow({
     }
 
     let cancelled = false;
-    setBeachChecking(true);
     void cityHasBeach(city).then((result) => {
       if (cancelled) return;
       setHasBeach(result);
-      setBeachChecking(false);
       if (!result) {
         setInterests((prev) => prev.filter((i) => i !== 'beach'));
       }
@@ -532,16 +529,6 @@ export function QuestionFlow({
               Select preferences for {city || 'your trip'} — or choose all, and add anything extra below.
             </p>
             <div className="question-body">
-              {beachChecking && (
-                <p className="hint" style={{ margin: 0 }}>
-                  Checking whether {city} has a beach…
-                </p>
-              )}
-              {hasBeach === false && !beachChecking && (
-                <p className="hint beach-note" style={{ margin: 0 }}>
-                  No beach nearby for {city}, so Beach isn’t offered as a preference.
-                </p>
-              )}
               <div className="chip-row">
                 <button
                   type="button"
@@ -712,7 +699,7 @@ export function QuestionFlow({
                 next();
               }}
             >
-              {stepIndex === steps.length - 1 ? 'Build itinerary' : 'Continue'}
+              {stepIndex === steps.length - 1 ? 'Group nearby places' : 'Continue'}
             </button>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { DestinationPicker } from './components/questions/DestinationPicker';
 import { EntryPoint } from './components/questions/EntryPoint';
 import { QuestionFlow } from './components/questions/QuestionFlow';
 import { AgentProcessing } from './components/trip/AgentProcessing';
-import { TripView } from './components/trip/TripView';
+import { ClusterPlanView } from './components/trip/ClusterPlanView';
 import { runTravelAgent } from './services/agent';
 import {
   clearAllSessionState,
@@ -89,7 +89,7 @@ export default function App() {
     setInput(withChat);
     setScreen('processing');
     setError(null);
-    setProgress({ step: 'reason', message: 'Starting…' });
+    setProgress({ step: 'act', message: 'Organizing your places…' });
     try {
       const result = await runTravelAgent(withChat, setProgress);
       setOutput(result);
@@ -159,11 +159,10 @@ export default function App() {
       )}
 
       {screen === 'trip' && input && output && (
-        <TripView
+        <ClusterPlanView
           input={input}
           output={output}
           onBack={resetToEntry}
-          initialChatNotes={chatNotes}
         />
       )}
 
