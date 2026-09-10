@@ -221,7 +221,7 @@ export function QuestionFlow({
     if (step === 'dates') {
       return Boolean(startDate && endDate && endDate >= startDate);
     }
-    if (step === 'hotel') return notBooked || hotelAddress.trim().length > 3;
+    if (step === 'hotel') return hotelAddress.trim().length > 3;
     if (step === 'interests') {
       return interests.length > 0 || customPreferences.trim().length > 0;
     }
@@ -414,30 +414,19 @@ export function QuestionFlow({
               We anchor every day to your accommodation — or the city center if you haven’t booked.
             </p>
             <div className="question-body">
-              <label className="toggle-row">
+              <div className="field">
+                <label htmlFor="hotel">Hotel or address</label>
                 <input
-                  type="checkbox"
-                  checked={notBooked}
-                  onChange={(e) => setNotBooked(e.target.checked)}
+                  id="hotel"
+                  type="text"
+                  value={hotelAddress}
+                  placeholder="e.g. Via Nazionale 123, Rome"
+                  onChange={(e) => {
+                    setNotBooked(false);
+                    setHotelAddress(e.target.value);
+                  }}
                 />
-                Not booked yet
-              </label>
-              {notBooked ? (
-                <p className="hint" style={{ margin: 0 }}>
-                  I’ll use the city center as your base.
-                </p>
-              ) : (
-                <div className="field">
-                  <label htmlFor="hotel">Hotel or address</label>
-                  <input
-                    id="hotel"
-                    type="text"
-                    value={hotelAddress}
-                    placeholder="e.g. Via Nazionale 123, Rome"
-                    onChange={(e) => setHotelAddress(e.target.value)}
-                  />
-                </div>
-              )}
+              </div>
             </div>
           </>
         )}
@@ -625,12 +614,26 @@ export function QuestionFlow({
                 Skip for now
               </button>
             )}
+            {step === 'hotel' && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setNotBooked(true);
+                  setHotelAddress('');
+                  next();
+                }}
+              >
+                Not booked yet
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-primary"
               disabled={!canContinue()}
               onClick={() => {
                 if (step === 'dates') setDatesFlexible(false);
+                if (step === 'hotel') setNotBooked(false);
                 next();
               }}
             >

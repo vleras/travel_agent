@@ -70,48 +70,82 @@ async function fetchWikiBlurb(
   return null;
 }
 
-function visitTips(category: string, city: string): string[] {
-  const c = category.toLowerCase();
+function placeDetailCopy(
+  spot: DestinationHighlight,
+  destination: DestinationCard,
+): string {
+  const c = spot.category.toLowerCase();
   if (c.includes('museum')) {
-    return [
-      'Often quieter mid-morning on weekdays',
-      'Check timed-entry tickets before you go',
-      `Pair with a nearby café or park in ${city}`,
-    ];
+    return `${spot.name} is one of the cultural anchors of ${destination.city}. Expect collections and rooms that reward a slower visit — plan it as a focused stop rather than a quick glance.`;
   }
   if (c.includes('architect')) {
-    return [
-      'Best photos in soft morning or golden-hour light',
-      'Look for viewpoints around the structure',
-      'Give yourself time to walk the surroundings',
-    ];
+    return `${spot.name} is a landmark of ${destination.city}’s built landscape. The structure and the spaces around it are part of the experience, so leave room to approach it from more than one angle.`;
   }
   if (c.includes('beach') || c.includes('nature')) {
-    return [
-      'Bring sunscreen and water for longer stays',
-      'Arrive early for calmer paths and better light',
-      'Combine with a short walk nearby',
-    ];
+    return `${spot.name} offers a breath of open air in and around ${destination.city}. It’s the kind of stop that resets the pace of a trip between denser city days.`;
   }
   if (c.includes('night')) {
-    return [
-      'Start after dusk when the energy picks up',
-      'Keep valuables close in busy areas',
-      'Plan your route home before it gets late',
-    ];
+    return `${spot.name} shows a different side of ${destination.city} after dark — atmosphere, music, and people-watching as much as any single venue.`;
   }
   if (c.includes('shop')) {
-    return [
-      'Wandering beats a fixed shopping list',
-      'Morning is calmer than late afternoon',
-      'Look for local makers, not only souvenirs',
-    ];
+    return `${spot.name} is a browsing stop in ${destination.city}: local craft, neighborhood character, and the pleasure of wandering without a strict checklist.`;
   }
-  return [
-    `A standout stop when exploring ${city}`,
-    'Easy to fold into a half-day walk',
-    'Worth lingering longer than a quick photo',
-  ];
+  if (c.includes('photo')) {
+    return `${spot.name} is a classic ${destination.city} viewpoint — worth visiting when the light is soft and the streets around it are still waking up or winding down.`;
+  }
+  return `${spot.name} is a highlight travelers keep returning to in ${destination.city}, ${destination.country}. It pairs well with a half-day of nearby walks and other stops on your list.`;
+}
+
+/** Split long copy into short readable paragraphs (no “read more”). */
+function chunkText(text: string, maxLen = 200): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [text];
+  const chunks: string[] = [];
+  let buf = '';
+  for (const raw of sentences) {
+    const sentence = raw.trim();
+    if (!sentence) continue;
+    const next = buf ? `${buf} ${sentence}` : sentence;
+    if (next.length > maxLen && buf) {
+      chunks.push(buf);
+      buf = sentence;
+    } else {
+      buf = next;
+    }
+  }
+  if (buf) chunks.push(buf);
+  return chunks;
+}
+
+const MIN_STORY_PHOTOS = 4;
+
+function StoryPhoto({
+  url,
+  alt,
+  className,
+  onOpen,
+  onError,
+}: {
+  url: string;
+  alt: string;
+  className?: string;
+  onOpen: () => void;
+  onError: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`highlight-story-shot ${className ?? ''}`}
+      onClick={onOpen}
+    >
+      <img
+        src={url}
+        alt={alt}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={onError}
+      />
+    </button>
+  );
 }
 
 function HighlightStory({
@@ -132,7 +166,6 @@ function HighlightStory({
   const [photos, setPhotos] = useState<string[]>([]);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [wiki, setWiki] = useState<WikiBlurb | null>(null);
-  const [expanded, setExpanded] = useState(false);
   const [loadingPhotos, setLoadingPhotos] = useState(true);
 
   useEffect(() => {
@@ -140,7 +173,6 @@ function HighlightStory({
     setPhotos([]);
     setLightbox(null);
     setWiki(null);
-    setExpanded(false);
     setLoadingPhotos(true);
 
     void fetchPlacePhotoUrls(spot.name, destination.city, spot.category).then(
@@ -177,13 +209,13 @@ function HighlightStory({
     return () => window.removeEventListener('keydown', onKey);
   }, [lightbox, photos.length]);
 
-  const hero = photos[0];
-  const mosaic = photos.slice(1);
-  const tips = visitTips(spot.category, destination.city);
-  const shortExtract =
-    wiki?.extract && wiki.extract.length > 280 && !expanded
-      ? `${wiki.extract.slice(0, 280).trim()}…`
-      : wiki?.extract;
+  const dropPhoto = (url: string) =>
+    setPhotos((prev) => prev.filter((u) => u !== url));
+
+  const detailChunks = chunkText(placeDetailCopy(spot, destination), 170);
+  const wikiChunks = wiki?.extract ? chunkText(wiki.extract, 190) : [];
+  const [hero, pairA, pairB, splitPhoto, trailing, ...rest] = photos;
+  const extraPhotos = [trailing, ...rest].filter(Boolean) as string[];
 
   return (
     <div className="questions highlight-story">
@@ -195,114 +227,175 @@ function HighlightStory({
       </div>
 
       <article className="highlight-story-card">
-        <button
-          type="button"
-          className="highlight-story-hero"
-          onClick={() => hero && setLightbox(0)}
-          aria-label={hero ? `View ${spot.name} photos` : spot.name}
-        >
-          {hero ? (
-            <img
-              src={hero}
-              alt=""
-              referrerPolicy="no-referrer"
-              onError={() => setPhotos((p) => p.slice(1))}
-            />
-          ) : (
-            <PlaceImage
-              className="highlight-story-hero-fallback"
-              name={spot.name}
-              city={destination.city}
-              category={spot.category}
-            />
+        {/* 1 — full hero image */}
+        {loadingPhotos && !hero ? (
+          <div className="highlight-story-hero-shot is-loading" aria-hidden />
+        ) : hero ? (
+          <StoryPhoto
+            url={hero}
+            alt={`${spot.name} main photo`}
+            className="highlight-story-hero-shot"
+            onOpen={() => setLightbox(0)}
+            onError={() => dropPhoto(hero)}
+          />
+        ) : null}
+
+        <header className="highlight-story-titlebar">
+          <span className="category-pill">{spot.category}</span>
+          <h1>{spot.name}</h1>
+          <p>
+            {destination.city}, {destination.country}
+          </p>
+          {wiki?.description && (
+            <p className="highlight-story-wiki-desc">{wiki.description}</p>
           )}
-          <div className="highlight-story-hero-shade" />
-          <div className="highlight-story-hero-copy">
-            <span className="category-pill">{spot.category}</span>
-            <h1>{spot.name}</h1>
-            <p>
-              {destination.city}, {destination.country}
-            </p>
-          </div>
-          {photos.length > 1 && (
-            <span className="highlight-story-photo-count">
-              {photos.length} photos · tap to explore
-            </span>
-          )}
-        </button>
+          <p className="highlight-detail-lead">{spot.description}</p>
+        </header>
 
         <div className="highlight-story-body">
+          {/* Intro text chunks */}
           <section className="highlight-story-section">
             <h2>About this place</h2>
-            <p className="highlight-detail-lead">{spot.description}</p>
-            {wiki?.description && (
-              <p className="highlight-story-wiki-desc">{wiki.description}</p>
-            )}
+            {detailChunks.map((chunk) => (
+              <p key={chunk} className="highlight-story-detail">
+                {chunk}
+              </p>
+            ))}
           </section>
 
-          <section className="highlight-story-section">
-            <h2>Good to know</h2>
-            <ul className="highlight-story-tips">
-              {tips.map((tip) => (
-                <li key={tip}>{tip}</li>
-              ))}
-            </ul>
-          </section>
-
-          {(loadingPhotos || mosaic.length > 0) && (
-            <section className="highlight-story-section">
-              <div className="highlight-story-section-head">
-                <h2>More looks</h2>
-                <p className="hint">Tap any photo to open the gallery</p>
-              </div>
-              {loadingPhotos && mosaic.length === 0 ? (
-                <div className="highlight-story-mosaic-loading">
-                  Finding photos…
-                </div>
+          {/* 2 — two side by side */}
+          {(pairA || pairB || loadingPhotos) && (
+            <div className="highlight-story-pair">
+              {loadingPhotos && !pairA && !pairB ? (
+                <>
+                  <div className="highlight-story-shot is-loading" aria-hidden />
+                  <div className="highlight-story-shot is-loading" aria-hidden />
+                </>
               ) : (
-                <div className="highlight-story-mosaic">
-                  {mosaic.map((url, i) => (
-                    <button
-                      key={url}
-                      type="button"
-                      className="highlight-story-mosaic-item"
-                      onClick={() => setLightbox(i + 1)}
-                    >
-                      <img
-                        src={url}
-                        alt={`${spot.name} photo ${i + 2}`}
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                    </button>
-                  ))}
-                </div>
+                <>
+                  {pairA && (
+                    <StoryPhoto
+                      url={pairA}
+                      alt={`${spot.name} photo 2`}
+                      onOpen={() => setLightbox(1)}
+                      onError={() => dropPhoto(pairA)}
+                    />
+                  )}
+                  {pairB && (
+                    <StoryPhoto
+                      url={pairB}
+                      alt={`${spot.name} photo 3`}
+                      onOpen={() => setLightbox(2)}
+                      onError={() => dropPhoto(pairB)}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* History chunk */}
+          {wikiChunks[0] && (
+            <section className="highlight-story-section">
+              <h2>A bit of history</h2>
+              <p className="highlight-story-detail">{wikiChunks[0]}</p>
+              {wikiChunks[1] && (
+                <p className="highlight-story-detail">{wikiChunks[1]}</p>
               )}
             </section>
           )}
 
-          {shortExtract && (
-            <section className="highlight-story-section highlight-story-readmore">
-              <h2>A little more history</h2>
-              <p>{shortExtract}</p>
-              {wiki && wiki.extract.length > 280 && (
-                <button
-                  type="button"
-                  className="btn btn-ghost highlight-story-expand"
-                  onClick={() => setExpanded((v) => !v)}
-                >
-                  {expanded ? 'Show less' : 'Read more'}
-                </button>
-              )}
+          {/* 3 — image left, text right */}
+          {splitPhoto && (
+            <section className="highlight-story-split">
+              <StoryPhoto
+                url={splitPhoto}
+                alt={`${spot.name} photo 4`}
+                className="highlight-story-split-media"
+                onOpen={() => setLightbox(3)}
+                onError={() => dropPhoto(splitPhoto)}
+              />
+              <div className="highlight-story-split-copy">
+                <h2>Looking closer</h2>
+                <p className="highlight-story-detail">
+                  {wikiChunks[2] ??
+                    `Wander around ${spot.name} and take in the details — the scale, materials, and how it sits in ${destination.city}.`}
+                </p>
+                {wikiChunks[3] && (
+                  <p className="highlight-story-detail">{wikiChunks[3]}</p>
+                )}
+              </div>
             </section>
+          )}
+
+          {/* Remaining wiki chunks */}
+          {wikiChunks.length > 4 && (
+            <section className="highlight-story-section">
+              <h2>Worth knowing</h2>
+              {wikiChunks.slice(4).map((chunk) => (
+                <p key={chunk} className="highlight-story-detail">
+                  {chunk}
+                </p>
+              ))}
+            </section>
+          )}
+
+          {/* 4+ — full-width solo, then optional reverse split */}
+          {extraPhotos[0] && (
+            <StoryPhoto
+              url={extraPhotos[0]}
+              alt={`${spot.name} photo 5`}
+              className="highlight-story-solo"
+              onOpen={() => setLightbox(4)}
+              onError={() => dropPhoto(extraPhotos[0])}
+            />
+          )}
+
+          {extraPhotos[1] && (
+            <section className="highlight-story-split is-reversed">
+              <StoryPhoto
+                url={extraPhotos[1]}
+                alt={`${spot.name} photo 6`}
+                className="highlight-story-split-media"
+                onOpen={() => setLightbox(5)}
+                onError={() => dropPhoto(extraPhotos[1])}
+              />
+              <div className="highlight-story-split-copy">
+                <h2>On the ground</h2>
+                <p className="highlight-story-detail">
+                  Give yourself time here. {spot.name} works best when it isn’t
+                  rushed — fold it into a half-day that also includes nearby
+                  streets and viewpoints in {destination.city}.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {extraPhotos.slice(2).map((url, i) => (
+            <StoryPhoto
+              key={url}
+              url={url}
+              alt={`${spot.name} photo ${i + 7}`}
+              className="highlight-story-solo"
+              onOpen={() => setLightbox(i + 6)}
+              onError={() => dropPhoto(url)}
+            />
+          ))}
+
+          {!loadingPhotos && photos.length > 0 && photos.length < MIN_STORY_PHOTOS && (
+            <p className="hint">
+              Showing {photos.length} photo{photos.length === 1 ? '' : 's'} for
+              this place so far.
+            </p>
           )}
 
           <section className="highlight-story-section">
             <h2>On your trip</h2>
-            <p className="hint">
-              When you start planning {destination.city}, stops like{' '}
-              <strong>{spot.name}</strong> can land on your day-by-day itinerary —
-              with timing that fits your pace.
+            <p className="highlight-story-detail">
+              When you start planning {destination.city},{' '}
+              <strong>{spot.name}</strong> can sit on your day-by-day itinerary
+              with timing that matches your pace — alongside other stops you
+              pick from this city.
             </p>
           </section>
 
@@ -366,39 +459,40 @@ function HighlightStory({
           >
             Close
           </button>
-          {photos.length > 1 && (
-            <button
-              type="button"
-              className="highlight-lightbox-nav prev"
-              onClick={(e) => {
-                e.stopPropagation();
-                setLightbox(
-                  (lightbox - 1 + photos.length) % photos.length,
-                );
-              }}
-            >
-              ‹
-            </button>
-          )}
-          <img
-            src={photos[lightbox]}
-            alt={`${spot.name} photo ${lightbox + 1}`}
-            referrerPolicy="no-referrer"
+          <div
+            className="highlight-lightbox-stage"
             onClick={(e) => e.stopPropagation()}
-          />
-          {photos.length > 1 && (
-            <button
-              type="button"
-              className="highlight-lightbox-nav next"
-              onClick={(e) => {
-                e.stopPropagation();
-                setLightbox((lightbox + 1) % photos.length);
-              }}
-            >
-              ›
-            </button>
-          )}
-          <div className="highlight-lightbox-dots" onClick={(e) => e.stopPropagation()}>
+          >
+            {photos.length > 1 && (
+              <button
+                type="button"
+                className="highlight-lightbox-nav prev"
+                onClick={() =>
+                  setLightbox((lightbox - 1 + photos.length) % photos.length)
+                }
+              >
+                ‹
+              </button>
+            )}
+            <img
+              src={photos[lightbox]}
+              alt={`${spot.name} photo ${lightbox + 1}`}
+              referrerPolicy="no-referrer"
+            />
+            {photos.length > 1 && (
+              <button
+                type="button"
+                className="highlight-lightbox-nav next"
+                onClick={() => setLightbox((lightbox + 1) % photos.length)}
+              >
+                ›
+              </button>
+            )}
+          </div>
+          <div
+            className="highlight-lightbox-dots"
+            onClick={(e) => e.stopPropagation()}
+          >
             {photos.map((url, i) => (
               <button
                 key={url}

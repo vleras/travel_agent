@@ -29,6 +29,7 @@ const claimedFingerprints = new Map<string, string>();
 
 function cacheKey(q: PlacePhotoQuery): string {
   return [
+    'v4',
     q.name,
     q.city ?? '',
     q.lat?.toFixed(4) ?? '',
@@ -71,26 +72,64 @@ function relevanceScore(haystack: string, name: string): number {
 }
 
 /** Same Commons file at different sizes / hosts → one fingerprint. */
+function normalizeFileKey(raw: string): string {
+  let s = raw;
+  try {
+    s = decodeURIComponent(s);
+  } catch {
+    /* keep raw */
+  }
+  return s
+    .replace(/^File:/i, '')
+    .replace(/^\d+px-/i, '')
+    .replace(/\+/g, ' ')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 export function imageFingerprint(url: string): string {
   try {
     const u = new URL(url);
     const path = decodeURIComponent(u.pathname);
+
+    // Special:FilePath/Name.jpg
+    const filepath = path.match(/\/special:filepath\/(.+)$/i);
+    if (filepath?.[1]) return `commons:${normalizeFileKey(filepath[1])}`;
+
     // /wikipedia/commons/thumb/d/de/File.jpg/800px-File.jpg
     // /wikipedia/commons/d/de/File.jpg
     const commons = path.match(
       /\/wikipedia\/commons\/(?:thumb\/)?(?:[0-9a-f]\/[0-9a-f]{2}\/)?([^/]+?)(?:\/\d+px-[^/]+)?$/i,
     );
-    if (commons?.[1]) {
-      return commons[1].replace(/^\d+px-/i, '').toLowerCase();
+    if (commons?.[1]) return `commons:${normalizeFileKey(commons[1])}`;
+
+    // Wikimedia static hash paths sometimes include /wikipedia/en/ etc.
+    const wikiStatic = path.match(
+      /\/wikipedia\/[^/]+\/(?:thumb\/)?(?:[0-9a-f]\/[0-9a-f]{2}\/)?([^/]+?)(?:\/\d+px-[^/]+)?$/i,
+    );
+    if (wikiStatic?.[1] && /\.(jpe?g|png|webp|gif)$/i.test(wikiStatic[1])) {
+      return `commons:${normalizeFileKey(wikiStatic[1])}`;
     }
-    const fp = path.match(/\/special:filepath\/(.+)$/i);
-    if (fp?.[1]) return decodeURIComponent(fp[1]).toLowerCase();
-    // Flickr and others: strip size suffixes
-    const base = path.split('/').pop() ?? path;
-    return `${u.host}/${base}`.toLowerCase().replace(/_[a-z]\.(jpe?g|png|webp)$/i, '.$1');
+
+    // Flickr / Openverse size variants
+    let base = (path.split('/').pop() ?? path).toLowerCase();
+    base = base
+      .replace(/_[a-z]\.(jpe?g|png|webp)$/i, '.$1')
+      .replace(/_\d{2,4}\.(jpe?g|png|webp)$/i, '.$1')
+      .replace(/-(small|medium|large|original)\.(jpe?g|png|webp)$/i, '.$1');
+
+    return `${u.hostname.replace(/^www\./, '')}/${normalizeFileKey(base)}`;
   } catch {
-    return url.toLowerCase().replace(/\?.*$/, '');
+    return normalizeFileKey(url.replace(/\?.*$/, ''));
   }
+}
+
+function uniquePhotoCount(scored: ScoredPhoto[]): number {
+  const seen = new Set<string>();
+  for (const item of scored) seen.add(imageFingerprint(item.url));
+  return seen.size;
 }
 
 const UGLY =
@@ -182,6 +221,19 @@ function pushScored(
   if (!url || !/^https?:\/\//i.test(url)) return;
   if (/\.svg(\?|$)/i.test(url) || UGLY.test(url) || UGLY.test(titleHint)) return;
   const canonical = canonicalizeUrl(url);
+  const fp = imageFingerprint(canonical);
+  // Skip exact duplicates as we collect — keeps later ranking cleaner
+  if (list.some((item) => imageFingerprint(item.url) === fp)) {
+    // Keep the higher-scoring copy
+    const existing = list.find((item) => imageFingerprint(item.url) === fp);
+    const nextScore = baseScore + beautyBonus(`${titleHint} ${canonical}`);
+    if (existing && nextScore > existing.score) {
+      existing.score = nextScore;
+      existing.source = source;
+      existing.url = canonical;
+    }
+    return;
+  }
   list.push({
     url: canonical,
     score: baseScore + beautyBonus(`${titleHint} ${canonical}`),
@@ -213,10 +265,10 @@ function finalizePhotos(
       /wikimedia\.org|wikipedia\.org|commons\.wikimedia/i.test(u),
     ).length;
 
-    // Once we have a real Wiki/Commons shot, don't pad with random CC Flickr
+    // Prefer curated shots, but allow Openverse/nearby to fill until we hit the limit
     if (
       (item.source === 'openverse' || item.source === 'nearby') &&
-      curatedCount >= 1
+      curatedCount >= limit
     ) {
       continue;
     }
@@ -300,7 +352,51 @@ function wikiLangsForCity(city?: string): string[] {
   return ['en'];
 }
 
-/** Exact-ish Wikipedia lead images — usually the most beautiful curated shot. */
+async function wikipediaMediaList(
+  title: string,
+  lang: string,
+): Promise<ScoredPhoto[]> {
+  const data = (await fetchJson(
+    `https://${lang}.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title)}`,
+  )) as {
+    items?: Array<{
+      title?: string;
+      type?: string;
+      showInGallery?: boolean;
+      original?: { source?: string; width?: number; height?: number };
+      srcset?: Array<{ src?: string }>;
+    }>;
+  } | null;
+
+  const scored: ScoredPhoto[] = [];
+  for (const item of data?.items ?? []) {
+    if (item.type && item.type !== 'image') continue;
+    const titleHint = item.title ?? '';
+    if (UGLY.test(titleHint)) continue;
+    const url =
+      item.original?.source ||
+      item.srcset?.[item.srcset.length - 1]?.src ||
+      item.srcset?.[0]?.src;
+    if (!url) continue;
+    let sizeBonus = 0;
+    if (item.original?.width && item.original?.height) {
+      const ratio = item.original.width / item.original.height;
+      if (ratio >= 1.15 && ratio <= 2.4) sizeBonus += 0.15;
+      if (item.original.width >= 1000) sizeBonus += 0.1;
+    }
+    // Gallery images from the article tend to be more varied than lead alone
+    pushScored(
+      scored,
+      url,
+      1.15 + sizeBonus + (item.showInGallery ? 0.1 : 0),
+      'wiki',
+      titleHint,
+    );
+  }
+  return scored;
+}
+
+/** Exact-ish Wikipedia lead + article gallery images for variety. */
 async function searchWikipediaLead(
   name: string,
   city?: string,
@@ -309,13 +405,15 @@ async function searchWikipediaLead(
   const core = searchName(name);
   const cityName = city ?? '';
 
-  // Best titles first; sequential to avoid Wikimedia rate limits
   const titles = [
     /pantheon/i.test(core) && cityName ? 'Pantheon (Rome)' : '',
     /forum/i.test(core) && /rome|roma/i.test(cityName) ? 'Roman Forum' : '',
     /forum/i.test(core) && /rome|roma/i.test(cityName) ? 'Foro Romano' : '',
     /colosseum|colosseo/i.test(core) ? 'Colosseum' : '',
     /trevi/i.test(core) ? 'Trevi Fountain' : '',
+    /st\.?\s*peter|san pietro|basilica/i.test(core) && /rome|roma|vatican/i.test(cityName)
+      ? "St. Peter's Basilica"
+      : '',
     /vatican/i.test(core) ? 'Vatican Museums' : '',
     cityName ? `${core} (${cityName})` : '',
     cityName ? `${core}, ${cityName}` : '',
@@ -323,26 +421,37 @@ async function searchWikipediaLead(
   ].filter(Boolean);
 
   const langs = wikiLangsForCity(city).slice(0, 2);
+  let resolvedTitle: { title: string; lang: string } | null = null;
 
-  outer: for (const lang of langs) {
+  for (const lang of langs) {
     for (const title of titles) {
       const hit = await wikipediaSummaryPhoto(title, lang);
       if (!hit) continue;
       pushScored(scored, hit.url, 1.4, 'wiki', hit.title);
-      if (scored.length >= 2) break outer;
+      resolvedTitle = { title: hit.title, lang };
+      break;
     }
+    if (resolvedTitle) break;
   }
 
-  if (scored.length < 2) {
+  // Pull several distinct images from the article gallery (not just the lead)
+  if (resolvedTitle) {
+    scored.push(
+      ...(await wikipediaMediaList(resolvedTitle.title, resolvedTitle.lang)),
+    );
+  }
+
+  if (uniquePhotoCount(scored) < 4) {
     const lang = langs[0] ?? 'en';
     const data = await wikiApi(`${lang}.wikipedia.org`, {
       action: 'query',
       generator: 'search',
       gsrsearch: [core, cityName].filter(Boolean).join(' '),
-      gsrlimit: '4',
-      prop: 'pageimages',
+      gsrlimit: '6',
+      prop: 'pageimages|images',
       piprop: 'thumbnail|original',
       pithumbsize: '1200',
+      imlimit: '8',
     });
     const pages = Object.values(
       (data?.query as {
@@ -352,6 +461,7 @@ async function searchWikipediaLead(
             title?: string;
             thumbnail?: { source?: string };
             original?: { source?: string };
+            images?: Array<{ title?: string }>;
           }
         >;
       })?.pages ?? {},
@@ -369,6 +479,13 @@ async function searchWikipediaLead(
         'wiki',
         page.title ?? '',
       );
+      for (const img of page.images ?? []) {
+        const file = img.title ?? '';
+        if (!/^File:/i.test(file)) continue;
+        if (UGLY.test(file)) continue;
+        if (!/\.(jpe?g|png|webp)$/i.test(file)) continue;
+        pushScored(scored, commonsFileUrl(file), 0.95 + rel * 0.3, 'wiki', file);
+      }
     }
   }
 
@@ -382,19 +499,22 @@ async function searchCommonsByName(
   const core = searchName(name);
   const queries = [
     [core, city].filter(Boolean).join(' '),
-    `${core} ${city ?? ''}`.trim(),
-  ];
+    `${core} exterior ${city ?? ''}`.trim(),
+    `${core} interior ${city ?? ''}`.trim(),
+    `${core} ${city ?? ''} view`.trim(),
+  ].filter((q, i, arr) => q.length > 3 && arr.indexOf(q) === i);
+
   const scored: ScoredPhoto[] = [];
 
   for (const q of queries) {
     const data = await wikiApi('commons.wikimedia.org', {
       action: 'query',
       generator: 'search',
-      gsrsearch: q,
+      gsrsearch: `${q} filetype:bitmap -svg`,
       gsrnamespace: '6',
-      gsrlimit: '12',
+      gsrlimit: '16',
       prop: 'imageinfo',
-      iiprop: 'url|size',
+      iiprop: 'url|size|mime',
       iiurlwidth: '1200',
     });
     if (!data) continue;
@@ -410,6 +530,7 @@ async function searchCommonsByName(
               thumburl?: string;
               width?: number;
               height?: number;
+              mime?: string;
             }>;
           }
         >;
@@ -419,18 +540,25 @@ async function searchCommonsByName(
     for (const page of pages) {
       const title = page.title ?? '';
       const rel = Math.max(relevanceScore(title, name), relevanceScore(title, core));
-      if (rel < 0.5) continue;
+      if (rel < 0.45) continue;
       const info = page.imageinfo?.[0];
+      if (info?.mime && !/^image\/(jpeg|png|webp)/i.test(info.mime)) continue;
       const url = info?.thumburl || info?.url;
       let sizeBonus = 0;
       if (info?.width && info?.height) {
         const ratio = info.width / info.height;
-        if (ratio >= 1.2 && ratio <= 2.2) sizeBonus += 0.2;
+        if (ratio >= 1.15 && ratio <= 2.3) sizeBonus += 0.2;
         if (info.width >= 1200) sizeBonus += 0.1;
       }
-      pushScored(scored, url, 0.8 + rel + sizeBonus, 'commons', title);
+      // Slight boost for query diversity keywords so interiors/exteriors compete
+      const angleBonus = /\b(interior|exterior|night|view|plaza|square)\b/i.test(
+        title,
+      )
+        ? 0.08
+        : 0;
+      pushScored(scored, url, 0.8 + rel + sizeBonus + angleBonus, 'commons', title);
     }
-    if (scored.filter((s) => s.score >= 1.3).length >= 3) break;
+    if (uniquePhotoCount(scored) >= 6) break;
   }
 
   return scored;
@@ -587,26 +715,27 @@ async function resolveKnownLinks(q: PlacePhotoQuery): Promise<ScoredPhoto[]> {
 }
 
 async function searchAll(q: PlacePhotoQuery): Promise<string[]> {
+  const target = 6;
   const scored: ScoredPhoto[] = [...(await resolveKnownLinks(q))];
 
-  // Sequential wiki then commons — avoids Wikimedia rate limits
+  // Wiki gallery first, then Commons angle searches for distinct shots
   scored.push(...(await searchWikipediaLead(q.name, q.city)));
-  if (finalizePhotos(scored, q.name, 4).length < 2) {
-    scored.push(...(await searchCommonsByName(q.name, q.city)));
+  scored.push(...(await searchCommonsByName(q.name, q.city)));
+  let result = finalizePhotos(scored, q.name, target);
+
+  if (result.length < target) {
+    const [nearby, openverse, nominatim] = await Promise.all([
+      q.lat != null && q.lon != null
+        ? searchCommonsNearby(q.lat, q.lon, q.name)
+        : Promise.resolve([] as ScoredPhoto[]),
+      searchOpenverse(searchName(q.name), q.city, q.category),
+      fromNominatim(searchName(q.name), q.city),
+    ]);
+    scored.push(...nearby, ...openverse, ...nominatim);
+    result = finalizePhotos(scored, q.name, target);
   }
 
-  let result = finalizePhotos(scored, q.name, 4);
-  if (result.length >= 1) return result;
-
-  const [nearby, openverse, nominatim] = await Promise.all([
-    q.lat != null && q.lon != null
-      ? searchCommonsNearby(q.lat, q.lon, q.name)
-      : Promise.resolve([] as ScoredPhoto[]),
-    searchOpenverse(searchName(q.name), q.city, q.category),
-    fromNominatim(searchName(q.name), q.city),
-  ]);
-  scored.push(...nearby, ...openverse, ...nominatim);
-  return finalizePhotos(scored, q.name, 4);
+  return result;
 }
 
 export async function fetchPlacePhotoUrls(
