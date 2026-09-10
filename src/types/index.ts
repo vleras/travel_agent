@@ -157,4 +157,5 @@ export type QuestionStep =
   | 'hotel'
   | 'interests'
   | 'pace'
-  | 'schedule';
+  | 'schedule'
+  | 'places';

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   availableInterestOptions,
+  destinationRecommendations,
   PACE_OPTIONS,
 } from '../../data/destinations';
 import {
@@ -18,12 +19,15 @@ import {
 } from '../../services/sessionState';
 import type {
   DestinationCard,
+  DestinationHighlight,
   Interest,
   Pace,
   QuestionStep,
   TripInput,
 } from '../../types';
+import { PlaceImage } from '../shared/PlaceImage';
 import '../../styles/questions.css';
+import '../../styles/chat.css';
 
 interface QuestionFlowProps {
   path: 'A' | 'B';
@@ -39,6 +43,7 @@ const STEPS_A: QuestionStep[] = [
   'hotel',
   'interests',
   'pace',
+  'places',
   'schedule',
 ];
 const STEPS_B: QuestionStep[] = [
@@ -47,8 +52,146 @@ const STEPS_B: QuestionStep[] = [
   'hotel',
   'interests',
   'pace',
+  'places',
   'schedule',
 ];
+
+function placesForCity(
+  city: string,
+  selectedDestination?: DestinationCard | null,
+): DestinationHighlight[] {
+  if (selectedDestination?.highlights?.length) {
+    return selectedDestination.highlights;
+  }
+  const match = destinationRecommendations.find(
+    (d) => d.city.toLowerCase() === city.trim().toLowerCase(),
+  );
+  return match?.highlights ?? [];
+}
+
+function PlacesGuideChat({
+  city,
+  selectedCount,
+}: {
+  city: string;
+  selectedCount: number;
+}) {
+  const [phase, setPhase] = useState(0);
+  const placeLabel = city.trim() || 'your destination';
+
+  useEffect(() => {
+    setPhase(0);
+    const t1 = window.setTimeout(() => setPhase(1), 450);
+    const t2 = window.setTimeout(() => setPhase(2), 1400);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [city]);
+
+  return (
+    <aside className="schedule-guide-chat" aria-live="polite">
+      <div className="schedule-guide-chat-head">
+        <span className="schedule-guide-avatar" aria-hidden>
+          ✈
+        </span>
+        <div>
+          <strong>Travel Agent</strong>
+          <p>Place picks</p>
+        </div>
+      </div>
+      <div className="schedule-guide-messages chatbot-messages">
+        {phase === 0 && (
+          <div className="chatbot-bubble chatbot-bubble--assistant chatbot-typing">
+            Typing…
+          </div>
+        )}
+        {phase >= 1 && (
+          <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
+            Here are places to visit in <strong>{placeLabel}</strong>. Tap the
+            ones you’re interested in seeing.
+          </div>
+        )}
+        {phase >= 2 && (
+          <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
+            When you’re done choosing, I’ll organize those picks into the days
+            you want — we’ll set your daily schedule after this.
+          </div>
+        )}
+        {selectedCount > 0 && (
+          <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
+            Nice — {selectedCount} place{selectedCount === 1 ? '' : 's'} selected.
+            Keep tapping to add more, then continue to set your schedule.
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function ScheduleGuideChat({
+  city,
+  selectedCount,
+}: {
+  city: string;
+  selectedCount: number;
+}) {
+  const [phase, setPhase] = useState(0);
+  const placeLabel = city.trim() || 'your destination';
+
+  useEffect(() => {
+    setPhase(0);
+    const t1 = window.setTimeout(() => setPhase(1), 450);
+    const t2 = window.setTimeout(() => setPhase(2), 1400);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [city, selectedCount]);
+
+  return (
+    <aside className="schedule-guide-chat" aria-live="polite">
+      <div className="schedule-guide-chat-head">
+        <span className="schedule-guide-avatar" aria-hidden>
+          ✈
+        </span>
+        <div>
+          <strong>Travel Agent</strong>
+          <p>Daily schedule</p>
+        </div>
+      </div>
+      <div className="schedule-guide-messages chatbot-messages">
+        {phase === 0 && (
+          <div className="chatbot-bubble chatbot-bubble--assistant chatbot-typing">
+            Typing…
+          </div>
+        )}
+        {phase >= 1 && (
+          <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
+            {selectedCount > 0 ? (
+              <>
+                Great — you’ve picked {selectedCount} place
+                {selectedCount === 1 ? '' : 's'} in <strong>{placeLabel}</strong>.
+                Now tell me when your days should start
+                {selectedCount > 0 ? ' and about breakfast' : ''}.
+              </>
+            ) : (
+              <>
+                Last step for <strong>{placeLabel}</strong>: set when sightseeing
+                starts and whether you want breakfast on the plan.
+              </>
+            )}
+          </div>
+        )}
+        {phase >= 2 && (
+          <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
+            After this, I’ll arrange your chosen places into the days you want.
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
 
 export function QuestionFlow({
   path,
@@ -110,6 +253,9 @@ export function QuestionFlow({
   const [breakfastFood, setBreakfastFood] = useState(
     () => saved?.breakfastFood ?? '',
   );
+  const [selectedPlaces, setSelectedPlaces] = useState<string[]>(
+    () => saved?.selectedPlaces ?? [],
+  );
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [hasBeach, setHasBeach] = useState<boolean | null>(
     selectedDestination ? selectedDestination.hasBeach : null,
@@ -134,6 +280,7 @@ export function QuestionFlow({
       wantBreakfast,
       breakfastTimeInput,
       breakfastFood,
+      selectedPlaces,
     });
   }, [
     path,
@@ -152,6 +299,7 @@ export function QuestionFlow({
     wantBreakfast,
     breakfastTimeInput,
     breakfastFood,
+    selectedPlaces,
   ]);
 
   const parsedDays = parseDaysInput(daysText);
@@ -230,7 +378,18 @@ export function QuestionFlow({
       if (!wantBreakfast) return true;
       return parseFlexibleTime(breakfastTimeInput) != null;
     }
+    if (step === 'places') {
+      const list = placesForCity(city, selectedDestination);
+      if (list.length === 0) return true;
+      return selectedPlaces.length > 0;
+    }
     return true;
+  }
+
+  function togglePlace(name: string) {
+    setSelectedPlaces((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+    );
   }
 
   function finish() {
@@ -251,6 +410,14 @@ export function QuestionFlow({
       ? toISODate(addDays(weekend, parsedDays.days - 1))
       : endDate;
 
+    const placeNote =
+      selectedPlaces.length > 0
+        ? `Must-visit places: ${selectedPlaces.join(', ')}`
+        : null;
+    const prefs = [customPreferences.trim() || null, placeNote]
+      .filter(Boolean)
+      .join('; ');
+
     onComplete({
       destination_city: city.trim(),
       trip_length_days: parsedDays.days,
@@ -261,7 +428,7 @@ export function QuestionFlow({
       hotel_address: notBooked ? null : hotelAddress.trim(),
       suggested_area: notBooked ? 'City Center' : null,
       interests: cleanedInterests,
-      custom_preferences: customPreferences.trim() || null,
+      custom_preferences: prefs || null,
       pace,
       day_start_time: startParsed,
       breakfast_time: breakfastTime,
@@ -511,6 +678,7 @@ export function QuestionFlow({
             <p className="hint">
               Set when sightseeing starts, then tell us when and what you want for breakfast.
             </p>
+            <ScheduleGuideChat city={city} selectedCount={selectedPlaces.length} />
             <div className="question-body">
               <div className="field">
                 <label htmlFor="day-start">Start seeing places at</label>
@@ -592,6 +760,55 @@ export function QuestionFlow({
                     ))}
                   </div>
                 </>
+              )}
+            </div>
+          </>
+        )}
+
+        {step === 'places' && (
+          <>
+            <h2>Places to visit</h2>
+            <p className="hint">
+              Tap places you care about in {city || 'your destination'}. We’ll fold them into your days.
+            </p>
+            <PlacesGuideChat city={city} selectedCount={selectedPlaces.length} />
+            <div className="question-body">
+              {placesForCity(city, selectedDestination).length === 0 ? (
+                <p className="hint" style={{ margin: 0 }}>
+                  No curated list for this city yet — add must-visits in chat after planning, or go back and pick a suggested destination.
+                </p>
+              ) : (
+                <div className="place-pick-grid">
+                  {placesForCity(city, selectedDestination).map((spot) => {
+                    const active = selectedPlaces.includes(spot.name);
+                    return (
+                      <button
+                        key={spot.name}
+                        type="button"
+                        className={`place-pick-card ${active ? 'active' : ''}`}
+                        onClick={() => togglePlace(spot.name)}
+                        aria-pressed={active}
+                      >
+                        <PlaceImage
+                          className="place-pick-photo"
+                          name={spot.name}
+                          city={city}
+                          category={spot.category}
+                        />
+                        <div className="place-pick-copy">
+                          <div className="place-pick-title">
+                            <strong>{spot.name}</strong>
+                            <span className="category-pill">{spot.category}</span>
+                          </div>
+                          <p>{spot.description}</p>
+                          <span className="place-pick-status">
+                            {active ? 'Selected ✓' : 'Tap to select'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </>

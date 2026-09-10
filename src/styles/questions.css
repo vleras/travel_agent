@@ -170,6 +170,145 @@
   justify-content: flex-end;
 }
 
+.schedule-guide-chat {
+  margin: 0.35rem 0 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fbfcfb;
+  overflow: hidden;
+  animation: highlight-story-in 380ms ease;
+}
+
+.schedule-guide-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+
+.schedule-guide-avatar {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--foam);
+  color: var(--sea);
+  font-size: 1rem;
+}
+
+.schedule-guide-chat-head strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.schedule-guide-chat-head p {
+  margin: 0.1rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.schedule-guide-messages {
+  min-height: auto;
+  max-height: none;
+  padding: 0.85rem 0.9rem 1rem;
+  background: #fbfcfb;
+}
+
+.schedule-guide-bubble {
+  animation: highlight-section-in 360ms ease both;
+}
+
+.schedule-guide-bubble + .schedule-guide-bubble {
+  animation-delay: 80ms;
+}
+
+.place-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.85rem;
+}
+
+.place-pick-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: white;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.place-pick-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(31, 111, 104, 0.35);
+}
+
+.place-pick-card.active {
+  border-color: var(--sea);
+  box-shadow: 0 0 0 3px rgba(31, 111, 104, 0.14);
+}
+
+.place-pick-photo {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+  display: block;
+  background: #dfe8e6;
+}
+
+.place-pick-copy {
+  padding: 0.75rem 0.85rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.35rem;
+}
+
+.place-pick-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.place-pick-title strong {
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.place-pick-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.place-pick-status {
+  margin-top: auto;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--sea);
+}
+
+.place-pick-card:not(.active) .place-pick-status {
+  color: var(--muted);
+  font-weight: 500;
+}
+
 .dest-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

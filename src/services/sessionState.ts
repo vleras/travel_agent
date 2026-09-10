@@ -44,6 +44,7 @@ export interface PersistedQuestionState {
   wantBreakfast: boolean;
   breakfastTimeInput: string;
   breakfastFood: string;
+  selectedPlaces: string[];
 }
 
 function readJson<T>(key: string): T | null {
