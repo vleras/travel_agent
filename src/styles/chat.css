@@ -110,6 +110,43 @@
   font-style: italic;
 }
 
+.chatbot-msg-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.chatbot-msg-block .chatbot-bubble--user {
+  align-self: flex-end;
+}
+
+.chatbot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-width: 95%;
+}
+
+.chatbot-actions .chip-action {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--sea) 35%, var(--line));
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.chatbot-actions .chip-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sea) 12%, white);
+}
+
+.chatbot-actions .chip-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .chat-panel-suggestions {
   display: flex;
   flex-wrap: wrap;

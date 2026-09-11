@@ -1,6 +1,7 @@
 import { placeImageUrl } from '../data/scheduleOptions';
 import { minutesToTime, parseTimeToMinutes } from '../data/scheduleOptions';
 import { getFallbackAttractions } from '../data/fallbackAttractions';
+import { lookupCityCenter } from '../data/cityCenters';
 import { addDays, toISODate } from './geo';
 import {
   haversineKm,
@@ -616,8 +617,15 @@ export async function runTravelAgent(
   nominatimMs += destGeo.latencyMs;
   apiCalls += 1;
 
-  if (!destGeo.result) {
-    throw new Error(`Could not geocode destination: ${input.destination_city}`);
+  const destFallback = !destGeo.result
+    ? lookupCityCenter(input.destination_city)
+    : null;
+  const dest = destGeo.result ?? destFallback;
+
+  if (!dest) {
+    throw new Error(
+      `Could not locate ${input.destination_city}. OpenStreetMap is busy — try again in a minute.`,
+    );
   }
 
   let hotelLat: number | null = null;
@@ -638,14 +646,14 @@ export async function runTravelAgent(
   }
 
   const location: TripLocation = {
-    destination_lat: destGeo.result.lat,
-    destination_lon: destGeo.result.lon,
-    destination_name: destGeo.result.display_name,
+    destination_lat: dest.lat,
+    destination_lon: dest.lon,
+    destination_name: dest.display_name,
     hotel_lat: hotelLat,
     hotel_lon: hotelLon,
     hotel_name: hotelName,
-    base_lat: hotelLat ?? destGeo.result.lat,
-    base_lon: hotelLon ?? destGeo.result.lon,
+    base_lat: hotelLat ?? dest.lat,
+    base_lon: hotelLon ?? dest.lon,
   };
 
   // —— ACT ——

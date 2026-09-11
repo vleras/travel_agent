@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  normalizeChatReply,
   replyToChat,
   type ChatHandlers,
   type ChatMessage,
@@ -21,7 +22,7 @@ const SUGGESTIONS_TRIP = [
 ];
 
 const SUGGESTIONS_GROUPS = [
-  'Add Pantheon to group 1',
+  'Find Pantheon',
   'Show group 1',
   'Move Colosseum to group 2',
   'What can you help with?',
@@ -44,6 +45,7 @@ export function TravelChatBot({
   onPlanDay,
   onMoveStop,
   onShowOptions,
+  onChatCommand,
 }: TravelChatBotProps) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -54,7 +56,7 @@ export function TravelChatBot({
       id: 'welcome',
       role: 'assistant',
       text: isGroups
-        ? 'Change these nearby groups anytime — add a place to a group, move one between groups, or ask me to focus a group.'
+        ? 'Look up a place and I’ll suggest which group it fits — photos load after you confirm.'
         : hasTrip
           ? `Direct the plan anytime — skip breakfast, plan a day, browse cafés/parks/nightlife, or move a stop between days.`
           : 'Share diet prefs or must-visit places before or during planning.',
@@ -87,7 +89,7 @@ export function TravelChatBot({
     setInput('');
     setBusy(true);
 
-    const reply = await replyToChat({
+    const raw = await replyToChat({
       message: trimmed,
       city,
       hasTrip,
@@ -98,14 +100,25 @@ export function TravelChatBot({
       onPlanDay,
       onMoveStop,
       onShowOptions,
+      onChatCommand,
     });
+    const { text: replyText, actions } = normalizeChatReply(raw);
 
     setMessages((prev) => [
       ...prev,
-      { id: `a-${Date.now()}`, role: 'assistant', text: reply },
+      {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        text: replyText,
+        actions,
+      },
     ]);
     setBusy(false);
   }
+
+  const latestActions = [...messages]
+    .reverse()
+    .find((m) => m.role === 'assistant' && m.actions?.length)?.actions;
 
   return (
     <div className={`chat-fab-wrap ${open ? 'chat-fab-wrap--open' : ''}`}>
@@ -124,22 +137,41 @@ export function TravelChatBot({
           </div>
           <div className="chatbot-messages">
             {messages.map((m) => (
-              <div
-                key={m.id}
-                className={`chatbot-bubble chatbot-bubble--${m.role}`}
-              >
-                {m.text}
+              <div key={m.id} className="chatbot-msg-block">
+                <div
+                  className={`chatbot-bubble chatbot-bubble--${m.role}`}
+                >
+                  {m.text}
+                </div>
+                {m.role === 'assistant' && m.actions && m.actions.length > 0 && (
+                  <div className="chatbot-actions">
+                    {m.actions.map((a) => (
+                      <button
+                        key={`${m.id}-${a.value}`}
+                        type="button"
+                        className="chip chip-action"
+                        disabled={busy}
+                        onClick={() => void send(a.value)}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             {busy && (
               <div className="chatbot-bubble chatbot-bubble--assistant chatbot-typing">
-                Working…
+                Looking up…
               </div>
             )}
             <div ref={bottomRef} />
           </div>
           <div className="chat-panel-suggestions">
-            {suggestions.map((s) => (
+            {(latestActions?.length
+              ? []
+              : suggestions
+            ).map((s) => (
               <button
                 key={s}
                 type="button"
@@ -164,7 +196,7 @@ export function TravelChatBot({
               value={input}
               placeholder={
                 isGroups
-                  ? 'e.g. add Pantheon to group 1…'
+                  ? 'e.g. find Pantheon…'
                   : hasTrip
                     ? 'e.g. skip breakfast, plan day 1…'
                     : 'e.g. vegetarian, must visit…'

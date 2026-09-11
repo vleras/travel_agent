@@ -2,10 +2,28 @@ import { geocode } from './nominatim';
 import { haversineKm } from './geo';
 import type { ItineraryStop } from '../types';
 
+export interface ChatAction {
+  label: string;
+  /** Sent as the next user message when clicked. */
+  value: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  actions?: ChatAction[];
+}
+
+/** Handlers may return plain text or text + quick-action chips. */
+export type ChatReply = string | { text: string; actions?: ChatAction[] };
+
+export function normalizeChatReply(reply: ChatReply): {
+  text: string;
+  actions?: ChatAction[];
+} {
+  if (typeof reply === 'string') return { text: reply };
+  return { text: reply.text, actions: reply.actions };
 }
 
 export type ChatIntent =
@@ -53,7 +71,7 @@ const DIET_PATTERNS: { re: RegExp; label: string; breakfastHint: string }[] = [
 ];
 
 const ADD_PLACE_RE =
-  /(?:(?:want to|wanna|would like to|I'd like to|i want to)\s+(?:visit|go to|see|check out)|(?:add|include|put)\s+(?:in\s+)?(?:the\s+)?(?:trip|itinerary)?\s*|visit|go to|see)\s+(.+)/i;
+  /(?:(?:want to|wanna|would like to|I'd like to|i want to)\s+(?:visit|go to|see|check out)|(?:add|include|put|find|look\s*up|search\s+for)\s+(?:in\s+)?(?:the\s+)?(?:trip|itinerary)?\s*|visit|go to|see|find|look\s*up)\s+(.+)/i;
 
 /** “add Pantheon to group 1” / “put Trevi in the first group” */
 const ADD_TO_GROUP_RE =
@@ -181,35 +199,50 @@ export async function resolvePlaceAsStop(
 export interface ChatHandlers {
   onDietary?: (label: string, breakfastHint: string) => void;
   onPreference?: (note: string) => void;
-  /** Optional toDay = group/day number (1-based). */
-  onAddPlace?: (placeQuery: string, toDay?: number) => Promise<string>;
-  onSkipBreakfast?: () => string | Promise<string>;
-  onPlanDay?: (day: number) => string | Promise<string>;
-  onMoveStop?: (stopName: string, toDay: number) => string | Promise<string>;
-  onShowOptions?: (category: string) => string | Promise<string>;
+  /** Optional toDay = group/day number (1-based). May return action chips. */
+  onAddPlace?: (
+    placeQuery: string,
+    toDay?: number,
+  ) => Promise<ChatReply> | ChatReply;
+  onSkipBreakfast?: () => ChatReply | Promise<ChatReply>;
+  onPlanDay?: (day: number) => ChatReply | Promise<ChatReply>;
+  onMoveStop?: (
+    stopName: string,
+    toDay: number,
+  ) => ChatReply | Promise<ChatReply>;
+  onShowOptions?: (category: string) => ChatReply | Promise<ChatReply>;
+  /**
+   * Intercept pending lookup flow (pick option / confirm group).
+   * Return null to fall through to normal intent parsing.
+   */
+  onChatCommand?: (message: string) => Promise<ChatReply | null> | ChatReply | null;
 }
 
 export async function replyToChat(params: {
   message: string;
   city?: string | null;
   hasTrip: boolean;
-} & ChatHandlers): Promise<string> {
+} & ChatHandlers): Promise<ChatReply> {
+  if (params.onChatCommand) {
+    const intercepted = await params.onChatCommand(params.message);
+    if (intercepted != null) return intercepted;
+  }
+
   const intent = parseChatIntent(params.message);
 
   switch (intent.type) {
     case 'greeting':
       return params.hasTrip
-        ? `Hi! I can rearrange nearby groups — add a place (“add Pantheon to group 1”), move one (“move Trevi Fountain to group 2”), or focus a group (“show group 1”).`
+        ? `Hi! Look up a place (“find Pantheon”), then I’ll suggest a group. Or move one (“move Trevi to group 2”).`
         : 'Hi! Share preferences (vegetarian, must-visit places). Once groups are ready, I can rearrange them too.';
 
     case 'help':
       return [
         'Try:',
-        '• “Add Pantheon to group 1”',
-        '• “Put Trevi Fountain in the first group”',
+        '• “Find Pantheon” or “I want to visit the Pantheon”',
+        '• Then tap Add to Group N (photos load after)',
         '• “Move Colosseum to group 2”',
         '• “Show group 1”',
-        '• “I want to visit the Pantheon” (adds to group 1)',
       ].join('\n');
 
     case 'skip_breakfast': {
@@ -257,7 +290,7 @@ export async function replyToChat(params: {
       try {
         return await params.onAddPlace(intent.placeQuery, intent.toDay);
       } catch {
-        return `I couldn't add “${intent.placeQuery}”. Try a clearer place name.`;
+        return `Couldn't find “${intent.placeQuery}”. Try a neighborhood name or exact address.`;
       }
     }
 
@@ -267,6 +300,6 @@ export async function replyToChat(params: {
     }
 
     default:
-      return 'Tell me a place to add, or how to rearrange a group (e.g. “move X to group 2”).';
+      return 'Tell me a place to look up, or how to rearrange a group (e.g. “move X to group 2”).';
   }
 }
