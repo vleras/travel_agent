@@ -9,6 +9,8 @@ import '../../styles/chat.css';
 interface TravelChatBotProps extends ChatHandlers {
   city?: string | null;
   hasTrip: boolean;
+  /** Nearby-groups screen uses group-oriented copy & chips. */
+  variant?: 'default' | 'groups';
 }
 
 const SUGGESTIONS_TRIP = [
@@ -16,6 +18,13 @@ const SUGGESTIONS_TRIP = [
   'Let’s plan day 1',
   'Show me parks',
   'Move this to day 3',
+];
+
+const SUGGESTIONS_GROUPS = [
+  'Add Pantheon to group 1',
+  'Show group 1',
+  'Move Colosseum to group 2',
+  'What can you help with?',
 ];
 
 const SUGGESTIONS_PRE = [
@@ -27,6 +36,7 @@ const SUGGESTIONS_PRE = [
 export function TravelChatBot({
   city,
   hasTrip,
+  variant = 'default',
   onDietary,
   onPreference,
   onAddPlace,
@@ -38,18 +48,25 @@ export function TravelChatBot({
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const isGroups = variant === 'groups';
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       role: 'assistant',
-      text: hasTrip
-        ? `Direct the plan anytime — skip breakfast, plan a day, browse cafés/parks/nightlife, or move a stop between days.`
-        : 'Share diet prefs or must-visit places before or during planning.',
+      text: isGroups
+        ? 'Change these nearby groups anytime — add a place to a group, move one between groups, or ask me to focus a group.'
+        : hasTrip
+          ? `Direct the plan anytime — skip breakfast, plan a day, browse cafés/parks/nightlife, or move a stop between days.`
+          : 'Share diet prefs or must-visit places before or during planning.',
     },
   ]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const suggestions = hasTrip ? SUGGESTIONS_TRIP : SUGGESTIONS_PRE;
+  const suggestions = isGroups
+    ? SUGGESTIONS_GROUPS
+    : hasTrip
+      ? SUGGESTIONS_TRIP
+      : SUGGESTIONS_PRE;
 
   useEffect(() => {
     if (open) {
@@ -146,9 +163,11 @@ export function TravelChatBot({
               type="text"
               value={input}
               placeholder={
-                hasTrip
-                  ? 'e.g. skip breakfast, plan day 1…'
-                  : 'e.g. vegetarian, must visit…'
+                isGroups
+                  ? 'e.g. add Pantheon to group 1…'
+                  : hasTrip
+                    ? 'e.g. skip breakfast, plan day 1…'
+                    : 'e.g. vegetarian, must visit…'
               }
               onChange={(e) => setInput(e.target.value)}
               disabled={busy}

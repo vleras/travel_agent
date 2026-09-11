@@ -10,7 +10,7 @@ export interface ChatMessage {
 
 export type ChatIntent =
   | { type: 'dietary'; label: string; breakfastHint: string }
-  | { type: 'add_place'; placeQuery: string }
+  | { type: 'add_place'; placeQuery: string; toDay?: number }
   | { type: 'skip_breakfast' }
   | { type: 'plan_day'; day: number }
   | { type: 'move_stop'; stopName: string; toDay: number }
@@ -55,11 +55,25 @@ const DIET_PATTERNS: { re: RegExp; label: string; breakfastHint: string }[] = [
 const ADD_PLACE_RE =
   /(?:(?:want to|wanna|would like to|I'd like to|i want to)\s+(?:visit|go to|see|check out)|(?:add|include|put)\s+(?:in\s+)?(?:the\s+)?(?:trip|itinerary)?\s*|visit|go to|see)\s+(.+)/i;
 
+/** “add Pantheon to group 1” / “put Trevi in the first group” */
+const ADD_TO_GROUP_RE =
+  /(?:add|put|include)\s+["“]?(.+?)["”]?\s+(?:to|onto|in|into|on)\s+(?:the\s+)?(?:(first|second|third|1st|2nd|3rd)(?:\s*(?:group|day))?|(?:(?:day|group)\s*)(\d+)(?:st|nd|rd|th)?)/i;
+
 const MOVE_RE =
-  /move\s+["“]?(.+?)["”]?\s+(?:to|onto)\s+(?:the\s+)?(?:day\s*)?(\d+)(?:st|nd|rd|th)?/i;
+  /move\s+["“]?(.+?)["”]?\s+(?:to|onto)\s+(?:the\s+)?(?:(?:day|group)\s*)?(\d+)(?:st|nd|rd|th)?/i;
 
 const PLAN_DAY_RE =
-  /(?:plan|let'?s plan|show|start with|focus on)\s+(?:the\s+)?(?:first|1st|day\s*)?(\d+|first|second|third)?(?:st|nd|rd|th)?\s*day|(?:plan|let'?s plan)\s+day\s*(\d+)/i;
+  /(?:plan|let'?s plan|show|start with|focus on|open)\s+(?:the\s+)?(?:(first|second|third|1st|2nd|3rd)(?:\s*(?:day|group))?|(?:(?:day|group)\s*)(\d+)(?:st|nd|rd|th)?)/i;
+
+function ordinalToDay(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const key = raw.toLowerCase();
+  if (key === 'first' || key === '1st' || key === '1') return 1;
+  if (key === 'second' || key === '2nd' || key === '2') return 2;
+  if (key === 'third' || key === '3rd' || key === '3') return 3;
+  if (/^\d+$/.test(key)) return Number(key);
+  return null;
+}
 
 export function parseChatIntent(message: string): ChatIntent {
   const text = message.trim();
@@ -81,14 +95,27 @@ export function parseChatIntent(message: string): ChatIntent {
     };
   }
 
+  const addToGroup = text.match(ADD_TO_GROUP_RE);
+  if (addToGroup?.[1]) {
+    const toDay =
+      ordinalToDay(addToGroup[2]) ?? ordinalToDay(addToGroup[3]) ?? 1;
+    const placeQuery = addToGroup[1]
+      .replace(/[?.!]+$/, '')
+      .replace(/\bplease\b/gi, '')
+      .trim();
+    if (placeQuery.length > 1) {
+      return { type: 'add_place', placeQuery, toDay };
+    }
+  }
+
   const plan = text.match(PLAN_DAY_RE);
-  if (plan || /plan\s+first\s+day|let'?s\s+plan\s+day\s*1|show\s+(me\s+)?(options|places)/i.test(text)) {
-    let day = 1;
-    const raw = plan?.[1] || plan?.[2];
-    if (raw === 'first' || raw === '1') day = 1;
-    else if (raw === 'second' || raw === '2') day = 2;
-    else if (raw === 'third' || raw === '3') day = 3;
-    else if (raw && /^\d+$/.test(raw)) day = Number(raw);
+  if (
+    plan ||
+    /plan\s+first\s+(?:day|group)|let'?s\s+plan\s+(?:day|group)\s*1|show\s+(me\s+)?(options|places)/i.test(
+      text,
+    )
+  ) {
+    const day = ordinalToDay(plan?.[1] || plan?.[2]) ?? 1;
     return { type: 'plan_day', day };
   }
 
@@ -154,7 +181,8 @@ export async function resolvePlaceAsStop(
 export interface ChatHandlers {
   onDietary?: (label: string, breakfastHint: string) => void;
   onPreference?: (note: string) => void;
-  onAddPlace?: (placeQuery: string) => Promise<string>;
+  /** Optional toDay = group/day number (1-based). */
+  onAddPlace?: (placeQuery: string, toDay?: number) => Promise<string>;
   onSkipBreakfast?: () => string | Promise<string>;
   onPlanDay?: (day: number) => string | Promise<string>;
   onMoveStop?: (stopName: string, toDay: number) => string | Promise<string>;
@@ -171,18 +199,17 @@ export async function replyToChat(params: {
   switch (intent.type) {
     case 'greeting':
       return params.hasTrip
-        ? `Hi! I can skip breakfast, plan a day (“plan day 1”), show cafés/parks/nightlife, add a place, or move a stop (“move Colosseum to day 3”).`
-        : 'Hi! Share preferences (vegetarian, must-visit places). Once your trip is built, I can rearrange days too.';
+        ? `Hi! I can rearrange nearby groups — add a place (“add Pantheon to group 1”), move one (“move Trevi Fountain to group 2”), or focus a group (“show group 1”).`
+        : 'Hi! Share preferences (vegetarian, must-visit places). Once groups are ready, I can rearrange them too.';
 
     case 'help':
       return [
         'Try:',
-        '• “Skip breakfast for now”',
-        '• “Let’s plan day 1”',
-        '• “Show me parks / nightlife / cafés”',
-        '• “I’m vegetarian”',
-        '• “I want to visit the Pantheon”',
-        '• “Move Trevi Fountain to day 3”',
+        '• “Add Pantheon to group 1”',
+        '• “Put Trevi Fountain in the first group”',
+        '• “Move Colosseum to group 2”',
+        '• “Show group 1”',
+        '• “I want to visit the Pantheon” (adds to group 1)',
       ].join('\n');
 
     case 'skip_breakfast': {
@@ -195,14 +222,14 @@ export async function replyToChat(params: {
 
     case 'plan_day': {
       if (!params.hasTrip || !params.onPlanDay) {
-        return 'Finish building your itinerary first, then ask me to plan a specific day.';
+        return 'Finish building your groups first, then ask me to show a specific group.';
       }
       return await params.onPlanDay(intent.day);
     }
 
     case 'move_stop': {
       if (!params.hasTrip || !params.onMoveStop) {
-        return 'That works once your trip days exist. Build the itinerary, then tell me which stop to move.';
+        return 'That works once your nearby groups exist. Then tell me which place to move.';
       }
       return await params.onMoveStop(intent.stopName, intent.toDay);
     }
@@ -225,10 +252,10 @@ export async function replyToChat(params: {
     case 'add_place': {
       if (!params.hasTrip || !params.onAddPlace) {
         params.onPreference?.(`Must visit: ${intent.placeQuery}`);
-        return `I'll remember “${intent.placeQuery}”. Ask again after the itinerary is ready to drop it on a day.`;
+        return `I'll remember “${intent.placeQuery}”. Ask again after groups are ready to drop it in.`;
       }
       try {
-        return await params.onAddPlace(intent.placeQuery);
+        return await params.onAddPlace(intent.placeQuery, intent.toDay);
       } catch {
         return `I couldn't add “${intent.placeQuery}”. Try a clearer place name.`;
       }
@@ -236,10 +263,10 @@ export async function replyToChat(params: {
 
     case 'preference': {
       params.onPreference?.(intent.note);
-      return `Noted: “${intent.note}”.`;
+      return `Noted: “${intent.note}”. Say “help” for ways to change groups.`;
     }
 
     default:
-      return 'Tell me a preference, a place to visit, or how to rearrange a day.';
+      return 'Tell me a place to add, or how to rearrange a group (e.g. “move X to group 2”).';
   }
 }

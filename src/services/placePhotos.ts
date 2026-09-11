@@ -1,7 +1,8 @@
 /**
- * Multi-source place photos (browser-safe, no API keys).
- * Prefers iconic Wikipedia/Commons lead photos; dedupes file variants;
- * avoids maps/logos and weak nearby street shots when better matches exist.
+ * Multi-source place photos (browser-safe).
+ * Cascade: Unsplash → Wikimedia Commons (fill) → geo/Openverse/Nominatim.
+ * Unsplash prefers time-of-day travel queries + engagement + photographer signals.
+ * Results are cached per place; Unsplash fails silently when unavailable.
  */
 
 export interface PlacePhotoQuery {
@@ -19,7 +20,14 @@ export interface PlacePhotoQuery {
 interface ScoredPhoto {
   url: string;
   score: number;
-  source: 'known' | 'wiki' | 'commons' | 'nearby' | 'openverse' | 'nominatim';
+  source:
+    | 'known'
+    | 'unsplash'
+    | 'wiki'
+    | 'commons'
+    | 'nearby'
+    | 'openverse'
+    | 'nominatim';
   titleHint: string;
 }
 
@@ -30,9 +38,10 @@ const claimedFingerprints = new Map<string, string>();
 
 function cacheKey(q: PlacePhotoQuery): string {
   return [
-    'v5',
+    'v11',
     q.name,
     q.city ?? '',
+    q.category ?? '',
     q.lat?.toFixed(4) ?? '',
     q.lon?.toFixed(4) ?? '',
     q.wikidataId ?? '',
@@ -134,16 +143,312 @@ function uniquePhotoCount(scored: ScoredPhoto[]): number {
 }
 
 const UGLY =
-  /\b(map|logo|icon|flag|seal|coa|coat[_ ]of[_ ]arms|diagram|svg|plan|blueprint|sign|poster|sticker|qr[_ ]?code|screenshot|crop|detail_of|cropped)\b/i;
+  /\b(map|logo|icon|flag|seal|coa|coat[_ ]of[_ ]arms|diagram|svg|plan|blueprint|sign|poster|sticker|qr[_ ]?code|screenshot|crop|detail_of|cropped|watermark|stamp)\b/i;
 const PRETTY =
-  /\b(sunset|sunrise|dusk|dawn|golden|panorama|skyline|aerial|drone|night|illuminat|view|vista|exterior|facade|façade|harbour|harbor|bridge|plaza|square|garden|temple|palace|cathedral|fountain|beach|coast)\b/i;
+  /\b(sunset|sunrise|dusk|dawn|golden|panorama|skyline|aerial|drone|night|illuminat|view|vista|exterior|facade|façade|harbour|harbor|bridge|plaza|square|garden|temple|palace|cathedral|fountain|beach|coast|scenic|landscape|interior)\b/i;
+const ARCHIVAL_BW =
+  /\b(black[\s_-]?and[\s_-]?white|b[&\s_-]?w|monochrome|greyscale|grayscale|archival|historical|historic photo|old photo|postcard|vintage|sepia|film grain|scan|engraving|etching|drawing|illustration|sketch|painting|oil on|watercolor|lithograph|antique|retro|1950|1960|1970|1980|1990|early 20th|19th century)\b/i;
+const FRESH_LOOK =
+  /\b(sunset|sunrise|golden hour|blue hour|vibrant|scenic|travel|modern|aerial|drone|beautiful|stunning|colorful|sunny|blue sky|clear day)\b/i;
+
+function isDullUnsplashColor(color?: string): boolean {
+  if (!color || !/^#?[0-9a-f]{3,8}$/i.test(color.trim())) return false;
+  const hex = color.replace('#', '');
+  const full =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : hex.slice(0, 6);
+  if (full.length < 6) return false;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const sat = max === 0 ? 0 : (max - min) / max;
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  // Near-gray or muddy dark tones read as “old”
+  if (sat < 0.12 && lum > 0.15 && lum < 0.85) return true;
+  if (lum < 0.12) return true;
+  return false;
+}
+
+function yearsSince(iso?: string | null): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return (Date.now() - t) / (365.25 * 24 * 3600 * 1000);
+}
+
+type PlaceKind =
+  | 'landmark'
+  | 'restaurant'
+  | 'street'
+  | 'museum'
+  | 'park';
+
+function detectPlaceKind(name: string, category?: string): PlaceKind {
+  const hay = `${category ?? ''} ${name}`.toLowerCase();
+  if (
+    /\b(food|restaurant|café|cafe|bakery|market|trattoria|deli|pizza|coffee|breakfast|gelato|brunch|eatery|bistro)\b/.test(
+      hay,
+    )
+  ) {
+    return 'restaurant';
+  }
+  if (/\b(museum|gallery|exhibit|collection)\b/.test(hay)) return 'museum';
+  if (/\b(park|garden|nature|beach|coast|hill|botanic)\b/.test(hay)) {
+    return 'park';
+  }
+  if (
+    /\b(street|neighborhood|neighbourhood|district|quarter|walk|alley|nightlife|souk|bazaar)\b/.test(
+      hay,
+    )
+  ) {
+    return 'street';
+  }
+  return 'landmark';
+}
+
+function unsplashQueryPair(
+  name: string,
+  kind: PlaceKind,
+  city?: string,
+): string[] {
+  const n = searchName(name);
+  const cityBit = city?.trim() ?? '';
+  // Prefer place + time/mood over generic "landmark vibrant" modifiers
+  const placeQ = (suffix: string) => {
+    const base = `${n} ${suffix}`.trim();
+    return cityBit ? [base, `${base} ${cityBit}`] : [base];
+  };
+
+  switch (kind) {
+    case 'restaurant':
+      return [
+        ...placeQ('interior warm lighting'),
+        ...placeQ('cozy'),
+        ...placeQ('evening ambiance'),
+        ...placeQ('restaurant interior'),
+      ];
+    case 'street':
+      return [
+        ...placeQ('street photography'),
+        ...placeQ('people'),
+        ...placeQ('daytime life'),
+        ...placeQ('evening'),
+      ];
+    case 'museum':
+      return [
+        ...placeQ('interior'),
+        ...placeQ('gallery'),
+        ...placeQ('daytime'),
+        ...placeQ('exhibits'),
+      ];
+    case 'park':
+      return [
+        ...placeQ('golden hour'),
+        ...placeQ('sunset'),
+        ...placeQ('daytime landscape'),
+        ...placeQ('scenic'),
+      ];
+    default:
+      // Landmarks: time-of-day travel shots beat "landmark vibrant"
+      return [
+        ...placeQ('sunset'),
+        ...placeQ('golden hour'),
+        ...placeQ('blue hour'),
+        ...placeQ('daytime landscape'),
+      ];
+  }
+}
+
+/** Serious photographer signal — portfolio or Instagram on Unsplash profile. */
+function hasPhotographerReputation(user?: {
+  portfolio_url?: string | null;
+  instagram_username?: string | null;
+  social?: { instagram_username?: string | null };
+}): boolean {
+  const portfolio = user?.portfolio_url?.trim();
+  const ig =
+    user?.social?.instagram_username?.trim() ||
+    user?.instagram_username?.trim();
+  return Boolean(portfolio) || Boolean(ig);
+}
+
+/** Keep if well-liked OR strong engagement ratio when views are present. */
+function passesUnsplashEngagement(likes: number, views?: number): boolean {
+  if (likes > 150) return true;
+  if (typeof views === 'number' && views > 0 && likes / views > 0.04) {
+    return true;
+  }
+  return false;
+}
+
+function isStockGenericPhotographer(bio?: string | null, name?: string | null): boolean {
+  const hay = `${bio ?? ''} ${name ?? ''}`.toLowerCase();
+  return /\b(stock|generic|shutterstock|getty|alamy|royalty[\s-]?free|clipart|placeholder)\b/.test(
+    hay,
+  );
+}
+
+/** Higher = more aesthetically appealing by Unsplash signals. */
+function unsplashAppealScore(photo: {
+  likes?: number;
+  downloads?: number;
+  views?: number;
+  created_at?: string;
+  width?: number;
+  height?: number;
+}): number {
+  const likes = photo.likes ?? 0;
+  const downloads = Math.max(photo.downloads ?? 1, 1);
+  const views = photo.views;
+  const age = yearsSince(photo.created_at);
+
+  // Likes primary; views/downloads rewards “looks good” over pure utility downloads
+  let score = likes * 3;
+  if (typeof views === 'number' && views > 0) {
+    score += Math.min(views / downloads, 40) * 4;
+  } else {
+    // Soft proxy when views missing from search payload
+    score += Math.min(likes / downloads, 5) * 8;
+  }
+
+  if (age != null) {
+    if (age <= 2) score += 120;
+    else if (age <= 4) score += 40;
+    else score -= age * 8;
+  }
+
+  const w = photo.width ?? 0;
+  const h = photo.height ?? 0;
+  if (h > 0 && w / h > 1.3) score += 25;
+  if (w >= 1600) score += 15;
+
+  return score;
+}
+
+/**
+ * Unsplash search — optional Access Key via VITE_UNSPLASH_ACCESS_KEY.
+ * Ranks by likes / aesthetic signals and prefers fresh landscape travel shots.
+ */
+async function searchUnsplash(
+  name: string,
+  category?: string,
+  city?: string,
+  limit = 10,
+): Promise<ScoredPhoto[]> {
+  const accessKey =
+    (import.meta.env.VITE_UNSPLASH_ACCESS_KEY as string | undefined)?.trim() ||
+    '';
+  const kind = detectPlaceKind(name, category);
+  const queries = [...new Set(unsplashQueryPair(name, kind, city))].filter(
+    Boolean,
+  );
+  const scored: ScoredPhoto[] = [];
+  const seenUserDims = new Set<string>();
+  const seenUrls = new Set<string>();
+
+  for (const query of queries) {
+    if (uniquePhotoCount(scored) >= limit) break;
+
+    const url = new URL('https://api.unsplash.com/search/photos');
+    url.searchParams.set('query', query);
+    url.searchParams.set('per_page', '20');
+    url.searchParams.set('order_by', 'relevant');
+    url.searchParams.set('orientation', 'landscape');
+    url.searchParams.set('content_filter', 'high');
+    if (accessKey) url.searchParams.set('client_id', accessKey);
+
+    const headers: HeadersInit = { 'Accept-Version': 'v1' };
+    if (accessKey) {
+      headers.Authorization = `Client-ID ${accessKey}`;
+    }
+
+    const data = (await fetchJson(url.toString(), { headers }, 5500)) as {
+      results?: Array<{
+        urls?: { regular?: string; small?: string };
+        downloads?: number;
+        likes?: number;
+        views?: number;
+        width?: number;
+        height?: number;
+        color?: string;
+        created_at?: string;
+        description?: string | null;
+        alt_description?: string | null;
+        user?: {
+          id?: string;
+          username?: string;
+          name?: string;
+          bio?: string | null;
+          portfolio_url?: string | null;
+          instagram_username?: string | null;
+          social?: { instagram_username?: string | null };
+        };
+      }>;
+    } | null;
+
+    if (!data?.results?.length) continue;
+
+    const ranked = [...data.results].sort(
+      (a, b) => unsplashAppealScore(b) - unsplashAppealScore(a),
+    );
+
+    for (const photo of ranked) {
+      if (uniquePhotoCount(scored) >= limit) break;
+      const photoUrl = photo.urls?.regular || photo.urls?.small;
+      if (!photoUrl || seenUrls.has(photoUrl)) continue;
+
+      const width = photo.width ?? 0;
+      const height = photo.height ?? 0;
+      if (width > 0 && width < 1000) continue;
+      // Travel photos trend wider
+      if (height > 0 && width / height <= 1.3) continue;
+
+      const likes = photo.likes ?? 0;
+      if (!passesUnsplashEngagement(likes, photo.views)) continue;
+
+      if (!hasPhotographerReputation(photo.user)) continue;
+
+      const ageYears = yearsSince(photo.created_at);
+      // Older popular shots are often generic — soft-cap hard filter at 6y
+      if (ageYears != null && ageYears > 6) continue;
+
+      if (isDullUnsplashColor(photo.color)) continue;
+      if (isStockGenericPhotographer(photo.user?.bio, photo.user?.name)) {
+        continue;
+      }
+
+      const hint = `${photo.alt_description ?? ''} ${photo.description ?? ''}`;
+      if (ARCHIVAL_BW.test(hint) || UGLY.test(hint)) continue;
+
+      const userId = photo.user?.id || photo.user?.username || 'anon';
+      const userDimKey = `${userId}:${width}x${height}`;
+      if (seenUserDims.has(userDimKey)) continue;
+      seenUserDims.add(userDimKey);
+      seenUrls.add(photoUrl);
+
+      const appeal =
+        1.55 + Math.min(unsplashAppealScore(photo) / 400, 0.9);
+      pushScored(scored, photoUrl, appeal, 'unsplash', hint.trim() || query);
+    }
+  }
+
+  return scored;
+}
 
 function beautyBonus(titleOrUrl: string): number {
   let score = 0;
-  if (PRETTY.test(titleOrUrl)) score += 0.35;
-  if (UGLY.test(titleOrUrl)) score -= 0.8;
+  if (PRETTY.test(titleOrUrl) || FRESH_LOOK.test(titleOrUrl)) score += 0.4;
+  if (UGLY.test(titleOrUrl) || ARCHIVAL_BW.test(titleOrUrl)) score -= 1.1;
   if (/\.svg(\?|$)/i.test(titleOrUrl)) score -= 1.2;
-  if (/upload\.wikimedia\.org/i.test(titleOrUrl)) score += 0.15;
+  // Slight penalty for generic Commons dumps vs Unsplash travel shots
+  if (/upload\.wikimedia\.org/i.test(titleOrUrl)) score -= 0.05;
+  if (/images\.unsplash\.com/i.test(titleOrUrl)) score += 0.2;
   return score;
 }
 
@@ -295,34 +600,41 @@ function looksTooSimilar(a: ScoredPhoto, b: ScoredPhoto): boolean {
   return false;
 }
 
+const TARGET_PLACE_PHOTOS = 10;
+
 function finalizePhotos(
   scored: ScoredPhoto[],
   placeName: string,
-  limit = 4,
+  limit = TARGET_PLACE_PHOTOS,
 ): string[] {
   scored.sort((a, b) => b.score - a.score);
 
   const placeKey = placeName.toLowerCase();
   const out: ScoredPhoto[] = [];
   const seen = new Set<string>();
-  const usedScenes = new Set<string>();
+  const usedScenes = new Map<string, number>();
 
   const ranked = [
     ...scored.filter(
-      (s) =>
-        s.source === 'known' ||
-        s.source === 'wiki' ||
-        s.source === 'commons' ||
-        s.source === 'nominatim',
+      (s) => s.source === 'unsplash' || s.source === 'known',
+    ),
+    ...scored.filter((s) => s.source === 'wiki'),
+    ...scored.filter(
+      (s) => s.source === 'commons' || s.source === 'nominatim',
     ),
     ...scored.filter((s) => s.source === 'nearby' || s.source === 'openverse'),
   ];
 
   for (const item of ranked) {
     if (item.score < 0.45) continue;
+    if (ARCHIVAL_BW.test(item.titleHint) || ARCHIVAL_BW.test(item.url)) {
+      continue;
+    }
 
     const curatedCount = out.filter((u) =>
-      /wikimedia\.org|wikipedia\.org|commons\.wikimedia/i.test(u.url),
+      /wikimedia\.org|wikipedia\.org|commons\.wikimedia|images\.unsplash\.com/i.test(
+        u.url,
+      ),
     ).length;
 
     if (
@@ -342,34 +654,33 @@ function finalizePhotos(
 
     const scenes = photoSceneTags(item.url, item.titleHint);
     const primary = scenes.find((s) => s !== 'general') ?? 'general';
-    // Allow at most one photo per non-general scene tag
-    if (primary !== 'general' && usedScenes.has(primary)) continue;
+    // Allow a couple per scene so we can still reach ~10 varied shots
+    const sceneCount = usedScenes.get(primary) ?? 0;
+    if (primary !== 'general' && sceneCount >= 2) continue;
 
     seen.add(fp);
     claimedFingerprints.set(fp, placeKey);
-    if (primary !== 'general') usedScenes.add(primary);
+    if (primary !== 'general') usedScenes.set(primary, sceneCount + 1);
     out.push(item);
     if (out.length >= limit) break;
   }
 
-  // If diversity was too strict and we have fewer than needed, fill with
-  // non-exact-duplicates we previously skipped for scene/title similarity
-  if (out.length < Math.min(limit, 4)) {
+  // Fill remaining slots if diversity rules left us short of ~10
+  if (out.length < limit) {
     for (const item of ranked) {
       if (out.length >= limit) break;
       const fp = imageFingerprint(item.url);
       if (seen.has(fp)) continue;
-      if (item.score < 0.45) continue;
+      if (item.score < 0.4) continue;
       const owner = claimedFingerprints.get(fp);
       if (owner && owner !== placeKey) continue;
-      // Still skip near-identical titles
       if (
         out.some(
           (picked) =>
             titleTokenOverlap(
               `${picked.titleHint} ${picked.url}`,
               `${item.titleHint} ${item.url}`,
-            ) >= 0.7,
+            ) >= 0.75,
         )
       ) {
         continue;
@@ -429,162 +740,55 @@ async function fromWikipediaTag(tag: string): Promise<string | null> {
   return hit?.url ?? null;
 }
 
-function wikiLangsForCity(city?: string): string[] {
-  const c = (city ?? '').toLowerCase();
-  if (/roma|rome|milan|firenze|florence|venezia|venice|napoli|naples/.test(c)) {
-    return ['it', 'en'];
-  }
-  if (/paris|lyon|marseille|nice/.test(c)) return ['fr', 'en'];
-  if (/madrid|barcelona|sevilla|valencia/.test(c)) return ['es', 'en'];
-  if (/berlin|münchen|munich|hamburg|köln|cologne/.test(c)) return ['de', 'en'];
-  if (/lisboa|lisbon|porto/.test(c)) return ['pt', 'en'];
-  if (/tokyo|kyoto|osaka|seoul/.test(c)) return ['en', 'ja', 'ko'];
-  if (/istanbul/.test(c)) return ['tr', 'en'];
-  if (/athens/.test(c)) return ['el', 'en'];
-  if (/prague/.test(c)) return ['cs', 'en'];
-  if (/sydney/.test(c)) return ['en'];
-  if (/marrakech|marrakesh/.test(c)) return ['fr', 'en'];
-  return ['en'];
+function commonsUploadAgeYears(ext?: Record<string, { value?: string }>): number | null {
+  const raw =
+    ext?.DateTimeOriginal?.value ||
+    ext?.DateTime?.value ||
+    ext?.DateTimeMetadata?.value ||
+    '';
+  if (!raw) return null;
+  // Commons often uses "YYYY-MM-DD HH:MM:SS" or "YYYY"
+  const isoish = raw.match(/(\d{4})(?:[-:/](\d{2}))?(?:[-:/](\d{2}))?/);
+  if (!isoish) return null;
+  const year = Number(isoish[1]);
+  const month = Number(isoish[2] ?? '6');
+  const day = Number(isoish[3] ?? '15');
+  if (year < 1990 || year > new Date().getFullYear() + 1) return null;
+  const t = Date.UTC(year, Math.max(0, month - 1), Math.max(1, day));
+  return (Date.now() - t) / (365.25 * 24 * 3600 * 1000);
 }
 
-async function wikipediaMediaList(
-  title: string,
-  lang: string,
-): Promise<ScoredPhoto[]> {
-  const data = (await fetchJson(
-    `https://${lang}.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title)}`,
-  )) as {
-    items?: Array<{
-      title?: string;
-      type?: string;
-      showInGallery?: boolean;
-      original?: { source?: string; width?: number; height?: number };
-      srcset?: Array<{ src?: string }>;
-    }>;
-  } | null;
+function scoreCommonsCandidate(opts: {
+  title: string;
+  rel: number;
+  width?: number;
+  height?: number;
+  ageYears?: number | null;
+}): number {
+  const { title, rel, width = 0, height = 0, ageYears } = opts;
+  let score = 0.55 + rel;
 
-  const scored: ScoredPhoto[] = [];
-  for (const item of data?.items ?? []) {
-    if (item.type && item.type !== 'image') continue;
-    const titleHint = item.title ?? '';
-    if (UGLY.test(titleHint)) continue;
-    const url =
-      item.original?.source ||
-      item.srcset?.[item.srcset.length - 1]?.src ||
-      item.srcset?.[0]?.src;
-    if (!url) continue;
-    let sizeBonus = 0;
-    if (item.original?.width && item.original?.height) {
-      const ratio = item.original.width / item.original.height;
-      if (ratio >= 1.15 && ratio <= 2.4) sizeBonus += 0.15;
-      if (item.original.width >= 1000) sizeBonus += 0.1;
-    }
-    // Gallery images from the article tend to be more varied than lead alone
-    pushScored(
-      scored,
-      url,
-      1.15 + sizeBonus + (item.showInGallery ? 0.1 : 0),
-      'wiki',
-      titleHint,
-    );
+  if (ARCHIVAL_BW.test(title) || UGLY.test(title)) return -1;
+  if (height > 0) {
+    const ratio = width / height;
+    if (ratio > 1.3) score += 0.25;
+    else if (ratio < 1.05) score -= 0.25;
   }
-  return scored;
-}
+  if (width >= 2000) score += 0.25;
+  else if (width >= 1400) score += 0.15;
+  else if (width < 900) score -= 0.2;
 
-/** Exact-ish Wikipedia lead + article gallery images for variety. */
-async function searchWikipediaLead(
-  name: string,
-  city?: string,
-): Promise<ScoredPhoto[]> {
-  const scored: ScoredPhoto[] = [];
-  const core = searchName(name);
-  const cityName = city ?? '';
-
-  const titles = [
-    /pantheon/i.test(core) && cityName ? 'Pantheon (Rome)' : '',
-    /forum/i.test(core) && /rome|roma/i.test(cityName) ? 'Roman Forum' : '',
-    /forum/i.test(core) && /rome|roma/i.test(cityName) ? 'Foro Romano' : '',
-    /colosseum|colosseo/i.test(core) ? 'Colosseum' : '',
-    /trevi/i.test(core) ? 'Trevi Fountain' : '',
-    /st\.?\s*peter|san pietro|basilica/i.test(core) && /rome|roma|vatican/i.test(cityName)
-      ? "St. Peter's Basilica"
-      : '',
-    /vatican/i.test(core) ? 'Vatican Museums' : '',
-    cityName ? `${core} (${cityName})` : '',
-    cityName ? `${core}, ${cityName}` : '',
-    core,
-  ].filter(Boolean);
-
-  const langs = wikiLangsForCity(city).slice(0, 2);
-  let resolvedTitle: { title: string; lang: string } | null = null;
-
-  for (const lang of langs) {
-    for (const title of titles) {
-      const hit = await wikipediaSummaryPhoto(title, lang);
-      if (!hit) continue;
-      pushScored(scored, hit.url, 1.4, 'wiki', hit.title);
-      resolvedTitle = { title: hit.title, lang };
-      break;
-    }
-    if (resolvedTitle) break;
+  if (ageYears != null) {
+    if (ageYears <= 3) score += 0.3;
+    else if (ageYears <= 7) score += 0.1;
+    else if (ageYears > 15) score -= 0.35;
+    else score -= 0.1;
   }
 
-  // Pull several distinct images from the article gallery (not just the lead)
-  if (resolvedTitle) {
-    scored.push(
-      ...(await wikipediaMediaList(resolvedTitle.title, resolvedTitle.lang)),
-    );
+  if (/\b(scenic|view|panorama|sunset|sunrise|vibrant|daytime)\b/i.test(title)) {
+    score += 0.12;
   }
-
-  if (uniquePhotoCount(scored) < 4) {
-    const lang = langs[0] ?? 'en';
-    const data = await wikiApi(`${lang}.wikipedia.org`, {
-      action: 'query',
-      generator: 'search',
-      gsrsearch: [core, cityName].filter(Boolean).join(' '),
-      gsrlimit: '6',
-      prop: 'pageimages|images',
-      piprop: 'thumbnail|original',
-      pithumbsize: '1200',
-      imlimit: '8',
-    });
-    const pages = Object.values(
-      (data?.query as {
-        pages?: Record<
-          string,
-          {
-            title?: string;
-            thumbnail?: { source?: string };
-            original?: { source?: string };
-            images?: Array<{ title?: string }>;
-          }
-        >;
-      })?.pages ?? {},
-    );
-    for (const page of pages) {
-      const rel = Math.max(
-        relevanceScore(page.title ?? '', name),
-        relevanceScore(page.title ?? '', core),
-      );
-      if (rel < 0.45) continue;
-      pushScored(
-        scored,
-        page.original?.source || page.thumbnail?.source,
-        1.05 + rel,
-        'wiki',
-        page.title ?? '',
-      );
-      for (const img of page.images ?? []) {
-        const file = img.title ?? '';
-        if (!/^File:/i.test(file)) continue;
-        if (UGLY.test(file)) continue;
-        if (!/\.(jpe?g|png|webp)$/i.test(file)) continue;
-        pushScored(scored, commonsFileUrl(file), 0.95 + rel * 0.3, 'wiki', file);
-      }
-    }
-  }
-
-  return scored;
+  return score;
 }
 
 async function searchCommonsByName(
@@ -595,9 +799,8 @@ async function searchCommonsByName(
   const queries = [
     [core, city].filter(Boolean).join(' '),
     `${core} exterior ${city ?? ''}`.trim(),
-    `${core} interior ${city ?? ''}`.trim(),
+    `${core} scenic ${city ?? ''}`.trim(),
     `${core} ${city ?? ''} daytime`.trim(),
-    `${core} night ${city ?? ''}`.trim(),
     `${core} ${city ?? ''} panorama`.trim(),
   ].filter((q, i, arr) => q.length > 3 && arr.indexOf(q) === i);
 
@@ -611,7 +814,7 @@ async function searchCommonsByName(
       gsrnamespace: '6',
       gsrlimit: '16',
       prop: 'imageinfo',
-      iiprop: 'url|size|mime',
+      iiprop: 'url|size|mime|extmetadata',
       iiurlwidth: '1200',
     });
     if (!data) continue;
@@ -628,6 +831,7 @@ async function searchCommonsByName(
               width?: number;
               height?: number;
               mime?: string;
+              extmetadata?: Record<string, { value?: string }>;
             }>;
           }
         >;
@@ -641,21 +845,92 @@ async function searchCommonsByName(
       const info = page.imageinfo?.[0];
       if (info?.mime && !/^image\/(jpeg|png|webp)/i.test(info.mime)) continue;
       const url = info?.thumburl || info?.url;
-      let sizeBonus = 0;
-      if (info?.width && info?.height) {
-        const ratio = info.width / info.height;
-        if (ratio >= 1.15 && ratio <= 2.3) sizeBonus += 0.2;
-        if (info.width >= 1200) sizeBonus += 0.1;
-      }
-      // Slight boost for query diversity keywords so interiors/exteriors compete
-      const angleBonus = /\b(interior|exterior|night|view|plaza|square)\b/i.test(
+      const ageYears = commonsUploadAgeYears(info?.extmetadata);
+      const score = scoreCommonsCandidate({
         title,
-      )
-        ? 0.08
-        : 0;
-      pushScored(scored, url, 0.8 + rel + sizeBonus + angleBonus, 'commons', title);
+        rel,
+        width: info?.width,
+        height: info?.height,
+        ageYears,
+      });
+      if (score < 0.5) continue;
+      pushScored(scored, url, score, 'commons', title);
     }
-    if (uniquePhotoCount(scored) >= 6) break;
+    if (uniquePhotoCount(scored) >= 10) break;
+  }
+
+  return scored;
+}
+
+/** Commons fill-in: scenic / view angles when still short of photos. */
+async function searchCommonsScenic(
+  name: string,
+  city?: string,
+): Promise<ScoredPhoto[]> {
+  const core = searchName(name);
+  const queries = [
+    `${core} scenic ${city ?? ''}`.trim(),
+    `${core} view ${city ?? ''}`.trim(),
+    `${core} ${city ?? ''}`.trim(),
+  ].filter((q, i, arr) => q.length > 3 && arr.indexOf(q) === i);
+
+  const scored: ScoredPhoto[] = [];
+
+  for (const q of queries) {
+    const data = await wikiApi('commons.wikimedia.org', {
+      action: 'query',
+      generator: 'search',
+      gsrsearch: `${q} filetype:bitmap -svg`,
+      gsrnamespace: '6',
+      gsrlimit: '12',
+      prop: 'imageinfo',
+      iiprop: 'url|size|mime|extmetadata',
+      iiurlwidth: '1200',
+    });
+    if (!data) continue;
+
+    const pages = Object.values(
+      (data.query as {
+        pages?: Record<
+          string,
+          {
+            title?: string;
+            imageinfo?: Array<{
+              url?: string;
+              thumburl?: string;
+              width?: number;
+              height?: number;
+              mime?: string;
+              extmetadata?: Record<string, { value?: string }>;
+            }>;
+          }
+        >;
+      })?.pages ?? {},
+    );
+
+    for (const page of pages) {
+      const title = page.title ?? '';
+      if (ARCHIVAL_BW.test(title) || UGLY.test(title)) continue;
+      const rel = Math.max(
+        relevanceScore(title, name),
+        relevanceScore(title, core),
+      );
+      if (rel < 0.4) continue;
+      const info = page.imageinfo?.[0];
+      if (info?.mime && !/^image\/(jpeg|png|webp)/i.test(info.mime)) continue;
+      const url = info?.thumburl || info?.url;
+      const ageYears = commonsUploadAgeYears(info?.extmetadata);
+      const score = scoreCommonsCandidate({
+        title,
+        rel,
+        width: info?.width,
+        height: info?.height,
+        ageYears,
+      });
+      if (score < 0.5) continue;
+      pushScored(scored, url, score, 'commons', title);
+    }
+    if (uniquePhotoCount(scored) >= 10) break;
   }
 
   return scored;
@@ -812,15 +1087,26 @@ async function resolveKnownLinks(q: PlacePhotoQuery): Promise<ScoredPhoto[]> {
 }
 
 async function searchAll(q: PlacePhotoQuery): Promise<string[]> {
-  const target = 6;
+  const target = TARGET_PLACE_PHOTOS;
   const scored: ScoredPhoto[] = [...(await resolveKnownLinks(q))];
 
-  // Wiki gallery first, then Commons angle searches for distinct shots
-  scored.push(...(await searchWikipediaLead(q.name, q.city)));
-  scored.push(...(await searchCommonsByName(q.name, q.city)));
+  // Pull a full Unsplash set up front (~10 keepers after filters)
+  scored.push(
+    ...(await searchUnsplash(q.name, q.category, q.city, target + 5)),
+  );
   let result = finalizePhotos(scored, q.name, target);
 
+  // Wikimedia Commons scenic/view fill — not Wikipedia article dumps
   if (result.length < target) {
+    scored.push(...(await searchCommonsScenic(q.name, q.city)));
+    if (uniquePhotoCount(scored) < target) {
+      scored.push(...(await searchCommonsByName(q.name, q.city)));
+    }
+    result = finalizePhotos(scored, q.name, target);
+  }
+
+  // Last resort geo / open catalog if still sparse
+  if (result.length < Math.min(6, target)) {
     const [nearby, openverse, nominatim] = await Promise.all([
       q.lat != null && q.lon != null
         ? searchCommonsNearby(q.lat, q.lon, q.name)
@@ -832,7 +1118,18 @@ async function searchAll(q: PlacePhotoQuery): Promise<string[]> {
     result = finalizePhotos(scored, q.name, target);
   }
 
-  return result;
+  // Drop leftover Wikipedia hosts if we already have Unsplash/Commons picks
+  const unsplashOrCommons = result.filter(
+    (u) =>
+      /images\.unsplash\.com|unsplash\.com|commons\.wikimedia|upload\.wikimedia/i.test(
+        u,
+      ) && !/\/wikipedia\//i.test(u),
+  );
+  if (unsplashOrCommons.length >= 4) {
+    return unsplashOrCommons.slice(0, target);
+  }
+
+  return result.slice(0, target);
 }
 
 export async function fetchPlacePhotoUrls(

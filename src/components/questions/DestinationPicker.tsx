@@ -179,7 +179,7 @@ function HighlightStory({
     void fetchPlacePhotoUrls(spot.name, destination.city, spot.category).then(
       (urls) => {
         if (!cancelled) {
-          setPhotos(urls.slice(0, 8));
+          setPhotos(urls.slice(0, 10));
           setLoadingPhotos(false);
         }
       },

@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PlaceImage, fetchPlacePhotoUrls } from '../shared/PlaceImage';
 import { MiniMap } from '../shared/MiniMap';
 import type { BreakfastPlace } from '../../types/breakfast';
 import type { ItineraryStop } from '../../types';
 import { minutesToLabel } from '../../services/geo';
+import '../../styles/placeImage.css';
 
 type DetailTarget =
   | { kind: 'breakfast'; place: BreakfastPlace }
@@ -47,6 +48,7 @@ function PhotoGallery({
 }) {
   const [photos, setPhotos] = useState<string[]>([]);
   const [active, setActive] = useState(0);
+  const touchX = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +59,7 @@ function PhotoGallery({
       wikipediaTag,
       commonsTag,
     }).then((urls) => {
-      if (!cancelled) setPhotos(urls.slice(0, 6));
+      if (!cancelled) setPhotos(urls.slice(0, 10));
     });
     return () => {
       cancelled = true;
@@ -81,18 +83,64 @@ function PhotoGallery({
     );
   }
 
+  const canSwipe = photos.length > 1;
+
+  function go(delta: number) {
+    setActive((i) => (i + delta + photos.length) % photos.length);
+  }
+
   return (
     <div className="place-page-gallery">
-      <img
-        className="place-page-hero"
-        src={photos[active]}
-        alt={`${name} photo ${active + 1}`}
-        referrerPolicy="no-referrer"
-        onError={() => {
-          if (active < photos.length - 1) setActive((a) => a + 1);
+      <div
+        className="place-page-hero-swipe place-img-swipe"
+        onTouchStart={(e) => {
+          touchX.current = e.changedTouches[0]?.clientX ?? null;
         }}
-      />
-      {photos.length > 1 && (
+        onTouchEnd={(e) => {
+          if (!canSwipe || touchX.current == null) return;
+          const dx = (e.changedTouches[0]?.clientX ?? 0) - touchX.current;
+          touchX.current = null;
+          if (Math.abs(dx) < 40) return;
+          go(dx < 0 ? 1 : -1);
+        }}
+      >
+        <img
+          className="place-page-hero"
+          src={photos[active]}
+          alt={`${name} photo ${active + 1}`}
+          referrerPolicy="no-referrer"
+          draggable={false}
+          onError={() => {
+            if (active < photos.length - 1) setActive((a) => a + 1);
+          }}
+        />
+        {canSwipe && (
+          <>
+            <button
+              type="button"
+              className="place-img-nav prev"
+              aria-label="Previous photo"
+              onClick={() => go(-1)}
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              className="place-img-nav next"
+              aria-label="Next photo"
+              onClick={() => go(1)}
+            >
+              ›
+            </button>
+            <div className="place-img-dots" aria-hidden>
+              {photos.map((_, i) => (
+                <span key={i} className={i === active ? 'active' : ''} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      {canSwipe && (
         <div className="place-photo-thumbs">
           {photos.map((url, i) => (
             <button

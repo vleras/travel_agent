@@ -1,4 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { TravelChatBot } from '../chat/TravelChatBot';
+import { resolvePlaceAsStop } from '../../services/chatbot';
+import { rescheduleDayStops } from '../../services/agent';
 import { haversineKm, minutesToLabel } from '../../services/geo';
 import type {
   AgentOutput,
@@ -22,6 +25,7 @@ interface ClusterPlanViewProps {
   input: TripInput;
   output: AgentOutput;
   onBack: () => void;
+  onItineraryChange?: (itinerary: DayItinerary[]) => void;
 }
 
 function formatKm(km: number): string {
@@ -53,19 +57,48 @@ const GROUP_COLORS = [
   '#3d7a4a',
 ];
 
+function refreshGroup(
+  day: DayItinerary,
+  input: TripInput,
+  baseLat: number,
+  baseLon: number,
+): DayItinerary {
+  return rescheduleDayStops(
+    day,
+    input.day_start_time,
+    input.breakfast_time,
+    baseLat,
+    baseLon,
+    input.destination_city,
+    null,
+    input.breakfast_food,
+  );
+}
+
 export function ClusterPlanView({
   input,
   output,
   onBack,
+  onItineraryChange,
 }: ClusterPlanViewProps) {
-  const [itinerary] = useState<DayItinerary[]>(output.itinerary);
+  const [itinerary, setItinerary] = useState<DayItinerary[]>(output.itinerary);
   const [mapDayIndex, setMapDayIndex] = useState<number | null>(null);
   const [showAllMap, setShowAllMap] = useState(false);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
+  const [focusGroup, setFocusGroup] = useState(0);
 
   const baseLat = output.metadata.hotel_lat;
   const baseLon = output.metadata.hotel_lon;
   const fromLabel = input.hotel_address ? 'your stay' : 'city center';
+
+  useEffect(() => {
+    setItinerary(output.itinerary);
+  }, [output]);
+
+  function commitItinerary(next: DayItinerary[]) {
+    setItinerary(next);
+    onItineraryChange?.(next);
+  }
 
   const groups = useMemo(
     () =>
@@ -86,6 +119,129 @@ export function ClusterPlanView({
     [groups],
   );
 
+  async function handleAddPlace(
+    placeQuery: string,
+    toDay?: number,
+  ): Promise<string> {
+    const targetIdx = Math.max(
+      0,
+      Math.min(itinerary.length, toDay ?? focusGroup + 1) - 1,
+    );
+
+    const stop = await resolvePlaceAsStop(
+      placeQuery,
+      input.destination_city,
+      baseLat,
+      baseLon,
+    );
+    if (!stop) {
+      return `I couldn’t find “${placeQuery}” near ${input.destination_city}. Try a more specific name.`;
+    }
+
+    const alreadyHere = itinerary.some((d) =>
+      d.stops.some(
+        (s) => s.name.toLowerCase() === stop.name.toLowerCase() && !s.is_meal,
+      ),
+    );
+    if (alreadyHere) {
+      return `“${stop.name}” is already in your groups. Say “move ${stop.name} to group ${targetIdx + 1}” to relocate it.`;
+    }
+
+    const next = itinerary.map((d, i) => {
+      if (i !== targetIdx) return d;
+      return refreshGroup(
+        { ...d, stops: [...d.stops, stop] },
+        input,
+        baseLat,
+        baseLon,
+      );
+    });
+    commitItinerary(next);
+    setFocusGroup(targetIdx);
+    setMapDayIndex(targetIdx);
+    setShowAllMap(false);
+    setDetail({ kind: 'stop', stop });
+    return `Added “${stop.name}” to Group ${targetIdx + 1}.`;
+  }
+
+  function handleMoveStop(stopName: string, toDay: number): string {
+    const targetIdx = toDay - 1;
+    if (targetIdx < 0 || targetIdx >= itinerary.length) {
+      return `Group ${toDay} doesn’t exist (you have ${itinerary.length} groups).`;
+    }
+
+    const needle = stopName.toLowerCase();
+    let fromIdx = -1;
+    let stopIdx = -1;
+    let moving: ItineraryStop | undefined;
+
+    for (let di = 0; di < itinerary.length; di++) {
+      const si = itinerary[di].stops.findIndex(
+        (s) => !s.is_meal && s.name.toLowerCase().includes(needle),
+      );
+      if (si >= 0) {
+        fromIdx = di;
+        stopIdx = si;
+        moving = itinerary[di].stops[si];
+        break;
+      }
+    }
+
+    if (!moving || fromIdx < 0 || stopIdx < 0) {
+      return `I couldn’t find a place matching “${stopName}”. Check the name on a group card.`;
+    }
+
+    if (fromIdx === targetIdx) {
+      return `“${moving.name}” is already in Group ${toDay}.`;
+    }
+
+    const moved = { ...moving };
+    const next = itinerary.map((d) => ({ ...d, stops: [...d.stops] }));
+    next[fromIdx].stops.splice(stopIdx, 1);
+    next[targetIdx].stops.push(moved);
+    commitItinerary(
+      next.map((d) => refreshGroup(d, input, baseLat, baseLon)),
+    );
+    setFocusGroup(targetIdx);
+    setMapDayIndex(targetIdx);
+    setShowAllMap(false);
+    setDetail({ kind: 'stop', stop: moved });
+    return `Moved “${moved.name}” from Group ${fromIdx + 1} to Group ${toDay}.`;
+  }
+
+  function handlePlanGroup(dayNum: number): string {
+    const idx = Math.max(0, Math.min(itinerary.length, dayNum) - 1);
+    setFocusGroup(idx);
+    setMapDayIndex(idx);
+    setShowAllMap(false);
+    setDetail(null);
+    const names = (itinerary[idx]?.stops ?? [])
+      .filter((s) => !s.is_meal)
+      .map((s) => s.name);
+    return names.length
+      ? `Focusing Group ${idx + 1}: ${names.join(', ')}. Add another place or move one here.`
+      : `Group ${idx + 1} is empty — tell me a place to add.`;
+  }
+
+  const chat = (
+    <TravelChatBot
+      city={input.destination_city}
+      hasTrip
+      variant="groups"
+      onAddPlace={handleAddPlace}
+      onMoveStop={handleMoveStop}
+      onPlanDay={handlePlanGroup}
+      onShowOptions={(category) =>
+        `Browse ${category} by naming a place to add (e.g. “add a café to group 1”), or pick from your existing cards.`
+      }
+      onPreference={() => undefined}
+      onDietary={() => undefined}
+      onSkipBreakfast={() =>
+        'Breakfast isn’t part of nearby groups — ask to add or move places instead.'
+      }
+    />
+  );
+
   if (detail) {
     return (
       <div className="trip-view">
@@ -96,6 +252,7 @@ export function ClusterPlanView({
           dayLabel="Place details"
           onBack={() => setDetail(null)}
         />
+        {chat}
       </div>
     );
   }
@@ -114,6 +271,9 @@ export function ClusterPlanView({
             <h1>
               Nearby groups in {input.destination_city}
             </h1>
+            <p className="cluster-chat-hint">
+              Use the chat to add places or move them between groups.
+            </p>
           </div>
         </div>
         <div className="trip-topbar-right">
@@ -148,8 +308,12 @@ export function ClusterPlanView({
         {groups.map(({ day, index, sights, spanKm }) => {
           const mapOpen = mapDayIndex === index;
           const color = GROUP_COLORS[index % GROUP_COLORS.length];
+          const focused = focusGroup === index;
           return (
-            <section key={day.date} className="cluster-group">
+            <section
+              key={day.date}
+              className={`cluster-group${focused ? ' cluster-group--focus' : ''}`}
+            >
               <div className="cluster-group-head">
                 <div>
                   <h2>
@@ -177,6 +341,7 @@ export function ClusterPlanView({
                   onClick={() => {
                     setMapDayIndex(mapOpen ? null : index);
                     if (!mapOpen) setShowAllMap(false);
+                    setFocusGroup(index);
                   }}
                 >
                   {mapOpen ? 'Hide map' : 'See on map'}
@@ -254,6 +419,8 @@ export function ClusterPlanView({
           );
         })}
       </div>
+
+      {chat}
     </div>
   );
 }

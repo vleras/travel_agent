@@ -682,8 +682,34 @@
   max-height: min(48vh, 480px);
 }
 
+.highlight-story-hero-swipe {
+  position: relative;
+  width: 100%;
+}
+
+.highlight-story-hero-swipe .highlight-story-hero-shot {
+  width: 100%;
+  display: block;
+  padding: 0;
+  border: none;
+  background: #dfe8e6;
+}
+
+.highlight-story-hero-swipe .place-img-nav {
+  opacity: 0.85;
+}
+
 .highlight-story-hero-shot img {
   max-height: min(48vh, 480px);
+}
+
+.place-page-hero-swipe {
+  position: relative;
+  width: 100%;
+}
+
+.place-page-hero-swipe .place-page-hero {
+  width: 100%;
 }
 
 .highlight-story-titlebar {

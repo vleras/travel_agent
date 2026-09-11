@@ -1,0 +1,87 @@
+.place-img-swipe {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.place-img-swipe > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.place-img-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(15, 30, 28, 0.45);
+  color: white;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+  user-select: none;
+}
+
+.place-img-swipe:hover .place-img-nav,
+.place-img-swipe:focus-within .place-img-nav {
+  opacity: 1;
+}
+
+.place-img-nav:hover {
+  background: rgba(15, 30, 28, 0.7);
+}
+
+.place-img-nav.prev {
+  left: 0.35rem;
+}
+
+.place-img-nav.next {
+  right: 0.35rem;
+}
+
+.place-img-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.4rem;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  gap: 0.28rem;
+  pointer-events: none;
+}
+
+.place-img-dots span {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.place-img-dots span.active {
+  background: white;
+  width: 0.55rem;
+}
+
+@keyframes place-img-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}

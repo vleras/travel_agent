@@ -163,6 +163,9 @@ export default function App() {
           input={input}
           output={output}
           onBack={resetToEntry}
+          onItineraryChange={(itinerary) => {
+            setOutput((prev) => (prev ? { ...prev, itinerary } : prev));
+          }}
         />
       )}
 

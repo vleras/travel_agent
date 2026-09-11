@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DestinationHighlight } from '../../types';
 import { planStoryPhotos } from '../../services/storyPhotoPlan';
 import { PlaceImage, fetchPlacePhotoUrls } from '../shared/PlaceImage';
 import '../../styles/questions.css';
+import '../../styles/placeImage.css';
 
 type WikiBlurb = { extract: string; description?: string };
 
@@ -98,20 +99,23 @@ export function PlacePickDetail({
   onToggleAdd,
 }: PlacePickDetailProps) {
   const [photos, setPhotos] = useState<string[]>([]);
+  const [heroIndex, setHeroIndex] = useState(0);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [wiki, setWiki] = useState<WikiBlurb | null>(null);
   const [loadingPhotos, setLoadingPhotos] = useState(true);
+  const heroTouchX = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setPhotos([]);
+    setHeroIndex(0);
     setLightbox(null);
     setWiki(null);
     setLoadingPhotos(true);
 
     void fetchPlacePhotoUrls(spot.name, city, spot.category).then((urls) => {
       if (!cancelled) {
-        setPhotos(urls.slice(0, 8));
+        setPhotos(urls.slice(0, 10));
         setLoadingPhotos(false);
       }
     });
@@ -141,13 +145,17 @@ export function PlacePickDetail({
     return () => window.removeEventListener('keydown', onKey);
   }, [lightbox, photos.length]);
 
-  const dropPhoto = (url: string) =>
-    setPhotos((prev) => prev.filter((u) => u !== url));
+  const dropPhoto = (url: string) => {
+    setPhotos((prev) => {
+      const next = prev.filter((u) => u !== url);
+      setHeroIndex((i) => Math.min(i, Math.max(0, next.length - 1)));
+      return next;
+    });
+  };
 
   const wikiChunks = wiki?.extract ? chunkText(wiki.extract, 220) : [];
   const plan = planStoryPhotos(photos);
   const {
-    hero,
     pair,
     pairIndices,
     split,
@@ -155,6 +163,13 @@ export function PlacePickDetail({
     reverseSplit,
     reverseSplitIndex,
   } = plan;
+  const hero = photos[heroIndex] ?? plan.hero;
+  const canSwipeHero = photos.length > 1;
+
+  function shiftHero(delta: number) {
+    if (!photos.length) return;
+    setHeroIndex((i) => (i + delta + photos.length) % photos.length);
+  }
 
   const addButton = (
     <button
@@ -171,13 +186,69 @@ export function PlacePickDetail({
       {loadingPhotos && !hero ? (
         <div className="highlight-story-hero-shot is-loading" aria-hidden />
       ) : hero ? (
-        <StoryPhoto
-          url={hero}
-          alt={`${spot.name} main photo`}
-          className="highlight-story-hero-shot"
-          onOpen={() => setLightbox(0)}
-          onError={() => dropPhoto(hero)}
-        />
+        <div
+          className="highlight-story-hero-swipe place-img-swipe"
+          onTouchStart={(e) => {
+            heroTouchX.current = e.changedTouches[0]?.clientX ?? null;
+          }}
+          onTouchEnd={(e) => {
+            if (!canSwipeHero || heroTouchX.current == null) return;
+            const dx =
+              (e.changedTouches[0]?.clientX ?? 0) - heroTouchX.current;
+            heroTouchX.current = null;
+            if (Math.abs(dx) < 40) return;
+            shiftHero(dx < 0 ? 1 : -1);
+          }}
+        >
+          <button
+            type="button"
+            className="highlight-story-shot highlight-story-hero-shot"
+            onClick={() => setLightbox(heroIndex)}
+          >
+            <img
+              src={hero}
+              alt={`${spot.name} photo ${heroIndex + 1}`}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              draggable={false}
+              onError={() => dropPhoto(hero)}
+            />
+          </button>
+          {canSwipeHero && (
+            <>
+              <button
+                type="button"
+                className="place-img-nav prev"
+                aria-label="Previous photo"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  shiftHero(-1);
+                }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="place-img-nav next"
+                aria-label="Next photo"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  shiftHero(1);
+                }}
+              >
+                ›
+              </button>
+              <div className="place-img-dots" aria-hidden>
+                {photos.map((_, i) => (
+                  <span
+                    key={i}
+                    className={i === heroIndex ? 'active' : ''}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       ) : (
         <PlaceImage
           className="highlight-story-hero-shot"

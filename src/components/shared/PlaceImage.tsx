@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   fetchPlacePhotoUrls as fetchPhotos,
   type PlacePhotoQuery,
 } from '../../services/placePhotos';
+import '../../styles/placeImage.css';
 
 interface PlaceImageProps {
   name: string;
@@ -15,6 +16,8 @@ interface PlaceImageProps {
   wikipediaTag?: string;
   commonsTag?: string;
   className?: string;
+  /** When true (default), allow swiping / arrows across multiple photos. */
+  swipeable?: boolean;
 }
 
 /** Re-export gallery helper with lat/lon support. */
@@ -30,8 +33,8 @@ export async function fetchPlacePhotoUrls(
 }
 
 /**
- * Cover image for a place — searches Wikipedia, Commons, Wikidata, OSM links,
- * and Openverse for photos that actually match the venue name / location.
+ * Cover image for a place — prefers Unsplash, then Commons.
+ * When multiple photos load, swipe or use arrows to browse them.
  */
 export function PlaceImage({
   name,
@@ -44,17 +47,20 @@ export function PlaceImage({
   wikipediaTag,
   commonsTag,
   className,
+  swipeable = true,
 }: PlaceImageProps) {
-  const [src, setSrc] = useState(imageUrl || '');
+  const [index, setIndex] = useState(0);
   const [queue, setQueue] = useState<string[]>([]);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(!imageUrl);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
     setLoading(true);
-    setSrc(imageUrl || '');
+    setIndex(0);
+    setQueue(imageUrl ? [imageUrl] : []);
 
     void (async () => {
       const urls = await fetchPhotos(name, city, category, lat, lon, {
@@ -68,7 +74,7 @@ export function PlaceImage({
         ? [imageUrl, ...urls.filter((u) => u !== imageUrl)]
         : urls;
       setQueue(list);
-      setSrc(list[0] ?? '');
+      setIndex(0);
       setLoading(false);
       if (!list.length) setFailed(true);
     })();
@@ -87,6 +93,14 @@ export function PlaceImage({
     wikipediaTag,
     commonsTag,
   ]);
+
+  const src = queue[index] ?? '';
+  const canSwipe = swipeable && queue.length > 1;
+
+  function go(delta: number) {
+    if (!queue.length) return;
+    setIndex((i) => (i + delta + queue.length) % queue.length);
+  }
 
   if (failed || (!src && !loading)) {
     return (
@@ -125,21 +139,83 @@ export function PlaceImage({
   }
 
   return (
-    <img
-      className={className}
-      src={src}
-      alt={name}
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => {
-        const idx = queue.indexOf(src);
-        const next = queue[idx + 1];
-        if (next) {
-          setSrc(next);
-          return;
-        }
-        setFailed(true);
+    <div
+      className={`place-img-swipe ${className ?? ''}`}
+      onTouchStart={(e) => {
+        touchStartX.current = e.changedTouches[0]?.clientX ?? null;
       }}
-    />
+      onTouchEnd={(e) => {
+        if (!canSwipe || touchStartX.current == null) return;
+        const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
+        touchStartX.current = null;
+        if (Math.abs(dx) < 40) return;
+        go(dx < 0 ? 1 : -1);
+      }}
+    >
+      <img
+        src={src}
+        alt={`${name}${canSwipe ? ` photo ${index + 1}` : ''}`}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        draggable={false}
+        onError={() => {
+          setQueue((prev) => {
+            const next = prev.filter((u) => u !== src);
+            if (!next.length) setFailed(true);
+            setIndex(0);
+            return next;
+          });
+        }}
+      />
+      {canSwipe && (
+        <>
+          <span
+            className="place-img-nav prev"
+            role="button"
+            tabIndex={0}
+            aria-label="Previous photo"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              go(-1);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                go(-1);
+              }
+            }}
+          >
+            ‹
+          </span>
+          <span
+            className="place-img-nav next"
+            role="button"
+            tabIndex={0}
+            aria-label="Next photo"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              go(1);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                go(1);
+              }
+            }}
+          >
+            ›
+          </span>
+          <div className="place-img-dots" aria-hidden>
+            {queue.map((_, i) => (
+              <span key={i} className={i === index ? 'active' : ''} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
