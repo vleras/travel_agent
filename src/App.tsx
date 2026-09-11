@@ -89,7 +89,7 @@ export default function App() {
     setInput(withChat);
     setScreen('processing');
     setError(null);
-    setProgress({ step: 'act', message: 'Organizing your places…' });
+    setProgress({ step: 'act', message: 'Building your days…' });
     try {
       const result = await runTravelAgent(withChat, setProgress);
       setOutput(result);

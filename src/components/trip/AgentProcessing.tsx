@@ -9,10 +9,10 @@ export function AgentProcessing({ progress }: AgentProcessingProps) {
   return (
     <div className="processing">
       <div className="processing-card processing-card--simple">
-        <h2>Organizing your places</h2>
+        <h2>Building your days</h2>
         <p>
-          Grouping nearby spots into walkable sets of 2–4 — no maps yet, just
-          your picks arranged by distance.
+          Assigning your picks across the trip timeline — nearby places prefer
+          the same day when it helps walking.
         </p>
         <div className="processing-status" aria-live="polite">
           <span className="processing-pulse" aria-hidden />

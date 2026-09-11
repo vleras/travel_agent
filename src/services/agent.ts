@@ -659,8 +659,8 @@ export async function runTravelAgent(
   // —— ACT ——
   onProgress({
     step: 'act',
-    message: 'Organizing your places',
-    detail: 'Finding nearby spots and grouping them…',
+    message: 'Building your days',
+    detail: 'Finding nearby spots and assigning them…',
   });
 
   const mustVisitNames = (input.must_visit_places ?? []).filter(Boolean);
@@ -733,27 +733,26 @@ export async function runTravelAgent(
   }
 
   // —— OBSERVE ——
-  const dayCount = Math.max(
-    1,
-    Math.min(
-      input.trip_length_days,
-      Math.max(1, Math.ceil(planningPool.length / 2)),
-    ),
-  );
+  // Trip length is the day budget — always create that many days (some may start empty).
+  const dayCount = Math.max(1, input.trip_length_days);
 
   onProgress({
     step: 'observe',
-    message: 'Grouping nearby places',
-    detail: `Clustering into walkable groups of 2–4 across ${dayCount} areas…`,
+    message: 'Organizing by day',
+    detail: `Assigning places across ${dayCount} day${dayCount === 1 ? '' : 's'}…`,
   });
 
-  const clusters = clusterByProximity(
+  let clusters = clusterByProximity(
     planningPool,
     dayCount,
     input.pace,
     location.base_lat,
     location.base_lon,
   );
+  while (clusters.length < dayCount) {
+    clusters.push([]);
+  }
+  clusters = clusters.slice(0, dayCount);
 
   const startDate = new Date(input.start_date + 'T12:00:00');
   const schedule = {
@@ -780,18 +779,21 @@ export async function runTravelAgent(
   // —— REVISE ——
   onProgress({
     step: 'revise',
-    message: 'Tightening groups',
-    detail: 'Moving outliers into closer neighborhoods…',
+    message: 'Balancing days',
+    detail: 'Moving outliers onto closer days…',
   });
 
-  const { clusters: revised, revisions } = reviseClusters(
+  const { clusters: revisedRaw, revisions } = reviseClusters(
     clusters,
     location.base_lat,
     location.base_lon,
     input.pace,
   );
+  const revised = [...revisedRaw];
+  while (revised.length < dayCount) revised.push([]);
+  const trimmed = revised.slice(0, dayCount);
 
-  const itinerary = revised.map((c, i) =>
+  const itinerary = trimmed.map((c, i) =>
     buildDay(
       i + 1,
       toISODate(addDays(startDate, i)),
@@ -830,8 +832,8 @@ export async function runTravelAgent(
 
   onProgress({
     step: 'done',
-    message: 'Groups ready',
-    detail: `${itinerary.length} nearby group${itinerary.length === 1 ? '' : 's'} from your picks`,
+    message: 'Days ready',
+    detail: `${itinerary.length}-day plan from your picks`,
   });
 
   return {

@@ -139,7 +139,7 @@ export function PlacesOverviewMap({
   );
 }
 
-/** Build labeled places from itinerary days, colored by group. */
+/** Build labeled places from itinerary days, colored by day. */
 export function placesFromItineraryGroups(
   groups: { sights: ItineraryStop[]; index: number }[],
 ): LabeledMapPlace[] {
@@ -149,7 +149,7 @@ export function placesFromItineraryGroups(
       lat: stop.lat,
       lon: stop.lon,
       category: stop.category,
-      groupLabel: `Group ${index + 1}`,
+      groupLabel: `Day ${index + 1}`,
       color: GROUP_COLORS[index % GROUP_COLORS.length],
     })),
   );

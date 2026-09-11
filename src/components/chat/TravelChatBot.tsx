@@ -23,9 +23,9 @@ const SUGGESTIONS_TRIP = [
 
 const SUGGESTIONS_GROUPS = [
   'Find Pantheon',
-  'Show group 1',
-  'Move Colosseum to group 2',
-  'What can you help with?',
+  'What day should I add Trevi Fountain?',
+  'Move Colosseum to day 2',
+  'Show day 1',
 ];
 
 const SUGGESTIONS_PRE = [
@@ -46,6 +46,7 @@ export function TravelChatBot({
   onMoveStop,
   onShowOptions,
   onChatCommand,
+  onSuggestDay,
 }: TravelChatBotProps) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -56,7 +57,7 @@ export function TravelChatBot({
       id: 'welcome',
       role: 'assistant',
       text: isGroups
-        ? 'Look up a place and I’ll suggest which group it fits — photos load after you confirm.'
+        ? 'Look up a place and I’ll suggest which day it fits — photos load after you confirm.'
         : hasTrip
           ? `Direct the plan anytime — skip breakfast, plan a day, browse cafés/parks/nightlife, or move a stop between days.`
           : 'Share diet prefs or must-visit places before or during planning.',
@@ -101,6 +102,7 @@ export function TravelChatBot({
       onMoveStop,
       onShowOptions,
       onChatCommand,
+      onSuggestDay,
     });
     const { text: replyText, actions } = normalizeChatReply(raw);
 
@@ -196,7 +198,7 @@ export function TravelChatBot({
               value={input}
               placeholder={
                 isGroups
-                  ? 'e.g. find Pantheon…'
+                  ? 'e.g. find Pantheon, move to day 2…'
                   : hasTrip
                     ? 'e.g. skip breakfast, plan day 1…'
                     : 'e.g. vegetarian, must visit…'

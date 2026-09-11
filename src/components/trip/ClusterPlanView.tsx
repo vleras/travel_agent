@@ -6,12 +6,13 @@ import { fetchPlacePhotoUrls } from '../../services/placePhotos';
 import { rescheduleDayStops } from '../../services/agent';
 import { addDays, haversineKm, minutesToLabel, toISODate } from '../../services/geo';
 import {
-  findExistingGroup,
-  NEAR_GROUP_KM,
-  rankGroupsForPlace,
+  dayActionButtons,
+  findExistingDay,
+  formatDayHint,
+  rankDaysForPlace,
   shortDisplayName,
   stopFromGeocode,
-  type GroupDistanceHint,
+  type DayDistanceHint,
 } from '../../services/placeLookup';
 import type {
   AgentOutput,
@@ -42,15 +43,15 @@ type LookupSession =
   | {
       stage: 'pick';
       query: string;
-      preferredGroup?: number;
+      preferredDay?: number;
       candidates: GeocodeResult[];
     }
   | {
       stage: 'preview';
       query: string;
-      preferredGroup?: number;
+      preferredDay?: number;
       geo: GeocodeResult;
-      ranked: GroupDistanceHint[];
+      ranked: DayDistanceHint[];
     };
 
 function formatKm(km: number): string {
@@ -73,7 +74,7 @@ function clusterSpanKm(stops: ItineraryStop[]): number {
   return max;
 }
 
-const GROUP_COLORS = [
+const DAY_COLORS = [
   '#1f6f68',
   '#2a6f9e',
   '#8a5a2b',
@@ -82,7 +83,7 @@ const GROUP_COLORS = [
   '#3d7a4a',
 ];
 
-function refreshGroup(
+function refreshDay(
   day: DayItinerary,
   input: TripInput,
   baseLat: number,
@@ -100,68 +101,71 @@ function refreshGroup(
   );
 }
 
+function emptyDay(
+  dayNumber: number,
+  date: string,
+): DayItinerary {
+  return {
+    date,
+    day_number: dayNumber,
+    stops: [],
+    total_distance_km: 0,
+    compactness_score: 100,
+    hotel_distance_km: 0,
+  };
+}
+
+/** Ensure itinerary length matches trip_length_days. */
+function ensureTripDays(
+  itinerary: DayItinerary[],
+  tripDays: number,
+  startDateIso: string,
+): DayItinerary[] {
+  const n = Math.max(1, tripDays);
+  const start = new Date(`${startDateIso}T12:00:00`);
+  const next = itinerary.slice(0, n).map((d, i) => ({
+    ...d,
+    day_number: i + 1,
+  }));
+  while (next.length < n) {
+    const i = next.length;
+    next.push(emptyDay(i + 1, toISODate(addDays(start, i))));
+  }
+  return next;
+}
+
 function buildPreviewReply(
   query: string,
   geo: GeocodeResult,
-  ranked: GroupDistanceHint[],
-  preferredGroup?: number,
+  ranked: DayDistanceHint[],
+  dayCount: number,
+  preferredDay?: number,
 ): ChatReply {
   const label = shortDisplayName(geo.display_name, query);
-  const near = ranked.filter((r) => r.distanceKm <= NEAR_GROUP_KM).slice(0, 2);
+  const actions = dayActionButtons(dayCount);
 
-  let primary =
-    preferredGroup != null
-      ? ranked.find((r) => r.groupIndex === preferredGroup - 1)
-      : undefined;
-  primary = primary ?? near[0] ?? ranked[0];
-
-  const actions: { label: string; value: string }[] = [];
-  const used = new Set<number>();
-
-  const pushGroup = (hint: GroupDistanceHint) => {
-    if (used.has(hint.groupIndex)) return;
-    used.add(hint.groupIndex);
-    const n = hint.groupIndex + 1;
-    actions.push({
-      label: `Add to Group ${n}`,
-      value: `Add to Group ${n}`,
-    });
-  };
-
-  if (primary && primary.distanceKm <= NEAR_GROUP_KM) pushGroup(primary);
-  for (const hint of near) {
-    if (actions.length >= 2) break;
-    pushGroup(hint);
+  if (!ranked.length) {
+    return {
+      text: `Found ${query} (${label}). No places on the board yet — which day should it go on?`,
+      actions,
+    };
   }
 
-  // Explicit preferred group even if farther
-  if (
-    preferredGroup != null &&
-    preferredGroup >= 1 &&
-    !used.has(preferredGroup - 1)
-  ) {
-    actions.unshift({
-      label: `Add to Group ${preferredGroup}`,
-      value: `Add to Group ${preferredGroup}`,
-    });
+  const primary =
+    (preferredDay != null
+      ? ranked.find((r) => r.dayIndex === preferredDay - 1)
+      : undefined) ?? ranked[0];
+  const second = ranked.find((r) => r.dayIndex !== primary.dayIndex);
+
+  let text = `Found ${query} (${label}). Closest to ${formatDayHint(primary)}.`;
+  if (second) {
+    text += ` Also near ${formatDayHint(second)}.`;
   }
+  text += preferredDay
+    ? ` Add to Day ${preferredDay}?`
+    : ' Add to that day?';
 
-  actions.push({ label: 'New group', value: 'New group' });
-  actions.push({ label: 'Cancel', value: 'Cancel' });
-
-  const allFar = !ranked.length || ranked.every((r) => r.distanceKm > NEAR_GROUP_KM);
-  const distLine = primary
-    ? `${formatKm(primary.distanceKm)} from Group ${primary.groupIndex + 1}`
-    : 'no existing groups yet';
-
-  const hint = allFar
-    ? `It’s more than ${NEAR_GROUP_KM} km from your current groups — a new group may fit better.`
-    : 'Add there?';
-
-  return {
-    text: `Found ${query} (${label}). ${distLine}. ${hint}`,
-    actions,
-  };
+  return { text, actions };
 }
 
 export function ClusterPlanView({
@@ -170,11 +174,17 @@ export function ClusterPlanView({
   onBack,
   onItineraryChange,
 }: ClusterPlanViewProps) {
-  const [itinerary, setItinerary] = useState<DayItinerary[]>(output.itinerary);
+  const [itinerary, setItinerary] = useState<DayItinerary[]>(() =>
+    ensureTripDays(
+      output.itinerary,
+      input.trip_length_days,
+      input.start_date,
+    ),
+  );
   const [mapDayIndex, setMapDayIndex] = useState<number | null>(null);
   const [showAllMap, setShowAllMap] = useState(false);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
-  const [focusGroup, setFocusGroup] = useState(0);
+  const [focusDay, setFocusDay] = useState(0);
   const [lookup, setLookup] = useState<LookupSession | null>(null);
   const [previewPin, setPreviewPin] = useState<{
     name: string;
@@ -190,17 +200,29 @@ export function ClusterPlanView({
   const baseLat = output.metadata.hotel_lat;
   const baseLon = output.metadata.hotel_lon;
   const fromLabel = input.hotel_address ? 'your stay' : 'city center';
+  const tripDays = Math.max(1, input.trip_length_days);
 
   useEffect(() => {
-    setItinerary(output.itinerary);
-  }, [output]);
+    setItinerary(
+      ensureTripDays(
+        output.itinerary,
+        input.trip_length_days,
+        input.start_date,
+      ),
+    );
+  }, [output, input.trip_length_days, input.start_date]);
 
   function commitItinerary(next: DayItinerary[]) {
-    setItinerary(next);
-    onItineraryChange?.(next);
+    const normalized = ensureTripDays(
+      next,
+      input.trip_length_days,
+      input.start_date,
+    );
+    setItinerary(normalized);
+    onItineraryChange?.(normalized);
   }
 
-  function loadPhotosAsync(stopName: string, groupIdx: number) {
+  function loadPhotosAsync(stopName: string, dayIdx: number) {
     void fetchPlacePhotoUrls(
       stopName,
       input.destination_city,
@@ -210,7 +232,7 @@ export function ClusterPlanView({
       if (!cover) return;
       const prev = itineraryRef.current;
       const next = prev.map((d, i) => {
-        if (i !== groupIdx) return d;
+        if (i !== dayIdx) return d;
         return {
           ...d,
           stops: d.stops.map((s) =>
@@ -227,21 +249,36 @@ export function ClusterPlanView({
   function goToPreview(
     query: string,
     geo: GeocodeResult,
-    preferredGroup?: number,
+    preferredDay?: number,
   ): ChatReply {
     const current = itineraryRef.current;
-    const dup = findExistingGroup(current, query, geo.lat, geo.lon);
+    const dup = findExistingDay(current, query, geo.lat, geo.lon);
     if (dup >= 0) {
       setLookup(null);
       setPreviewPin(null);
-      return `“${query}” is already in Group ${dup + 1}. Say “move ${query} to group N” to relocate it.`;
+      return `“${query}” is already on Day ${dup + 1}. Say “move ${query} to day N” to relocate it.`;
     }
 
-    const ranked = rankGroupsForPlace(geo.lat, geo.lon, current);
-    setLookup({ stage: 'preview', query, geo, ranked, preferredGroup });
+    const ranked = rankDaysForPlace(geo.lat, geo.lon, current);
+    setLookup({ stage: 'preview', query, geo, ranked, preferredDay });
     setPreviewPin({ name: query, lat: geo.lat, lon: geo.lon });
     setShowAllMap(true);
-    return buildPreviewReply(query, geo, ranked, preferredGroup);
+    return buildPreviewReply(
+      query,
+      geo,
+      ranked,
+      current.length,
+      preferredDay,
+    );
+  }
+
+  async function geocodePlace(query: string): Promise<GeocodeResult[]> {
+    const { results } = await geocodeMany(
+      `${query} ${input.destination_city}`,
+      3,
+    );
+    if (results.length) return results;
+    return (await geocodeMany(query, 3)).results;
   }
 
   async function handleLookupPlace(
@@ -250,20 +287,12 @@ export function ClusterPlanView({
   ): Promise<ChatReply> {
     const query = placeQuery.trim();
     const current = itineraryRef.current;
-    const dup = findExistingGroup(current, query);
+    const dup = findExistingDay(current, query);
     if (dup >= 0) {
-      return `“${query}” is already in Group ${dup + 1}. Say “move ${query} to group N” to relocate it.`;
+      return `“${query}” is already on Day ${dup + 1}. Say “move ${query} to day N” to relocate it.`;
     }
 
-    const { results } = await geocodeMany(
-      `${query} ${input.destination_city}`,
-      3,
-    );
-    const hits =
-      results.length > 0
-        ? results
-        : (await geocodeMany(query, 3)).results;
-
+    const hits = await geocodePlace(query);
     if (!hits.length) {
       setLookup(null);
       setPreviewPin(null);
@@ -274,7 +303,7 @@ export function ClusterPlanView({
       setLookup({
         stage: 'pick',
         query,
-        preferredGroup: toDay,
+        preferredDay: toDay,
         candidates: hits,
       });
       setPreviewPin(null);
@@ -295,7 +324,7 @@ export function ClusterPlanView({
 
   function confirmAdd(
     session: Extract<LookupSession, { stage: 'preview' }>,
-    target: number | 'new',
+    targetIdx: number,
   ): ChatReply {
     const stop = stopFromGeocode(
       session.query,
@@ -304,7 +333,7 @@ export function ClusterPlanView({
       baseLon,
     );
     const current = itineraryRef.current;
-    const dup = findExistingGroup(
+    const dup = findExistingDay(
       current,
       session.query,
       session.geo.lat,
@@ -313,65 +342,37 @@ export function ClusterPlanView({
     if (dup >= 0) {
       setLookup(null);
       setPreviewPin(null);
-      return `“${session.query}” is already in Group ${dup + 1}.`;
+      return `“${session.query}” is already on Day ${dup + 1}.`;
     }
 
-    let groupIdx: number;
-    let next: DayItinerary[];
-
-    if (target === 'new') {
-      const last = current[current.length - 1];
-      const nextDate = last
-        ? toISODate(addDays(new Date(`${last.date}T12:00:00`), 1))
-        : input.start_date;
-      const blank: DayItinerary = {
-        date: nextDate,
-        day_number: current.length + 1,
-        stops: [stop],
-        total_distance_km: 0,
-        compactness_score: 100,
-        hotel_distance_km: 0,
+    if (targetIdx < 0 || targetIdx >= current.length) {
+      return {
+        text: `Day ${targetIdx + 1} doesn’t exist (this trip has ${current.length} days).`,
+        actions: dayActionButtons(current.length),
       };
-      next = [
-        ...current,
-        refreshGroup(blank, input, baseLat, baseLon),
-      ];
-      groupIdx = next.length - 1;
-    } else {
-      if (target < 0 || target >= current.length) {
-        const again = buildPreviewReply(
-          session.query,
-          session.geo,
-          session.ranked,
-          session.preferredGroup,
-        );
-        return {
-          text: `Group ${target + 1} doesn’t exist (you have ${current.length} groups).`,
-          actions: typeof again === 'string' ? undefined : again.actions,
-        };
-      }
-      groupIdx = target;
-      next = current.map((d, i) => {
-        if (i !== target) return d;
-        return refreshGroup(
-          { ...d, stops: [...d.stops, stop] },
-          input,
-          baseLat,
-          baseLon,
-        );
-      });
     }
+
+    const next = current.map((d, i) => {
+      if (i !== targetIdx) return d;
+      return refreshDay(
+        { ...d, stops: [...d.stops, stop] },
+        input,
+        baseLat,
+        baseLon,
+      );
+    });
 
     commitItinerary(next);
     setLookup(null);
     setPreviewPin(null);
-    setFocusGroup(groupIdx);
-    setMapDayIndex(groupIdx);
+    setFocusDay(targetIdx);
+    setMapDayIndex(targetIdx);
     setShowAllMap(false);
     setDetail(null);
-    loadPhotosAsync(stop.name, groupIdx);
+    loadPhotosAsync(stop.name, targetIdx);
 
-    return `Added “${stop.name}” to Group ${groupIdx + 1}. Photos will fill in shortly.`;
+    const count = next[targetIdx].stops.filter((s) => !s.is_meal).length;
+    return `Added “${stop.name}” to Day ${targetIdx + 1}. Now on Day ${targetIdx + 1}: ${count} stop${count === 1 ? '' : 's'}. Photos will fill in shortly.`;
   }
 
   function handleChatCommand(message: string): ChatReply | null {
@@ -399,17 +400,14 @@ export function ClusterPlanView({
             })),
           };
         }
-        return goToPreview(session.query, geo, session.preferredGroup);
+        return goToPreview(session.query, geo, session.preferredDay);
       }
     }
 
     if (session?.stage === 'preview') {
-      if (/^new\s+group$/i.test(t)) {
-        return confirmAdd(session, 'new');
-      }
-      const add = t.match(/^(?:add\s+to\s+)?(?:group|day)\s*(\d+)$/i);
-      if (add) {
-        return confirmAdd(session, Number(add[1]) - 1);
+      const dayOnly = t.match(/^(?:add\s+to\s+)?(?:day|group)\s*(\d+)$/i);
+      if (dayOnly) {
+        return confirmAdd(session, Number(dayOnly[1]) - 1);
       }
     }
 
@@ -420,7 +418,7 @@ export function ClusterPlanView({
     const targetIdx = toDay - 1;
     const current = itineraryRef.current;
     if (targetIdx < 0 || targetIdx >= current.length) {
-      return `Group ${toDay} doesn’t exist (you have ${current.length} groups).`;
+      return `Day ${toDay} doesn’t exist (this trip has ${current.length} days).`;
     }
 
     const needle = stopName.toLowerCase();
@@ -441,11 +439,11 @@ export function ClusterPlanView({
     }
 
     if (!moving || fromIdx < 0 || stopIdx < 0) {
-      return `I couldn’t find a place matching “${stopName}”. Check the name on a group card.`;
+      return `I couldn’t find a place matching “${stopName}”. Check the name on a day card.`;
     }
 
     if (fromIdx === targetIdx) {
-      return `“${moving.name}” is already in Group ${toDay}.`;
+      return `“${moving.name}” is already on Day ${toDay}.`;
     }
 
     const moved = { ...moving };
@@ -453,18 +451,19 @@ export function ClusterPlanView({
     next[fromIdx].stops.splice(stopIdx, 1);
     next[targetIdx].stops.push(moved);
     commitItinerary(
-      next.map((d) => refreshGroup(d, input, baseLat, baseLon)),
+      next.map((d) => refreshDay(d, input, baseLat, baseLon)),
     );
-    setFocusGroup(targetIdx);
+    setFocusDay(targetIdx);
     setMapDayIndex(targetIdx);
     setShowAllMap(false);
-    return `Moved “${moved.name}” from Group ${fromIdx + 1} to Group ${toDay}.`;
+    const count = next[targetIdx].stops.filter((s) => !s.is_meal).length;
+    return `Moved “${moved.name}” to Day ${toDay}. Now on Day ${toDay}: ${count} stop${count === 1 ? '' : 's'}.`;
   }
 
-  function handlePlanGroup(dayNum: number): string {
+  function handlePlanDay(dayNum: number): string {
     const current = itineraryRef.current;
     const idx = Math.max(0, Math.min(current.length, dayNum) - 1);
-    setFocusGroup(idx);
+    setFocusDay(idx);
     setMapDayIndex(idx);
     setShowAllMap(false);
     setDetail(null);
@@ -472,11 +471,11 @@ export function ClusterPlanView({
       .filter((s) => !s.is_meal)
       .map((s) => s.name);
     return names.length
-      ? `Focusing Group ${idx + 1}: ${names.join(', ')}. Look up another place to add here.`
-      : `Group ${idx + 1} is empty — tell me a place to find.`;
+      ? `Focusing Day ${idx + 1}: ${names.join(', ')}. Look up another place to add here.`
+      : `Day ${idx + 1} is empty — tell me a place to find.`;
   }
 
-  const groups = useMemo(
+  const days = useMemo(
     () =>
       itinerary.map((day, index) => {
         const sights = day.stops.filter((s) => !s.is_meal);
@@ -491,7 +490,7 @@ export function ClusterPlanView({
   );
 
   const allPlaces = useMemo(() => {
-    const mapped = placesFromItineraryGroups(groups);
+    const mapped = placesFromItineraryGroups(days);
     if (!previewPin) return mapped;
     return [
       ...mapped,
@@ -503,7 +502,7 @@ export function ClusterPlanView({
         color: '#c45c26',
       },
     ];
-  }, [groups, previewPin]);
+  }, [days, previewPin]);
 
   const chat = (
     <TravelChatBot
@@ -511,28 +510,41 @@ export function ClusterPlanView({
       hasTrip
       variant="groups"
       onAddPlace={handleLookupPlace}
+      onSuggestDay={handleLookupPlace}
       onChatCommand={handleChatCommand}
       onMoveStop={handleMoveStop}
-      onPlanDay={handlePlanGroup}
+      onPlanDay={handlePlanDay}
       onShowOptions={(category) =>
-        `Name a place to look up (e.g. “find a ${category} spot”), then confirm which group.`
+        `Name a place to look up (e.g. “find a ${category} spot”), then pick a day.`
       }
       onPreference={() => undefined}
       onDietary={() => undefined}
       onSkipBreakfast={() =>
-        'Breakfast isn’t part of nearby groups — look up a place to add instead.'
+        'Breakfast isn’t part of the day board — look up a place to add instead.'
       }
     />
   );
 
   if (detail) {
+    const dayIdx = findExistingDay(
+      itinerary,
+      detail.kind === 'stop' ? detail.stop.name : detail.place.name,
+    );
+    const daySights =
+      dayIdx >= 0
+        ? itinerary[dayIdx].stops.filter((s) => !s.is_meal).length
+        : 0;
     return (
       <div className="trip-view">
         <PlaceDetailPage
           target={detail}
           city={input.destination_city}
           hasHotel={Boolean(input.hotel_address)}
-          dayLabel="Place details"
+          dayLabel={
+            dayIdx >= 0
+              ? `Day ${dayIdx + 1} · ${daySights} stop${daySights === 1 ? '' : 's'}`
+              : 'Place details'
+          }
           onBack={() => setDetail(null)}
         />
         {chat}
@@ -552,10 +564,10 @@ export function ClusterPlanView({
               Travel Agent
             </div>
             <h1>
-              Nearby groups in {input.destination_city}
+              {tripDays}-day plan in {input.destination_city}
             </h1>
             <p className="cluster-chat-hint">
-              Look up a place in chat — preview first, photos load after you add it.
+              Look up a place in chat — I’ll suggest the best day; photos load after you add it.
             </p>
           </div>
         </div>
@@ -583,16 +595,16 @@ export function ClusterPlanView({
             />
             <p className="cluster-map-hint">
               {previewPin
-                ? `Preview pin for “${previewPin.name}” · confirm in chat to add it.`
-                : `Each pin has a name label. Colors match the groups below · base is ${fromLabel}.`}
+                ? `Preview pin for “${previewPin.name}” · confirm a day in chat to add it.`
+                : `Pins are color-coded by day · base is ${fromLabel}.`}
             </p>
           </section>
         )}
 
-        {groups.map(({ day, index, sights, spanKm }) => {
+        {days.map(({ day, index, sights, spanKm }) => {
           const mapOpen = mapDayIndex === index;
-          const color = GROUP_COLORS[index % GROUP_COLORS.length];
-          const focused = focusGroup === index;
+          const color = DAY_COLORS[index % DAY_COLORS.length];
+          const focused = focusDay === index;
           return (
             <section
               key={`${day.date}-${index}`}
@@ -606,17 +618,23 @@ export function ClusterPlanView({
                       style={{ background: color }}
                       aria-hidden
                     />
-                    Group {index + 1}
+                    Day {index + 1}
                     <span className="cluster-group-count">
                       {sights.length} place{sights.length === 1 ? '' : 's'}
                     </span>
                   </h2>
                   <p>
-                    {spanKm > 0
-                      ? `Within about ${formatKm(spanKm)} of each other`
-                      : 'Single stop in this area'}
-                    {' · '}
-                    About {formatKm(day.hotel_distance_km)} from {fromLabel}
+                    {sights.length === 0
+                      ? 'Empty day — add a place from chat'
+                      : spanKm > 0
+                        ? `Within about ${formatKm(spanKm)} of each other`
+                        : 'Single stop today'}
+                    {sights.length > 0 && (
+                      <>
+                        {' · '}
+                        About {formatKm(day.hotel_distance_km)} from {fromLabel}
+                      </>
+                    )}
                   </p>
                 </div>
                 <button
@@ -625,19 +643,19 @@ export function ClusterPlanView({
                   onClick={() => {
                     setMapDayIndex(mapOpen ? null : index);
                     if (!mapOpen) setShowAllMap(false);
-                    setFocusGroup(index);
+                    setFocusDay(index);
                   }}
                 >
                   {mapOpen ? 'Hide map' : 'See on map'}
                 </button>
               </div>
 
-              {mapOpen && (
+              {mapOpen && sights.length > 0 && (
                 <div className="cluster-group-map">
                   <PlacesOverviewMap
                     places={placesFromStops(
                       sights,
-                      `Group ${index + 1}`,
+                      `Day ${index + 1}`,
                       color,
                     )}
                     hotelLat={baseLat}
@@ -649,61 +667,71 @@ export function ClusterPlanView({
                 </div>
               )}
 
-              <div className="cluster-card-grid">
-                {sights.map((stop, i) => {
-                  const fromBase = haversineKm(
-                    baseLat,
-                    baseLon,
-                    stop.lat,
-                    stop.lon,
-                  );
-                  const nextStop = sights[i + 1];
-                  const toNext = nextStop
-                    ? haversineKm(
-                        stop.lat,
-                        stop.lon,
-                        nextStop.lat,
-                        nextStop.lon,
-                      )
-                    : null;
+              {sights.length === 0 ? (
+                <p className="cluster-empty-day">
+                  No places yet. Say “find …” in chat to add one here.
+                </p>
+              ) : (
+                <div className="cluster-card-grid">
+                  {sights.map((stop, i) => {
+                    const fromBase = haversineKm(
+                      baseLat,
+                      baseLon,
+                      stop.lat,
+                      stop.lon,
+                    );
+                    const nextStop = sights[i + 1];
+                    const toNext = nextStop
+                      ? haversineKm(
+                          stop.lat,
+                          stop.lon,
+                          nextStop.lat,
+                          nextStop.lon,
+                        )
+                      : null;
 
-                  return (
-                    <button
-                      key={`${stop.name}-${i}`}
-                      type="button"
-                      className="cluster-place-card"
-                      onClick={() => setDetail({ kind: 'stop', stop })}
-                    >
-                      <PlaceImage
-                        className="cluster-place-photo"
-                        name={stop.name}
-                        city={input.destination_city}
-                        category={stop.category}
-                        imageUrl={stop.image_url}
-                        lat={stop.lat}
-                        lon={stop.lon}
-                      />
-                      <div className="cluster-place-body">
-                        <h3>
-                          {i + 1}. {stop.name}
-                        </h3>
-                        <span className="category-pill">◉ {stop.category}</span>
-                        <p>{stop.description}</p>
-                        <div className="cluster-place-meta">
-                          <span>{minutesToLabel(stop.duration_min)}</span>
-                          <span>
-                            {formatKm(fromBase)} from {fromLabel}
+                    return (
+                      <button
+                        key={`${stop.name}-${i}`}
+                        type="button"
+                        className="cluster-place-card"
+                        onClick={() => setDetail({ kind: 'stop', stop })}
+                      >
+                        <PlaceImage
+                          className="cluster-place-photo"
+                          name={stop.name}
+                          city={input.destination_city}
+                          category={stop.category}
+                          imageUrl={stop.image_url}
+                          lat={stop.lat}
+                          lon={stop.lon}
+                        />
+                        <div className="cluster-place-body">
+                          <h3>
+                            {i + 1}. {stop.name}
+                          </h3>
+                          <span className="category-pill">
+                            ◉ {stop.category}
                           </span>
-                          {toNext != null && (
-                            <span>{formatKm(toNext)} to next</span>
-                          )}
+                          <p>{stop.description}</p>
+                          <div className="cluster-place-meta">
+                            <span>{minutesToLabel(stop.duration_min)}</span>
+                            <span>
+                              {formatKm(fromBase)} from {fromLabel}
+                            </span>
+                            {toNext != null && (
+                              <span>{formatKm(toNext)} to next</span>
+                            )}
+                          </div>
+                          <span className="breakfast-card-cta">
+                            View details →
+                          </span>
                         </div>
-                        <span className="breakfast-card-cta">View details →</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           );
         })}

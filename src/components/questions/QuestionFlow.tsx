@@ -548,7 +548,7 @@ export function QuestionFlow({
                 next();
               }}
             >
-              {stepIndex === steps.length - 1 ? 'Group nearby places' : 'Continue'}
+              {stepIndex === steps.length - 1 ? 'Organize by day' : 'Continue'}
             </button>
           </div>
         </div>
