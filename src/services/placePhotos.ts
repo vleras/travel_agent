@@ -71,84 +71,17 @@ export function photoSourceFromUrl(url: string): PhotoSourceInfo | null {
   }
 }
 
-type PlaceKind =
-  | 'landmark'
-  | 'restaurant'
-  | 'street'
-  | 'museum'
-  | 'park';
-
-function detectPlaceKind(name: string, category?: string): PlaceKind {
-  const hay = `${category ?? ''} ${name}`.toLowerCase();
-  if (
-    /\b(food|restaurant|café|cafe|bakery|market|trattoria|deli|pizza|coffee|breakfast|gelato|brunch|eatery|bistro)\b/.test(
-      hay,
-    )
-  ) {
-    return 'restaurant';
-  }
-  if (/\b(museum|gallery|exhibit|collection)\b/.test(hay)) return 'museum';
-  if (/\b(park|garden|nature|beach|coast|hill|botanic)\b/.test(hay)) {
-    return 'park';
-  }
-  if (
-    /\b(street|neighborhood|neighbourhood|district|quarter|walk|alley|nightlife|souk|bazaar)\b/.test(
-      hay,
-    )
-  ) {
-    return 'street';
-  }
-  return 'landmark';
-}
-
 function cleanName(name: string): string {
-  return name
-    .replace(/\b(day trip|nightlife|evening|dinner|tour|walk|ride|stroll|&)\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return name.replace(/\s+/g, ' ').trim();
 }
 
-/** Kind-specific Pexels search queries. */
-function pexelsQueries(
-  name: string,
-  kind: PlaceKind,
-  city?: string,
-): string[] {
+/** Straightforward queries: place name, plus name+city when city is known. */
+function pexelsQueries(name: string, city?: string): string[] {
   const n = cleanName(name);
-  const withCity = (q: string) => {
-    const cityBit = city?.trim();
-    return cityBit ? [q, `${q} ${cityBit}`] : [q];
-  };
-
-  switch (kind) {
-    case 'restaurant':
-      return [
-        ...withCity(`${n} interior`),
-        'cozy restaurant',
-        'ambient dining',
-      ];
-    case 'street':
-      return [
-        ...withCity(`${n} street photography`),
-        ...withCity(`${n} street life`),
-      ];
-    case 'museum':
-      return [
-        ...withCity(`${n} interior`),
-        ...withCity(`${n} exhibits`),
-      ];
-    case 'park':
-      return [
-        ...withCity(`${n} scenic`),
-        ...withCity(`${n} landscape`),
-      ];
-    default:
-      return [
-        ...withCity(`${n} sunset`),
-        ...withCity(`${n} golden hour`),
-        ...withCity(`${n} daytime landscape`),
-      ];
-  }
+  if (!n) return [];
+  const cityBit = city?.trim();
+  if (cityBit) return [n, `${n} ${cityBit}`];
+  return [n];
 }
 
 type PexelsPhoto = {
@@ -251,20 +184,18 @@ async function searchPexels(query: string): Promise<PexelsPhoto[]> {
 }
 
 async function searchAll(q: PlacePhotoQuery): Promise<string[]> {
-  const kind = detectPlaceKind(q.name, q.category);
-  const queries = [...new Set(pexelsQueries(q.name, kind, q.city))].filter(
-    Boolean,
-  );
+  const queries = [...new Set(pexelsQueries(q.name, q.city))].filter(Boolean);
   const urls: string[] = [];
   const seen = new Set<string>();
 
-  // Prefer a known Unsplash/Pexels seed only if it's already a usable https URL
-  if (q.imageUrl && /^https:\/\//i.test(q.imageUrl)) {
-    // Skip non-Pexels seeds so we stay single-source when possible
-    if (/images\.pexels\.com|pexels\.com/i.test(q.imageUrl)) {
-      seen.add(imageFingerprint(q.imageUrl));
-      urls.push(q.imageUrl);
-    }
+  // Prefer a known Pexels seed if present
+  if (
+    q.imageUrl &&
+    /^https:\/\//i.test(q.imageUrl) &&
+    /images\.pexels\.com|pexels\.com/i.test(q.imageUrl)
+  ) {
+    seen.add(imageFingerprint(q.imageUrl));
+    urls.push(q.imageUrl);
   }
 
   for (const query of queries) {
