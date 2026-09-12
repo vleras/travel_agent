@@ -14,7 +14,7 @@ import {
   stopFromGeocode,
   type DayDistanceHint,
 } from '../../services/placeLookup';
-import { openTripMailto } from '../../services/tripEmail';
+import { sendTripPlanEmail } from '../../services/tripEmail';
 import type {
   AgentOutput,
   DayItinerary,
@@ -197,6 +197,8 @@ export function ClusterPlanView({
   const [emailOpen, setEmailOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSentTo, setEmailSentTo] = useState<string | null>(null);
   const [dragging, setDragging] = useState<{
     fromDay: number;
     stopName: string;
@@ -251,19 +253,34 @@ export function ClusterPlanView({
   function openEmailConfirm() {
     if (dirty) commitChanges();
     setEmailError(null);
+    setEmailSentTo(null);
     setEmailOpen(true);
   }
 
-  function sendPlanToEmail(e: React.FormEvent) {
+  async function sendPlanToEmail(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = email.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       setEmailError('Enter a valid email address.');
       return;
     }
-    openTripMailto(trimmed, input, itineraryRef.current);
-    setEmailOpen(false);
-    setCommitNote(`Opening mail to ${trimmed}…`);
+
+    setEmailSending(true);
+    setEmailError(null);
+    const result = await sendTripPlanEmail(
+      trimmed,
+      input,
+      itineraryRef.current,
+    );
+    setEmailSending(false);
+
+    if (!result.ok) {
+      setEmailError(result.error);
+      return;
+    }
+
+    setEmailSentTo(trimmed);
+    setCommitNote(`Plan sent to ${trimmed}.`);
   }
 
   function removePlaceFromDay(dayIdx: number, stopName: string) {
@@ -665,7 +682,7 @@ export function ClusterPlanView({
               {tripDays}-day plan in {input.destination_city}
             </h1>
             <p className="cluster-chat-hint">
-              Drag cards between days, tap × to remove, then Commit or Confirm & email.
+              Drag cards between days, tap × to remove, then Commit or send the plan to email.
             </p>
           </div>
         </div>
@@ -686,7 +703,7 @@ export function ClusterPlanView({
             className="btn btn-primary"
             onClick={openEmailConfirm}
           >
-            Confirm & email
+            Send plan to email
           </button>
           <button
             type="button"
@@ -929,7 +946,9 @@ export function ClusterPlanView({
         <div
           className="cluster-email-backdrop"
           role="presentation"
-          onClick={() => setEmailOpen(false)}
+          onClick={() => {
+            if (!emailSending) setEmailOpen(false);
+          }}
         >
           <div
             className="cluster-email-modal"
@@ -937,41 +956,72 @@ export function ClusterPlanView({
             aria-labelledby="cluster-email-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="cluster-email-title">Confirm & send plan</h2>
-            <p>
-              We’ll open your email app with your {tripDays}-day{' '}
-              {input.destination_city} plan ready to send.
-            </p>
-            <form onSubmit={sendPlanToEmail}>
-              <label htmlFor="trip-email">
-                Your email
-                <input
-                  id="trip-email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(ev) => {
-                    setEmail(ev.target.value);
-                    setEmailError(null);
-                  }}
-                  autoFocus
-                />
-              </label>
-              {emailError && <p className="cluster-email-error">{emailError}</p>}
-              <div className="cluster-email-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setEmailOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Send to email
-                </button>
-              </div>
-            </form>
+            {emailSentTo ? (
+              <>
+                <h2 id="cluster-email-title">Plan sent</h2>
+                <p>
+                  Your {tripDays}-day {input.destination_city} plan is on its
+                  way to <strong>{emailSentTo}</strong>. Check your inbox (and
+                  spam). If it’s your first time, you may get a quick activation
+                  email first — tap confirm there, then we’ll deliver the plan.
+                </p>
+                <div className="cluster-email-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setEmailOpen(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 id="cluster-email-title">Send plan to email</h2>
+                <p>
+                  We’ll email your {tripDays}-day {input.destination_city} plan
+                  with small photos of each place.
+                </p>
+                <form onSubmit={(ev) => void sendPlanToEmail(ev)}>
+                  <label htmlFor="trip-email">
+                    Email address
+                    <input
+                      id="trip-email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      disabled={emailSending}
+                      onChange={(ev) => {
+                        setEmail(ev.target.value);
+                        setEmailError(null);
+                      }}
+                      autoFocus
+                    />
+                  </label>
+                  {emailError && (
+                    <p className="cluster-email-error">{emailError}</p>
+                  )}
+                  <div className="cluster-email-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={emailSending}
+                      onClick={() => setEmailOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={emailSending || !email.trim()}
+                    >
+                      {emailSending ? 'Sending…' : 'Send plan to email'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}
