@@ -14,7 +14,7 @@ import {
   stopFromGeocode,
   type DayDistanceHint,
 } from '../../services/placeLookup';
-import { sendTripPlanEmail } from '../../services/tripEmail';
+import { googleMapsUrl, sendTripPlanEmail } from '../../services/tripEmail';
 import type {
   AgentOutput,
   DayItinerary,
@@ -910,15 +910,20 @@ export function ClusterPlanView({
                             ×
                           </button>
                         </div>
-                        <button
-                          type="button"
-                          className="cluster-place-body"
-                          onClick={() => setDetail({ kind: 'stop', stop })}
-                        >
+                        <div className="cluster-place-body">
                           <h3>
-                            {i + 1}. {stop.name}
+                            {i + 1}.{' '}
+                            <a
+                              className="cluster-place-maps-link"
+                              href={googleMapsUrl(stop)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              draggable={false}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {stop.name}
+                            </a>
                           </h3>
-                          <p>{stop.description}</p>
                           <div className="cluster-place-meta">
                             <span>{minutesToLabel(stop.duration_min)}</span>
                             <span>
@@ -928,10 +933,14 @@ export function ClusterPlanView({
                               <span>{formatKm(toNext)} to next</span>
                             )}
                           </div>
-                          <span className="breakfast-card-cta">
+                          <button
+                            type="button"
+                            className="breakfast-card-cta"
+                            onClick={() => setDetail({ kind: 'stop', stop })}
+                          >
                             View details →
-                          </span>
-                        </button>
+                          </button>
+                        </div>
                       </article>
                     );
                   })}

@@ -332,13 +332,36 @@
   padding: 0.75rem 0.85rem 0.9rem;
   display: grid;
   gap: 0.4rem;
-  border: none;
-  background: transparent;
   text-align: left;
-  cursor: pointer;
-  font: inherit;
   color: inherit;
   width: 100%;
+}
+
+.cluster-place-maps-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--sea) 45%, transparent);
+}
+
+.cluster-place-maps-link:hover {
+  color: var(--sea);
+  text-decoration-color: var(--sea);
+}
+
+.cluster-place-body .breakfast-card-cta {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--sea);
+  cursor: pointer;
+  text-align: left;
+  justify-self: start;
+}
+
+.cluster-place-body .breakfast-card-cta:hover {
+  text-decoration: underline;
 }
 
 .cluster-commit-note {

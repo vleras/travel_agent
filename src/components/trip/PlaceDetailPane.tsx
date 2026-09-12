@@ -4,6 +4,7 @@ import { MiniMap } from '../shared/MiniMap';
 import type { BreakfastPlace } from '../../types/breakfast';
 import type { ItineraryStop } from '../../types';
 import { minutesToLabel } from '../../services/geo';
+import { photoSourceFromUrl } from '../../services/placePhotos';
 import '../../styles/placeImage.css';
 
 type DetailTarget =
@@ -84,6 +85,7 @@ function PhotoGallery({
   }
 
   const canSwipe = photos.length > 1;
+  const source = photoSourceFromUrl(photos[active] ?? '');
 
   function go(delta: number) {
     setActive((i) => (i + delta + photos.length) % photos.length);
@@ -114,6 +116,22 @@ function PhotoGallery({
             if (active < photos.length - 1) setActive((a) => a + 1);
           }}
         />
+        {source &&
+          (source.href ? (
+            <a
+              className="place-img-credit"
+              href={source.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Photo from ${source.label}`}
+            >
+              {source.label}
+            </a>
+          ) : (
+            <span className="place-img-credit" title={`Photo from ${source.label}`}>
+              {source.label}
+            </span>
+          ))}
         {canSwipe && (
           <>
             <button

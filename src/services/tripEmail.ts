@@ -13,7 +13,7 @@ export function buildTripEmailBody(
 ): string {
   const lines: string[] = [
     `Your trip to ${input.destination_city}`,
-    `${itinerary.length} day${itinerary.length === 1 ? '' : 's'} · starting ${input.start_date}`,
+    `${itinerary.length} day${itinerary.length === 1 ? '' : 's'}`,
     '',
   ];
 
@@ -29,11 +29,10 @@ export function buildTripEmailBody(
       continue;
     }
     for (const stop of sights) {
-      // Plain-text email: name + duration, then Maps URL on the next line
-      // (FormSubmit escapes HTML, so the name itself can't be an <a> link).
+      // FormSubmit escapes HTML, so we can't wrap the name in <a>.
+      // Put the Maps URL right after the name (Gmail linkifies the URL).
       lines.push(
-        `  • ${stop.name} — ${minutesToLabel(stop.duration_min)}`,
-        `    ${googleMapsUrl(stop)}`,
+        `  • ${stop.name} ${googleMapsUrl(stop)} — ${minutesToLabel(stop.duration_min)}`,
       );
     }
     lines.push('');

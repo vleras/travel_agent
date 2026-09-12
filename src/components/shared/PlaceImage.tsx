@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   fetchPlacePhotoUrls as fetchPhotos,
+  photoSourceFromUrl,
   type PlacePhotoQuery,
 } from '../../services/placePhotos';
 import '../../styles/placeImage.css';
@@ -33,7 +34,7 @@ export async function fetchPlacePhotoUrls(
 }
 
 /**
- * Cover image for a place — prefers Unsplash, then Commons.
+ * Cover image for a place — Pexels only.
  * When multiple photos load, swipe or use arrows to browse them.
  */
 export function PlaceImage({
@@ -96,6 +97,7 @@ export function PlaceImage({
 
   const src = queue[index] ?? '';
   const canSwipe = swipeable && queue.length > 1;
+  const source = photoSourceFromUrl(src);
 
   function go(delta: number) {
     if (!queue.length) return;
@@ -167,6 +169,24 @@ export function PlaceImage({
           });
         }}
       />
+      {source &&
+        (source.href ? (
+          <a
+            className="place-img-credit"
+            href={source.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            draggable={false}
+            onClick={(e) => e.stopPropagation()}
+            title={`Photo from ${source.label}`}
+          >
+            {source.label}
+          </a>
+        ) : (
+          <span className="place-img-credit" title={`Photo from ${source.label}`}>
+            {source.label}
+          </span>
+        ))}
       {canSwipe && (
         <>
           <span
