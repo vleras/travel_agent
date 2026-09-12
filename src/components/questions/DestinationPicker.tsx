@@ -586,13 +586,13 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
               <p className="dest-preview-country">{preview.country}</p>
               <h2>{preview.city}</h2>
               <p>{preview.description}</p>
-              <div className="tag-row">
-                {preview.tags.map((tag) => (
-                  <span key={tag} className="tag">
-                    #{tag}
-                  </span>
-                ))}
-              </div>
+              <button
+                type="button"
+                className="btn btn-primary dest-preview-cta"
+                onClick={() => onSelect(preview)}
+              >
+                Start planning this trip
+              </button>
             </div>
           </div>
 
@@ -623,13 +623,6 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
               onClick={() => setPreview(null)}
             >
               Back
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => onSelect(preview)}
-            >
-              Start planning this trip
             </button>
           </div>
         </div>
@@ -678,13 +671,6 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
                   </span>
                 </h3>
                 <p>{dest.tagline}</p>
-                <div className="tag-row">
-                  {dest.tags.map((tag) => (
-                    <span key={tag} className="tag">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
                 <span className="breakfast-card-cta">See places to visit →</span>
               </div>
             </button>

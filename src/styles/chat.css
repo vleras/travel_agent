@@ -2,7 +2,8 @@
   position: fixed;
   right: 1.25rem;
   bottom: 1.25rem;
-  z-index: 90;
+  /* Above Leaflet panes (tiles ~200, markers ~600, popups ~700) */
+  z-index: 5000;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

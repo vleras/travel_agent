@@ -65,6 +65,7 @@ export function TravelChatBot({
   ]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const suggestions = isGroups
     ? SUGGESTIONS_GROUPS
     : hasTrip
@@ -77,6 +78,28 @@ export function TravelChatBot({
       inputRef.current?.focus();
     }
   }, [messages, open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function onPointerDown(event: PointerEvent) {
+      const root = wrapRef.current;
+      if (!root) return;
+      if (root.contains(event.target as Node)) return;
+      setOpen(false);
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
 
   async function send(text: string) {
     const trimmed = text.trim();
@@ -123,7 +146,10 @@ export function TravelChatBot({
     .find((m) => m.role === 'assistant' && m.actions?.length)?.actions;
 
   return (
-    <div className={`chat-fab-wrap ${open ? 'chat-fab-wrap--open' : ''}`}>
+    <div
+      ref={wrapRef}
+      className={`chat-fab-wrap ${open ? 'chat-fab-wrap--open' : ''}`}
+    >
       {open && (
         <div className="chat-panel" role="dialog" aria-label="Travel assistant">
           <div className="chat-panel-head">

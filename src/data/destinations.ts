@@ -6,9 +6,15 @@ function commons(file: string): string {
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=800`;
 }
 
+/** Sightseeing picks only — no cafés, restaurants, or food halls. */
+export function withoutFoodPlaces<T extends { category: string }>(
+  list: T[],
+): T[] {
+  return list.filter((item) => item.category !== 'Food');
+}
+
 function fromFallback(cityKey: string): DestinationHighlight[] {
-  const list = fallbackAttractions[cityKey] ?? [];
-  // Include sights, cafés, and restaurants — at least a full picker set.
+  const list = withoutFoodPlaces(fallbackAttractions[cityKey] ?? []);
   return list.slice(0, 16).map((a) => ({
     name: a.name,
     category: a.category,
@@ -16,7 +22,7 @@ function fromFallback(cityKey: string): DestinationHighlight[] {
   }));
 }
 
-export const destinationRecommendations: DestinationCard[] = [
+export const destinationRecommendationsRaw: DestinationCard[] = [
   {
     id: 'rome',
     city: 'Rome',
@@ -340,6 +346,13 @@ export const destinationRecommendations: DestinationCard[] = [
     ],
   },
 ];
+
+/** Destinations with sightseeing highlights only (no places to eat). */
+export const destinationRecommendations: DestinationCard[] =
+  destinationRecommendationsRaw.map((d) => ({
+    ...d,
+    highlights: withoutFoodPlaces(d.highlights),
+  }));
 
 export const INTEREST_OPTIONS = [
   { id: 'museums' as const, label: 'Museums' },

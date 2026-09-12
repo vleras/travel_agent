@@ -14,6 +14,7 @@ import {
   stopFromGeocode,
   type DayDistanceHint,
 } from '../../services/placeLookup';
+import { openTripMailto } from '../../services/tripEmail';
 import type {
   AgentOutput,
   DayItinerary,
@@ -191,6 +192,16 @@ export function ClusterPlanView({
     lat: number;
     lon: number;
   } | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [commitNote, setCommitNote] = useState<string | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<{
+    fromDay: number;
+    stopName: string;
+  } | null>(null);
+  const [dropDay, setDropDay] = useState<number | null>(null);
 
   const itineraryRef = useRef(itinerary);
   itineraryRef.current = itinerary;
@@ -210,16 +221,102 @@ export function ClusterPlanView({
         input.start_date,
       ),
     );
+    setDirty(false);
+    setCommitNote(null);
   }, [output, input.trip_length_days, input.start_date]);
 
-  function commitItinerary(next: DayItinerary[]) {
+  function applyDraft(
+    next: DayItinerary[],
+    options?: { markDirty?: boolean },
+  ) {
     const normalized = ensureTripDays(
       next,
       input.trip_length_days,
       input.start_date,
     );
     setItinerary(normalized);
-    onItineraryChange?.(normalized);
+    if (options?.markDirty !== false) {
+      setDirty(true);
+      setCommitNote(null);
+    }
+  }
+
+  /** Persist the current day board (after removes / chat edits). */
+  function commitChanges() {
+    onItineraryChange?.(itineraryRef.current);
+    setDirty(false);
+    setCommitNote('Changes saved.');
+  }
+
+  function openEmailConfirm() {
+    if (dirty) commitChanges();
+    setEmailError(null);
+    setEmailOpen(true);
+  }
+
+  function sendPlanToEmail(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setEmailError('Enter a valid email address.');
+      return;
+    }
+    openTripMailto(trimmed, input, itineraryRef.current);
+    setEmailOpen(false);
+    setCommitNote(`Opening mail to ${trimmed}…`);
+  }
+
+  function removePlaceFromDay(dayIdx: number, stopName: string) {
+    const next = itineraryRef.current.map((d, i) => {
+      if (i !== dayIdx) return d;
+      return refreshDay(
+        {
+          ...d,
+          stops: d.stops.filter(
+            (s) => s.is_meal || s.name.toLowerCase() !== stopName.toLowerCase(),
+          ),
+        },
+        input,
+        baseLat,
+        baseLon,
+      );
+    });
+    applyDraft(next);
+    if (detail?.kind === 'stop' && detail.stop.name === stopName) {
+      setDetail(null);
+    }
+  }
+
+  function movePlaceBetweenDays(
+    fromDay: number,
+    stopName: string,
+    toDay: number,
+  ) {
+    if (fromDay === toDay) return;
+    const current = itineraryRef.current;
+    if (
+      fromDay < 0 ||
+      toDay < 0 ||
+      fromDay >= current.length ||
+      toDay >= current.length
+    ) {
+      return;
+    }
+
+    const needle = stopName.toLowerCase();
+    const stopIdx = current[fromDay].stops.findIndex(
+      (s) => !s.is_meal && s.name.toLowerCase() === needle,
+    );
+    if (stopIdx < 0) return;
+
+    const moving = { ...current[fromDay].stops[stopIdx] };
+    const next = current.map((d) => ({ ...d, stops: [...d.stops] }));
+    next[fromDay].stops.splice(stopIdx, 1);
+    next[toDay].stops.push(moving);
+    applyDraft(next.map((d) => refreshDay(d, input, baseLat, baseLon)));
+    setFocusDay(toDay);
+    setMapDayIndex(null);
+    setShowAllMap(false);
   }
 
   function loadPhotosAsync(stopName: string, dayIdx: number) {
@@ -242,7 +339,8 @@ export function ClusterPlanView({
           ),
         };
       });
-      commitItinerary(next);
+      // Photo fill-in shouldn't force a Commit
+      applyDraft(next, { markDirty: false });
     });
   }
 
@@ -362,7 +460,7 @@ export function ClusterPlanView({
       );
     });
 
-    commitItinerary(next);
+    applyDraft(next);
     setLookup(null);
     setPreviewPin(null);
     setFocusDay(targetIdx);
@@ -372,7 +470,7 @@ export function ClusterPlanView({
     loadPhotosAsync(stop.name, targetIdx);
 
     const count = next[targetIdx].stops.filter((s) => !s.is_meal).length;
-    return `Added “${stop.name}” to Day ${targetIdx + 1}. Now on Day ${targetIdx + 1}: ${count} stop${count === 1 ? '' : 's'}. Photos will fill in shortly.`;
+    return `Added “${stop.name}” to Day ${targetIdx + 1}. Now on Day ${targetIdx + 1}: ${count} stop${count === 1 ? '' : 's'}. Photos will fill in shortly — tap Commit when you’re done editing.`;
   }
 
   function handleChatCommand(message: string): ChatReply | null {
@@ -450,7 +548,7 @@ export function ClusterPlanView({
     const next = current.map((d) => ({ ...d, stops: [...d.stops] }));
     next[fromIdx].stops.splice(stopIdx, 1);
     next[targetIdx].stops.push(moved);
-    commitItinerary(
+    applyDraft(
       next.map((d) => refreshDay(d, input, baseLat, baseLon)),
     );
     setFocusDay(targetIdx);
@@ -567,11 +665,29 @@ export function ClusterPlanView({
               {tripDays}-day plan in {input.destination_city}
             </h1>
             <p className="cluster-chat-hint">
-              Look up a place in chat — I’ll suggest the best day; photos load after you add it.
+              Drag cards between days, tap × to remove, then Commit or Confirm & email.
             </p>
           </div>
         </div>
         <div className="trip-topbar-right">
+          {commitNote && !dirty && !emailOpen && (
+            <span className="cluster-commit-note">{commitNote}</span>
+          )}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={!dirty}
+            onClick={commitChanges}
+          >
+            Commit
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={openEmailConfirm}
+          >
+            Confirm & email
+          </button>
           <button
             type="button"
             className={`btn ${showAllMap ? 'btn-primary' : 'btn-secondary'}`}
@@ -605,10 +721,44 @@ export function ClusterPlanView({
           const mapOpen = mapDayIndex === index;
           const color = DAY_COLORS[index % DAY_COLORS.length];
           const focused = focusDay === index;
+          const isDropTarget = dropDay === index;
           return (
             <section
               key={`${day.date}-${index}`}
-              className={`cluster-group${focused ? ' cluster-group--focus' : ''}`}
+              className={`cluster-group${focused ? ' cluster-group--focus' : ''}${isDropTarget ? ' cluster-group--drop' : ''}`}
+              onDragOver={(e) => {
+                if (!dragging) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (dropDay !== index) setDropDay(index);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDropDay((d) => (d === index ? null : d));
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const raw =
+                  e.dataTransfer.getData('application/x-travel-stop') ||
+                  e.dataTransfer.getData('text/plain');
+                setDropDay(null);
+                setDragging(null);
+                if (!raw) return;
+                try {
+                  const payload = JSON.parse(raw) as {
+                    fromDay: number;
+                    stopName: string;
+                  };
+                  movePlaceBetweenDays(
+                    payload.fromDay,
+                    payload.stopName,
+                    index,
+                  );
+                } catch {
+                  /* ignore bad payload */
+                }
+              }}
             >
               <div className="cluster-group-head">
                 <div>
@@ -625,7 +775,7 @@ export function ClusterPlanView({
                   </h2>
                   <p>
                     {sights.length === 0
-                      ? 'Empty day — add a place from chat'
+                      ? 'Empty day — drag a place here or add from chat'
                       : spanKm > 0
                         ? `Within about ${formatKm(spanKm)} of each other`
                         : 'Single stop today'}
@@ -668,8 +818,8 @@ export function ClusterPlanView({
               )}
 
               {sights.length === 0 ? (
-                <p className="cluster-empty-day">
-                  No places yet. Say “find …” in chat to add one here.
+                <p className="cluster-empty-day cluster-drop-zone">
+                  Drop a place here
                 </p>
               ) : (
                 <div className="cluster-card-grid">
@@ -689,30 +839,68 @@ export function ClusterPlanView({
                           nextStop.lon,
                         )
                       : null;
+                    const isDragging =
+                      dragging?.fromDay === index &&
+                      dragging.stopName === stop.name;
 
                     return (
-                      <button
+                      <article
                         key={`${stop.name}-${i}`}
-                        type="button"
-                        className="cluster-place-card"
-                        onClick={() => setDetail({ kind: 'stop', stop })}
+                        className={`cluster-place-card${isDragging ? ' cluster-place-card--dragging' : ''}`}
+                        draggable
+                        onDragStart={(e) => {
+                          const payload = {
+                            fromDay: index,
+                            stopName: stop.name,
+                          };
+                          setDragging(payload);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData(
+                            'application/x-travel-stop',
+                            JSON.stringify(payload),
+                          );
+                          e.dataTransfer.setData(
+                            'text/plain',
+                            JSON.stringify(payload),
+                          );
+                        }}
+                        onDragEnd={() => {
+                          setDragging(null);
+                          setDropDay(null);
+                        }}
                       >
-                        <PlaceImage
-                          className="cluster-place-photo"
-                          name={stop.name}
-                          city={input.destination_city}
-                          category={stop.category}
-                          imageUrl={stop.image_url}
-                          lat={stop.lat}
-                          lon={stop.lon}
-                        />
-                        <div className="cluster-place-body">
+                        <div className="cluster-place-media">
+                          <PlaceImage
+                            className="cluster-place-photo"
+                            name={stop.name}
+                            city={input.destination_city}
+                            category={stop.category}
+                            imageUrl={stop.image_url}
+                            lat={stop.lat}
+                            lon={stop.lon}
+                          />
+                          <button
+                            type="button"
+                            className="cluster-place-remove"
+                            aria-label={`Remove ${stop.name} from Day ${index + 1}`}
+                            draggable={false}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              removePlaceFromDay(index, stop.name);
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          className="cluster-place-body"
+                          onClick={() => setDetail({ kind: 'stop', stop })}
+                        >
                           <h3>
                             {i + 1}. {stop.name}
                           </h3>
-                          <span className="category-pill">
-                            ◉ {stop.category}
-                          </span>
                           <p>{stop.description}</p>
                           <div className="cluster-place-meta">
                             <span>{minutesToLabel(stop.duration_min)}</span>
@@ -726,8 +914,8 @@ export function ClusterPlanView({
                           <span className="breakfast-card-cta">
                             View details →
                           </span>
-                        </div>
-                      </button>
+                        </button>
+                      </article>
                     );
                   })}
                 </div>
@@ -736,6 +924,57 @@ export function ClusterPlanView({
           );
         })}
       </div>
+
+      {emailOpen && (
+        <div
+          className="cluster-email-backdrop"
+          role="presentation"
+          onClick={() => setEmailOpen(false)}
+        >
+          <div
+            className="cluster-email-modal"
+            role="dialog"
+            aria-labelledby="cluster-email-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="cluster-email-title">Confirm & send plan</h2>
+            <p>
+              We’ll open your email app with your {tripDays}-day{' '}
+              {input.destination_city} plan ready to send.
+            </p>
+            <form onSubmit={sendPlanToEmail}>
+              <label htmlFor="trip-email">
+                Your email
+                <input
+                  id="trip-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(ev) => {
+                    setEmail(ev.target.value);
+                    setEmailError(null);
+                  }}
+                  autoFocus
+                />
+              </label>
+              {emailError && <p className="cluster-email-error">{emailError}</p>}
+              <div className="cluster-email-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEmailOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Send to email
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {chat}
     </div>

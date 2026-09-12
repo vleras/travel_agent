@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { destinationRecommendations } from '../../data/destinations';
+import { destinationRecommendations, withoutFoodPlaces } from '../../data/destinations';
 import { fallbackAttractions } from '../../data/fallbackAttractions';
 import { parseDaysInput } from '../../data/scheduleOptions';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
@@ -56,7 +56,7 @@ function curatedPlacesForCity(city: string): DestinationHighlight[] {
     (k) => key.includes(k) || k.includes(key),
   );
   if (!match) return [];
-  return fallbackAttractions[match].map(attractionToHighlight);
+  return withoutFoodPlaces(fallbackAttractions[match]).map(attractionToHighlight);
 }
 
 function mergePlaceLists(
@@ -89,7 +89,7 @@ function placesForCity(
         (d) => d.city.toLowerCase() === city.trim().toLowerCase(),
       )?.highlights ?? [];
 
-  return mergePlaceLists(fromCard, curated);
+  return withoutFoodPlaces(mergePlaceLists(fromCard, curated));
 }
 
 function PlacesGuideChat({
