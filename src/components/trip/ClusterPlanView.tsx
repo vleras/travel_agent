@@ -960,10 +960,7 @@ export function ClusterPlanView({
               <>
                 <h2 id="cluster-email-title">Plan sent</h2>
                 <p>
-                  Your {tripDays}-day {input.destination_city} plan is on its
-                  way to <strong>{emailSentTo}</strong>. Check your inbox (and
-                  spam). If it’s your first time, you may get a quick activation
-                  email first — tap confirm there, then we’ll deliver the plan.
+                  Sent to <strong>{emailSentTo}</strong>. Check your inbox.
                 </p>
                 <div className="cluster-email-actions">
                   <button
@@ -979,8 +976,7 @@ export function ClusterPlanView({
               <>
                 <h2 id="cluster-email-title">Send plan to email</h2>
                 <p>
-                  We’ll email your {tripDays}-day {input.destination_city} plan
-                  with small photos of each place.
+                  We’ll email your {tripDays}-day {input.destination_city} plan.
                 </p>
                 <form onSubmit={(ev) => void sendPlanToEmail(ev)}>
                   <label htmlFor="trip-email">
