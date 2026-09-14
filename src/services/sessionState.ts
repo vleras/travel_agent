@@ -29,8 +29,6 @@ export interface PersistedQuestionState {
   path: 'A' | 'B';
   stepIndex: number;
   city: string;
-  hotelAddress: string;
-  notBooked: boolean;
   selectedPlaces: string[];
 }
 

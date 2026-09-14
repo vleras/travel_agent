@@ -164,17 +164,61 @@ export async function autocompletePlaces(
   return results;
 }
 
-/** Explicit search: only accommodation or numbered addresses within the destination. */
+function normalizePlaceName(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+// Official listings cover business names that are missing or outdated in OSM.
+// Coordinates must still be resolved and checked against the destination.
+const accommodationListings = [{
+  city: 'Prague',
+  aliases: ['Hotel Karlova Prague', 'Hotel Karlova'],
+  name: 'Hotel Karlova Prague',
+  street: 'Karlova',
+  houseNumber: '13',
+  address: 'Karlova 13, Prague 1',
+  source: 'https://www.hotelkarlovaprague.com/en/contact/',
+}];
+
+/** Explicit search: match the requested stay/address, never just nearby hotels. */
 export async function findAccommodation(query: string, city: string): Promise<GeocodeResult[]> {
   const destination = (await nominatimSearch(city, 1, { featuretype: 'city' })).results[0];
-  if (!destination?.boundingbox) return [];
+  if (!destination?.boundingbox) throw new Error('Destination lookup unavailable');
   const [south, north, west, east] = destination.boundingbox.map(Number);
-  if (![south, north, west, east].every(Number.isFinite)) return [];
-  const { results } = await nominatimSearch(`${query.trim()}, ${city.trim()}`, 5, {
-    viewbox: `${west},${north},${east},${south}`, bounded: '1',
-  });
-  const stays = new Set(['hotel', 'hostel', 'guest_house', 'apartment', 'apartments', 'motel', 'chalet', 'house', 'residential', 'yes']);
-  return results.filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lon) &&
-    r.lat >= south && r.lat <= north && r.lon >= west && r.lon <= east &&
-    (stays.has(r.type ?? '') || Boolean(r.address?.house_number)));
+  if (![south, north, west, east].every(Number.isFinite)) throw new Error('Invalid destination bounds');
+  const options = { viewbox: `${west},${north},${east},${south}`, bounded: '1' };
+  const withinDestination = (r: GeocodeResult) => Number.isFinite(r.lat) && Number.isFinite(r.lon) &&
+    r.lat >= south && r.lat <= north && r.lon >= west && r.lon <= east;
+  const cityWords = new Set(normalizePlaceName(city).split(' '));
+  const nameWords = normalizePlaceName(query).split(' ').filter(w => !cityWords.has(w));
+  const cleanedQuery = nameWords.join(' ');
+  if (!cleanedQuery) return [];
+  const stays = new Set(['hotel', 'hostel', 'guest_house', 'apartment', 'apartments', 'motel', 'chalet']);
+  const isNumberedAddress = /\d/.test(cleanedQuery);
+  const significantWords = nameWords.filter(w => !['hotel', 'hostel', 'guest', 'house', 'apartment', 'apartments', 'motel'].includes(w));
+  const matchesQuery = (r: GeocodeResult) => {
+    if (!withinDestination(r)) return false;
+    if (isNumberedAddress) {
+      const addressWords = normalizePlaceName(`${r.address?.road ?? ''} ${r.address?.house_number ?? ''}`).split(' ');
+      return Boolean(r.address?.house_number) && nameWords.every(w => addressWords.includes(w));
+    }
+    const resultWords = normalizePlaceName(r.name ?? r.display_name.split(',')[0]).split(' ');
+    return stays.has(r.type ?? '') && significantWords.length > 0 && significantWords.every(w => resultWords.includes(w));
+  };
+  const initial = await nominatimSearch(`${cleanedQuery}, ${city.trim()}`, 10, options);
+  let matches = initial.results.filter(matchesQuery);
+  if (!matches.length && !isNumberedAddress) {
+    // A city already in the entered name must not be duplicated in the query.
+    const alternative = await nominatimSearch(cleanedQuery, 10, options);
+    matches = alternative.results.filter(matchesQuery);
+  }
+  if (matches.length) return matches;
+  const listing = accommodationListings.find(l => normalizePlaceName(l.city) === normalizePlaceName(city) &&
+    l.aliases.some(alias => normalizePlaceName(alias) === normalizePlaceName(query)));
+  if (!listing) return [];
+  const resolved = await nominatimSearch(listing.address, 5, options);
+  return resolved.results.filter(r => withinDestination(r) &&
+    normalizePlaceName(r.address?.road ?? '') === normalizePlaceName(listing.street) &&
+    (r.address?.house_number ?? '').split('/').includes(listing.houseNumber))
+    .map(r => ({ ...r, name: listing.name, display_name: `${listing.name}, ${r.display_name}` }));
 }

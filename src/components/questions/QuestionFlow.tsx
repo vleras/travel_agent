@@ -171,10 +171,8 @@ export function QuestionFlow({
     () => saved?.city ?? selectedDestination?.city ?? '',
   );
   const [daysText, setDaysText] = useState('');
-  const [hotelAddress, setHotelAddress] = useState(
-    () => saved?.hotelAddress ?? '',
-  );
-  const [notBooked, setNotBooked] = useState(() => saved?.notBooked ?? false);
+  const [hotelAddress, setHotelAddress] = useState('');
+  const [notBooked, setNotBooked] = useState(false);
   const [verifiedHotel, setVerifiedHotel] = useState<GeocodeResult | null>(null);
   const [hotelMatches, setHotelMatches] = useState<GeocodeResult[]>([]);
   const [checkingHotel, setCheckingHotel] = useState(false);
@@ -190,7 +188,7 @@ export function QuestionFlow({
       const matches = await findAccommodation(hotelAddress, city);
       if (request !== hotelRequest.current) return;
       setHotelMatches(matches);
-      if (!matches.length) setHotelError(`We couldn’t verify this stay in ${city}. Enter a hotel name or full street address and try again.`);
+      if (!matches.length) setHotelError(`We couldn’t verify this stay in ${city}. Try the full street address from your booking confirmation. Map listings may use a different hotel name.`);
     } catch {
       if (request === hotelRequest.current) setHotelError('Address lookup is unavailable. Please try again.');
     } finally {
@@ -211,16 +209,12 @@ export function QuestionFlow({
       path,
       stepIndex,
       city,
-      hotelAddress,
-      notBooked,
       selectedPlaces,
     });
   }, [
     path,
     stepIndex,
     city,
-    hotelAddress,
-    notBooked,
     selectedPlaces,
   ]);
 
@@ -316,6 +310,15 @@ export function QuestionFlow({
     if (viewingPlace) {
       setViewingPlace(null);
       return;
+    }
+    if (step === 'hotel' || steps[stepIndex - 1] === 'hotel') {
+      hotelRequest.current += 1;
+      setHotelAddress('');
+      setVerifiedHotel(null);
+      setHotelMatches([]);
+      setHotelError('');
+      setCheckingHotel(false);
+      setNotBooked(false);
     }
     if (stepIndex === 0) {
       onBack();
