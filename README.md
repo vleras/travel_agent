@@ -7,11 +7,11 @@ Thesis project: an agentic travel planner that combines a **reason → act → o
 ```bash
 npm install
 cp .env.example .env
-# Optional: add VITE_GEMINI_API_KEY from https://ai.google.dev/
+# Add DEEPSEEK_API_KEY to .env (server-side only)
 npm run dev
 ```
 
-Without a Gemini key, the agent uses curated attractions for Rome, Tokyo, Barcelona, Bangkok, and Paris — the full clustering / scoring / revision loop still runs.
+Without an AI key, the agent uses curated attractions for Rome, Tokyo, Barcelona, Bangkok, and Paris — the full clustering / scoring / revision loop still runs.
 
 ## Stack (zero-cost APIs)
 
@@ -19,7 +19,7 @@ Without a Gemini key, the agent uses curated attractions for Rome, Tokyo, Barcel
 |--------|----------|
 | Geocoding | Nominatim (OpenStreetMap) |
 | Routing sample | OSRM public demo |
-| Attractions LLM | Gemini (optional) |
+| Attractions LLM | DeepSeek (preferred), Gemini or curated fallback |
 | Maps | Leaflet + OSM tiles |
 | Place photos | Wikipedia thumbnails (fallback: LoremFlickr) |
 
@@ -29,7 +29,7 @@ Without a Gemini key, the agent uses curated attractions for Rome, Tokyo, Barcel
 2. Questions: days (number or range), dates, hotel/base, interests, pace, daily schedule (start + breakfast)
 3. Agent loop (visible in UI):
    - **Reason** — geocode city + hotel/base
-   - **Act** — generate attractions (Gemini or fallback)
+   - **Act** — generate attractions (DeepSeek, Gemini or fallback)
    - **Observe** — cluster by day, score compactness
    - **Revise** — move outlier stops if score < 70
 4. Trip view: day tabs, map with route, stop photos + list, schedule controls, compactness badges, thesis metrics
@@ -52,3 +52,11 @@ src/
   types/
   styles/
 ```
+
+## DeepSeek integration
+
+DeepSeek generates attractions through `POST /api/deepseek/attractions`. The Vite development and preview servers run this endpoint; the API key stays on the server. Set `DEEPSEEK_MODEL` to override the default model. Restart Vite after changing `.env`.
+
+For production, deploy `server/deepseek.ts` in a Node backend and route `/api/deepseek/attractions` to it, passing server environment variables to `deepseekHandler`. A static `dist` deployment alone cannot run this endpoint. Protect a public deployment with authentication and rate limits to control API spending.
+
+The travel chatbot uses local intent handlers; this integration powers attraction recommendations. Explicit must-visit selections retain the existing behavior and skip AI-generated filler.

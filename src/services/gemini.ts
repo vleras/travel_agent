@@ -31,23 +31,18 @@ Return ONLY a valid JSON array with no preamble:
 }
 
 function parseAttractions(text: string): Attraction[] | null {
-  const cleaned = text
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
   try {
-    const parsed = JSON.parse(cleaned) as Attraction[];
-    if (!Array.isArray(parsed) || !parsed.length) return null;
-    return parsed.filter((a) => a.name && a.typical_visit_duration_minutes);
+    const parsed: unknown = JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim());
+    const items = Array.isArray(parsed) ? parsed : (parsed as { attractions?: unknown })?.attractions;
+    if (!Array.isArray(items)) return null;
+    const valid = items.filter((a): a is Attraction => a != null &&
+      typeof a.name === 'string' && a.name.trim().length > 0 &&
+      typeof a.category === 'string' && typeof a.description === 'string' &&
+      typeof a.why_visit === 'string' && typeof a.typical_visit_duration_minutes === 'number' &&
+      Number.isFinite(a.typical_visit_duration_minutes) && a.typical_visit_duration_minutes > 0);
+    return valid.length ? valid : null;
   } catch {
-    const match = cleaned.match(/\[[\s\S]*\]/);
-    if (!match) return null;
-    try {
-      return JSON.parse(match[0]) as Attraction[];
-    } catch {
-      return null;
-    }
+    return null;
   }
 }
 
@@ -64,7 +59,23 @@ export async function generateAttractions(
   city: string,
   interests: string[],
   customPreferences?: string | null,
-): Promise<{ attractions: Attraction[]; latencyMs: number; source: 'gemini' | 'fallback' }> {
+): Promise<{ attractions: Attraction[]; latencyMs: number; source: 'deepseek' | 'gemini' | 'fallback' }> {
+  const deepseekStarted = performance.now();
+  try {
+    const response = await fetch('/api/deepseek/attractions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city, interests, customPreferences }),
+      signal: AbortSignal.timeout(65000),
+    });
+    if (response.ok) {
+      const attractions = parseAttractions(JSON.stringify(await response.json()));
+      const filtered = attractions ? filterByInterests(attractions, interests) : [];
+      if (filtered.length) return { attractions: filtered, latencyMs: Math.round(performance.now() - deepseekStarted), source: 'deepseek' };
+    }
+  } catch {
+    // Keep the itinerary available if DeepSeek is unreachable.
+  }
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 
   if (!apiKey) {

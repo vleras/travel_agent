@@ -670,7 +670,7 @@ export async function runTravelAgent(
   );
 
   let attractions: Attraction[] = [];
-  let source: 'gemini' | 'fallback' | 'picks' = 'picks';
+  let source: 'deepseek' | 'gemini' | 'fallback' | 'picks' = 'picks';
 
   if (mustVisitAttractions.length > 0) {
     // Traveler picks drive the plan — skip filler recommendations.
@@ -684,8 +684,8 @@ export async function runTravelAgent(
     );
     attractions = generated.attractions;
     geminiMs += generated.latencyMs;
-    if (generated.source === 'gemini') apiCalls += 1;
-    source = generated.source === 'gemini' ? 'gemini' : 'fallback';
+    if (generated.source !== 'fallback') apiCalls += 1;
+    source = generated.source;
   }
 
   const mergedAttractions =
