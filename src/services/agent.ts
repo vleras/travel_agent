@@ -632,7 +632,11 @@ export async function runTravelAgent(
   let hotelLon: number | null = null;
   let hotelName: string | null = null;
 
-  if (input.hotel_address) {
+  if (input.hotel_location && input.hotel_address) {
+    hotelLat = input.hotel_location.lat;
+    hotelLon = input.hotel_location.lon;
+    hotelName = input.hotel_location.display_name;
+  } else if (input.hotel_address) {
     const hotelGeo = await geocode(
       `${input.hotel_address}, ${input.destination_city}`,
     );

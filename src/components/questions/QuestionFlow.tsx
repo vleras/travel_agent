@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { destinationRecommendations, withoutFoodPlaces } from '../../data/destinations';
 import { fallbackAttractions } from '../../data/fallbackAttractions';
 import { parseDaysInput } from '../../data/scheduleOptions';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
-import { autocompletePlaces, type GeocodeResult } from '../../services/nominatim';
+import { autocompletePlaces, findAccommodation, type GeocodeResult } from '../../services/nominatim';
 import {
   loadQuestionState,
   saveQuestionState,
@@ -161,23 +161,43 @@ export function QuestionFlow({
   const steps = path === 'A' ? STEPS_A : STEPS_B;
   const saved = useMemo(() => loadQuestionState(path), [path]);
   const weekend = useMemo(() => nextWeekendStart(), []);
-  const defaultDays = selectedDestination?.suggestedDays ?? 4;
 
   const [stepIndex, setStepIndex] = useState(() =>
-    Math.min(saved?.stepIndex ?? 0, steps.length - 1),
+    Math.min(saved?.stepIndex ?? 0, steps.indexOf('days')),
   );
   const step = steps[stepIndex];
 
   const [city, setCity] = useState(
     () => saved?.city ?? selectedDestination?.city ?? '',
   );
-  const [daysText, setDaysText] = useState(
-    () => saved?.daysText ?? String(defaultDays),
-  );
+  const [daysText, setDaysText] = useState('');
   const [hotelAddress, setHotelAddress] = useState(
     () => saved?.hotelAddress ?? '',
   );
   const [notBooked, setNotBooked] = useState(() => saved?.notBooked ?? false);
+  const [verifiedHotel, setVerifiedHotel] = useState<GeocodeResult | null>(null);
+  const [hotelMatches, setHotelMatches] = useState<GeocodeResult[]>([]);
+  const [checkingHotel, setCheckingHotel] = useState(false);
+  const [hotelError, setHotelError] = useState('');
+  const hotelRequest = useRef(0);
+
+  async function checkHotel() {
+    const request = ++hotelRequest.current;
+    setCheckingHotel(true);
+    setHotelError('');
+    setHotelMatches([]);
+    try {
+      const matches = await findAccommodation(hotelAddress, city);
+      if (request !== hotelRequest.current) return;
+      setHotelMatches(matches);
+      if (!matches.length) setHotelError(`We couldn’t verify this stay in ${city}. Enter a hotel name or full street address and try again.`);
+    } catch {
+      if (request === hotelRequest.current) setHotelError('Address lookup is unavailable. Please try again.');
+    } finally {
+      if (request === hotelRequest.current) setCheckingHotel(false);
+    }
+  }
+
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>(
     () => saved?.selectedPlaces ?? [],
   );
@@ -191,7 +211,6 @@ export function QuestionFlow({
       path,
       stepIndex,
       city,
-      daysText,
       hotelAddress,
       notBooked,
       selectedPlaces,
@@ -200,7 +219,6 @@ export function QuestionFlow({
     path,
     stepIndex,
     city,
-    daysText,
     hotelAddress,
     notBooked,
     selectedPlaces,
@@ -224,7 +242,7 @@ export function QuestionFlow({
   function canContinue(): boolean {
     if (step === 'destination') return city.trim().length > 1;
     if (step === 'days') return parsedDays != null;
-    if (step === 'hotel') return hotelAddress.trim().length > 3;
+    if (step === 'hotel') return verifiedHotel != null && !checkingHotel;
     if (step === 'places') {
       const list = placesForCity(city, selectedDestination);
       if (list.length === 0) return true;
@@ -256,7 +274,7 @@ export function QuestionFlow({
   }
 
   function finish() {
-    if (!parsedDays) return;
+    if (!parsedDays || (!notBooked && !verifiedHotel)) return;
     const planningStart = toISODate(weekend);
     const planningEnd = toISODate(addDays(weekend, parsedDays.days - 1));
 
@@ -272,7 +290,8 @@ export function QuestionFlow({
       start_date: planningStart,
       end_date: planningEnd,
       dates_flexible: true,
-      hotel_address: notBooked ? null : hotelAddress.trim(),
+      hotel_address: notBooked ? null : verifiedHotel?.display_name ?? null,
+      hotel_location: notBooked ? null : verifiedHotel,
       suggested_area: notBooked ? 'City Center' : null,
       interests: selectedDestination?.interests ?? [],
       custom_preferences: placeNote,
@@ -378,6 +397,7 @@ export function QuestionFlow({
                   id="days"
                   type="text"
                   inputMode="numeric"
+                  autoComplete="off"
                   value={daysText}
                   placeholder="4 or 3-5"
                   onChange={(e) => setDaysText(e.target.value)}
@@ -411,14 +431,42 @@ export function QuestionFlow({
                 <label htmlFor="hotel">Hotel or address</label>
                 <input
                   id="hotel"
+                  autoComplete="off"
+                  aria-describedby="hotel-validation"
+                  aria-invalid={Boolean(hotelError)}
                   type="text"
                   value={hotelAddress}
                   placeholder="e.g. Via Nazionale 123, Rome"
                   onChange={(e) => {
+                    hotelRequest.current += 1;
+                    setCheckingHotel(false);
+                    setVerifiedHotel(null);
+                    setHotelMatches([]);
+                    setHotelError('');
                     setNotBooked(false);
                     setHotelAddress(e.target.value);
                   }}
                 />
+                <button type="button" className="btn btn-secondary" disabled={checkingHotel || hotelAddress.trim().length < 4} onClick={() => void checkHotel()}>
+                  {checkingHotel ? 'Checking address…' : 'Find address'}
+                </button>
+                <p id="hotel-validation" className="hint" role="status">
+                  {hotelError || (verifiedHotel ? `Verified: ${verifiedHotel.display_name}` : `Find your hotel or address, then select a matching stay in ${city}.`)}
+                </p>
+                {hotelMatches.length > 0 && (
+                  <ul className="suggestions">
+                    {hotelMatches.map((match) => (
+                      <li key={`${match.lat},${match.lon},${match.display_name}`}>
+                        <button type="button" onClick={() => {
+                          setVerifiedHotel(match);
+                          setHotelAddress(match.display_name);
+                          setHotelMatches([]);
+                          setNotBooked(false);
+                        }}>{match.display_name}</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           </>
@@ -531,6 +579,11 @@ export function QuestionFlow({
                 type="button"
                 className="btn btn-ghost"
                 onClick={() => {
+                  hotelRequest.current += 1;
+                  setCheckingHotel(false);
+                  setVerifiedHotel(null);
+                  setHotelMatches([]);
+                  setHotelError('');
                   setNotBooked(true);
                   setHotelAddress('');
                   next();

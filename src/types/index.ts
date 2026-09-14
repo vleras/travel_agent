@@ -44,6 +44,7 @@ export interface TripInput {
   /** User skipped picking exact travel dates. */
   dates_flexible?: boolean;
   hotel_address: string | null;
+  hotel_location?: { lat: number; lon: number; display_name: string } | null;
   suggested_area: string | null;
   interests: Interest[];
   custom_preferences: string | null;

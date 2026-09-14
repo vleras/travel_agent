@@ -2,6 +2,10 @@ export interface GeocodeResult {
   lat: number;
   lon: number;
   display_name: string;
+  boundingbox?: string[];
+  address?: Record<string, string>;
+  type?: string;
+  name?: string;
 }
 
 const CACHE_KEY = 'travel_planner_geocode_v1';
@@ -55,6 +59,7 @@ async function rateLimit() {
 async function nominatimSearch(
   query: string,
   limit: number,
+  options: Record<string, string> = {},
 ): Promise<{ results: GeocodeResult[]; latencyMs: number }> {
   const started = performance.now();
   await rateLimit();
@@ -63,10 +68,13 @@ async function nominatimSearch(
   url.searchParams.set('q', query);
   url.searchParams.set('format', 'json');
   url.searchParams.set('limit', String(limit));
+  url.searchParams.set('addressdetails', '1');
+  for (const [key, value] of Object.entries(options)) url.searchParams.set(key, value);
 
   async function requestOnce(): Promise<Response> {
     return fetch(url.toString(), {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
     });
   }
 
@@ -85,11 +93,19 @@ async function nominatimSearch(
       lat: string;
       lon: string;
       display_name: string;
+      boundingbox?: string[];
+      address?: Record<string, string>;
+      type?: string;
+      name?: string;
     }>;
     const results = data.map((d) => ({
       lat: parseFloat(d.lat),
       lon: parseFloat(d.lon),
       display_name: d.display_name,
+      boundingbox: d.boundingbox,
+      address: d.address,
+      type: d.type,
+      name: d.name,
     }));
     return { results, latencyMs };
   } catch {
@@ -146,4 +162,19 @@ export async function autocompletePlaces(
   if (query.trim().length < 2) return [];
   const { results } = await nominatimSearch(query, 5);
   return results;
+}
+
+/** Explicit search: only accommodation or numbered addresses within the destination. */
+export async function findAccommodation(query: string, city: string): Promise<GeocodeResult[]> {
+  const destination = (await nominatimSearch(city, 1, { featuretype: 'city' })).results[0];
+  if (!destination?.boundingbox) return [];
+  const [south, north, west, east] = destination.boundingbox.map(Number);
+  if (![south, north, west, east].every(Number.isFinite)) return [];
+  const { results } = await nominatimSearch(`${query.trim()}, ${city.trim()}`, 5, {
+    viewbox: `${west},${north},${east},${south}`, bounded: '1',
+  });
+  const stays = new Set(['hotel', 'hostel', 'guest_house', 'apartment', 'apartments', 'motel', 'chalet', 'house', 'residential', 'yes']);
+  return results.filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lon) &&
+    r.lat >= south && r.lat <= north && r.lon >= west && r.lon <= east &&
+    (stays.has(r.type ?? '') || Boolean(r.address?.house_number)));
 }
