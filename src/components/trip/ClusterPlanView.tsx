@@ -682,7 +682,7 @@ export function ClusterPlanView({
               {tripDays}-day plan in {input.destination_city}
             </h1>
             <p className="cluster-chat-hint">
-              Drag cards between days, tap × to remove, then Commit or send the plan to email.
+              Drag cards between days, tap × to remove, then send the plan to email.
             </p>
           </div>
         </div>

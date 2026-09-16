@@ -852,5 +852,5 @@ export function getFallbackAttractions(city: string): Attraction[] {
   const match = Object.keys(fallbackAttractions).find(
     (k) => key.includes(k) || k.includes(key),
   );
-  return match ? fallbackAttractions[match] : fallbackAttractions.rome;
+  return match ? fallbackAttractions[match] : [];
 }

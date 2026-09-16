@@ -3,6 +3,7 @@ import { destinationRecommendations, withoutFoodPlaces } from '../../data/destin
 import { fallbackAttractions } from '../../data/fallbackAttractions';
 import { parseDaysInput } from '../../data/scheduleOptions';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
+import { generateAttractions } from '../../services/gemini';
 import { autocompletePlaces, findAccommodation, type GeocodeResult } from '../../services/nominatim';
 import {
   loadQuestionState,
@@ -203,6 +204,35 @@ export function QuestionFlow({
     null,
   );
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
+  const [generatedPlaces, setGeneratedPlaces] = useState<Attraction[]>([]);
+  const [generatingCity, setGeneratingCity] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const placesRequest = useRef(0);
+
+  async function loadGeneratedPlaces(targetCity = city.trim()) {
+    if (!targetCity) return;
+    const request = ++placesRequest.current;
+    setGeneratingCity(targetCity);
+    setGenerationError(null);
+    try {
+      const generated = await generateAttractions(
+        targetCity,
+        selectedDestination?.interests ?? [],
+        null,
+      );
+      if (request !== placesRequest.current) return;
+      setGeneratedPlaces(generated.attractions);
+      if (!generated.attractions.length) {
+        setGenerationError(`We couldn’t generate attractions for ${targetCity}. Please try again.`);
+      }
+    } catch {
+      if (request === placesRequest.current) {
+        setGenerationError(`We couldn’t generate attractions for ${targetCity}. Please try again.`);
+      }
+    } finally {
+      if (request === placesRequest.current) setGeneratingCity(null);
+    }
+  }
 
   useEffect(() => {
     saveQuestionState({
@@ -231,6 +261,29 @@ export function QuestionFlow({
     return () => window.clearTimeout(handle);
   }, [city, step]);
 
+  useEffect(() => {
+    const targetCity = city.trim();
+    placesRequest.current += 1;
+    setGeneratedPlaces([]);
+    setGenerationError(null);
+    setGeneratingCity(null);
+    setSelectedPlaces([]);
+    if (!targetCity || placesForCity(targetCity, selectedDestination).length >= MIN_PLACE_OPTIONS) {
+      return;
+    }
+
+    // Debounce free-text entry so only the settled destination starts a request.
+    const timer = window.setTimeout(() => {
+      void loadGeneratedPlaces(targetCity);
+    }, 600);
+    return () => {
+      window.clearTimeout(timer);
+      placesRequest.current += 1;
+    };
+    // loadGeneratedPlaces reads only the destination represented by these dependencies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city, selectedDestination]);
+
   const progress = ((stepIndex + 1) / steps.length) * 100;
 
   function canContinue(): boolean {
@@ -238,9 +291,8 @@ export function QuestionFlow({
     if (step === 'days') return parsedDays != null;
     if (step === 'hotel') return verifiedHotel != null && !checkingHotel;
     if (step === 'places') {
-      const list = placesForCity(city, selectedDestination);
-      if (list.length === 0) return true;
-      return selectedPlaces.length > 0;
+      const hasPlaces = placesForCity(city, selectedDestination).length > 0 || generatedPlaces.length > 0;
+      return generatingCity !== city.trim() && hasPlaces && selectedPlaces.length > 0;
     }
     return true;
   }
@@ -252,8 +304,8 @@ export function QuestionFlow({
   }
 
   const availablePlaces = useMemo(
-    () => placesForCity(city, selectedDestination),
-    [city, selectedDestination],
+    () => mergePlaceLists(placesForCity(city, selectedDestination), generatedPlaces.map(attractionToHighlight)),
+    [city, selectedDestination, generatedPlaces],
   );
   const allPlacesSelected =
     availablePlaces.length > 0 &&
@@ -498,10 +550,19 @@ export function QuestionFlow({
             </p>
             <PlacesGuideChat city={city} selectedCount={selectedPlaces.length} />
             <div className="question-body">
-              {availablePlaces.length === 0 ? (
-                <p className="hint" style={{ margin: 0 }}>
-                  No curated list for this city yet — add must-visits in chat after planning, or go back and pick a suggested destination.
+              {generatingCity === city.trim() && availablePlaces.length === 0 ? (
+                <p className="hint" role="status" style={{ margin: 0 }}>
+                  Generating attraction cards for {city}…
                 </p>
+              ) : availablePlaces.length === 0 ? (
+                <div>
+                  <p className="hint" role="alert" style={{ margin: '0 0 12px' }}>
+                    {generationError || `No places are available for ${city} yet.`}
+                  </p>
+                  <button type="button" className="btn btn-secondary" disabled={generatingCity === city.trim()} onClick={() => void loadGeneratedPlaces()}>
+                    Try again
+                  </button>
+                </div>
               ) : (
                 <>
                   <div className="chip-row place-pick-toolbar">
