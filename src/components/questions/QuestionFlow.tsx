@@ -4,7 +4,7 @@ import { fallbackAttractions } from '../../data/fallbackAttractions';
 import { parseDaysInput } from '../../data/scheduleOptions';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
 import { generateAttractions } from '../../services/gemini';
-import { autocompletePlaces, findAccommodation, type GeocodeResult } from '../../services/nominatim';
+import { autocompletePlaces, type GeocodeResult } from '../../services/nominatim';
 import {
   loadQuestionState,
   saveQuestionState,
@@ -15,8 +15,10 @@ import type {
   DestinationHighlight,
   QuestionStep,
   TripInput,
+  TripAccommodation,
 } from '../../types';
 import { PlaceImage } from '../shared/PlaceImage';
+import { AddressSearchMap } from '../shared/AddressSearchMap';
 import { PlacePickDetail } from './PlacePickDetail';
 import '../../styles/questions.css';
 import '../../styles/chat.css';
@@ -172,30 +174,8 @@ export function QuestionFlow({
     () => saved?.city ?? selectedDestination?.city ?? '',
   );
   const [daysText, setDaysText] = useState('');
-  const [hotelAddress, setHotelAddress] = useState('');
   const [notBooked, setNotBooked] = useState(false);
-  const [verifiedHotel, setVerifiedHotel] = useState<GeocodeResult | null>(null);
-  const [hotelMatches, setHotelMatches] = useState<GeocodeResult[]>([]);
-  const [checkingHotel, setCheckingHotel] = useState(false);
-  const [hotelError, setHotelError] = useState('');
-  const hotelRequest = useRef(0);
-
-  async function checkHotel() {
-    const request = ++hotelRequest.current;
-    setCheckingHotel(true);
-    setHotelError('');
-    setHotelMatches([]);
-    try {
-      const matches = await findAccommodation(hotelAddress, city);
-      if (request !== hotelRequest.current) return;
-      setHotelMatches(matches);
-      if (!matches.length) setHotelError(`We couldn’t verify this stay in ${city}. Try the full street address from your booking confirmation. Map listings may use a different hotel name.`);
-    } catch {
-      if (request === hotelRequest.current) setHotelError('Address lookup is unavailable. Please try again.');
-    } finally {
-      if (request === hotelRequest.current) setCheckingHotel(false);
-    }
-  }
+  const [accommodation, setAccommodation] = useState<TripAccommodation | null>(null);
 
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>(
     () => saved?.selectedPlaces ?? [],
@@ -289,7 +269,7 @@ export function QuestionFlow({
   function canContinue(): boolean {
     if (step === 'destination') return city.trim().length > 1;
     if (step === 'days') return parsedDays != null;
-    if (step === 'hotel') return verifiedHotel != null && !checkingHotel;
+    if (step === 'hotel') return accommodation != null;
     if (step === 'places') {
       const hasPlaces = placesForCity(city, selectedDestination).length > 0 || generatedPlaces.length > 0;
       return generatingCity !== city.trim() && hasPlaces && selectedPlaces.length > 0;
@@ -320,7 +300,7 @@ export function QuestionFlow({
   }
 
   function finish() {
-    if (!parsedDays || (!notBooked && !verifiedHotel)) return;
+    if (!parsedDays || (!notBooked && !accommodation)) return;
     const planningStart = toISODate(weekend);
     const planningEnd = toISODate(addDays(weekend, parsedDays.days - 1));
 
@@ -336,8 +316,9 @@ export function QuestionFlow({
       start_date: planningStart,
       end_date: planningEnd,
       dates_flexible: true,
-      hotel_address: notBooked ? null : verifiedHotel?.display_name ?? null,
-      hotel_location: notBooked ? null : verifiedHotel,
+      hotel_address: notBooked ? null : accommodation?.address ?? null,
+      hotel_location: notBooked || !accommodation ? null : { lat: accommodation.latitude, lon: accommodation.longitude, display_name: accommodation.address },
+      accommodation: notBooked ? null : accommodation,
       suggested_area: notBooked ? 'City Center' : null,
       interests: selectedDestination?.interests ?? [],
       custom_preferences: placeNote,
@@ -358,19 +339,24 @@ export function QuestionFlow({
     setStepIndex((i) => i + 1);
   }
 
+  useEffect(() => {
+    function continueOnEnter(event: KeyboardEvent) {
+      if (event.key !== 'Enter' || event.repeat || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('button, a, textarea, [role="option"]')) return;
+      if (step === 'places' || viewingPlace || !canContinue()) return;
+      event.preventDefault();
+      if (step === 'hotel') setNotBooked(false);
+      next();
+    }
+    document.addEventListener('keydown', continueOnEnter);
+    return () => document.removeEventListener('keydown', continueOnEnter);
+  });
+
   function prev() {
     if (viewingPlace) {
       setViewingPlace(null);
       return;
-    }
-    if (step === 'hotel' || steps[stepIndex - 1] === 'hotel') {
-      hotelRequest.current += 1;
-      setHotelAddress('');
-      setVerifiedHotel(null);
-      setHotelMatches([]);
-      setHotelError('');
-      setCheckingHotel(false);
-      setNotBooked(false);
     }
     if (stepIndex === 0) {
       onBack();
@@ -482,47 +468,18 @@ export function QuestionFlow({
               We anchor every day to your accommodation — or the city center if you haven’t booked.
             </p>
             <div className="question-body">
-              <div className="field">
-                <label htmlFor="hotel">Hotel or address</label>
-                <input
-                  id="hotel"
-                  autoComplete="off"
-                  aria-describedby="hotel-validation"
-                  aria-invalid={Boolean(hotelError)}
-                  type="text"
-                  value={hotelAddress}
-                  placeholder="e.g. Via Nazionale 123, Rome"
-                  onChange={(e) => {
-                    hotelRequest.current += 1;
-                    setCheckingHotel(false);
-                    setVerifiedHotel(null);
-                    setHotelMatches([]);
-                    setHotelError('');
-                    setNotBooked(false);
-                    setHotelAddress(e.target.value);
-                  }}
-                />
-                <button type="button" className="btn btn-secondary" disabled={checkingHotel || hotelAddress.trim().length < 4} onClick={() => void checkHotel()}>
-                  {checkingHotel ? 'Checking address…' : 'Find address'}
-                </button>
-                <p id="hotel-validation" className="hint" role="status">
-                  {hotelError || (verifiedHotel ? `Verified: ${verifiedHotel.display_name}` : `Find your hotel or address, then select a matching stay in ${city}.`)}
-                </p>
-                {hotelMatches.length > 0 && (
-                  <ul className="suggestions">
-                    {hotelMatches.map((match) => (
-                      <li key={`${match.lat},${match.lon},${match.display_name}`}>
-                        <button type="button" onClick={() => {
-                          setVerifiedHotel(match);
-                          setHotelAddress(match.display_name);
-                          setHotelMatches([]);
-                          setNotBooked(false);
-                        }}>{match.display_name}</button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <AddressSearchMap
+                city={city}
+                value={accommodation}
+                onChange={() => {
+                  setAccommodation(null);
+                  setNotBooked(false);
+                }}
+                onConfirm={(selection) => {
+                  setAccommodation(selection);
+                  setNotBooked(false);
+                }}
+              />
             </div>
           </>
         )}
@@ -643,13 +600,8 @@ export function QuestionFlow({
                 type="button"
                 className="btn btn-ghost"
                 onClick={() => {
-                  hotelRequest.current += 1;
-                  setCheckingHotel(false);
-                  setVerifiedHotel(null);
-                  setHotelMatches([]);
-                  setHotelError('');
+                  setAccommodation(null);
                   setNotBooked(true);
-                  setHotelAddress('');
                   next();
                 }}
               >

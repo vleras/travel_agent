@@ -35,6 +35,13 @@ export interface DestinationCard {
   highlights: DestinationHighlight[];
 }
 
+export interface TripAccommodation {
+  address: string;
+  latitude: number;
+  longitude: number;
+  placeId?: string;
+}
+
 export interface TripInput {
   destination_city: string;
   trip_length_days: number;
@@ -45,6 +52,7 @@ export interface TripInput {
   dates_flexible?: boolean;
   hotel_address: string | null;
   hotel_location?: { lat: number; lon: number; display_name: string } | null;
+  accommodation?: TripAccommodation | null;
   suggested_area: string | null;
   interests: Interest[];
   custom_preferences: string | null;
