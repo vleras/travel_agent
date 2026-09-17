@@ -20,6 +20,8 @@ import type {
 import { PlaceImage } from '../shared/PlaceImage';
 import { AddressSearchMap } from '../shared/AddressSearchMap';
 import { PlacePickDetail } from './PlacePickDetail';
+import { InteractiveTripChat, type TripChatState } from './InteractiveTripChat';
+import type { TripChatData } from '../../services/tripChatExtraction';
 import '../../styles/questions.css';
 import '../../styles/chat.css';
 
@@ -174,6 +176,9 @@ export function QuestionFlow({
     () => saved?.city ?? selectedDestination?.city ?? '',
   );
   const [daysText, setDaysText] = useState('');
+  const [chatMode, setChatMode] = useState(true);
+  const [chatData, setChatData] = useState<TripChatData | null>(null);
+  const [chatState, setChatState] = useState<TripChatState | null>(null);
   const [notBooked, setNotBooked] = useState(false);
   const [accommodation, setAccommodation] = useState<TripAccommodation | null>(null);
 
@@ -197,7 +202,7 @@ export function QuestionFlow({
     try {
       const generated = await generateAttractions(
         targetCity,
-        selectedDestination?.interests ?? [],
+        chatData?.interests ?? selectedDestination?.interests ?? [],
         null,
       );
       if (request !== placesRequest.current) return;
@@ -262,7 +267,7 @@ export function QuestionFlow({
     };
     // loadGeneratedPlaces reads only the destination represented by these dependencies.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, selectedDestination]);
+  }, [city, selectedDestination, chatData?.interests]);
 
   const progress = ((stepIndex + 1) / steps.length) * 100;
 
@@ -300,7 +305,7 @@ export function QuestionFlow({
   }
 
   function finish() {
-    if (!parsedDays || (!notBooked && !accommodation)) return;
+    if (!parsedDays || (!chatData && !notBooked && !accommodation)) return;
     const planningStart = toISODate(weekend);
     const planningEnd = toISODate(addDays(weekend, parsedDays.days - 1));
 
@@ -319,9 +324,10 @@ export function QuestionFlow({
       hotel_address: notBooked ? null : accommodation?.address ?? null,
       hotel_location: notBooked || !accommodation ? null : { lat: accommodation.latitude, lon: accommodation.longitude, display_name: accommodation.address },
       accommodation: notBooked ? null : accommodation,
-      suggested_area: notBooked ? 'City Center' : null,
-      interests: selectedDestination?.interests ?? [],
-      custom_preferences: placeNote,
+      budget: chatData?.budget ?? null,
+      suggested_area: chatData?.accommodationPreference ?? (notBooked ? 'City Center' : null),
+      interests: chatData?.interests ?? selectedDestination?.interests ?? [],
+      custom_preferences: [placeNote, chatData?.travelDates ? `Travel dates: ${chatData.travelDates}` : null, ...(chatData?.extraPreferences ?? [])].filter(Boolean).join('; ') || null,
       must_visit_places: selectedPlaces,
       pace: DEFAULT_PACE,
       day_start_time: '09:00',
@@ -363,6 +369,28 @@ export function QuestionFlow({
       return;
     }
     setStepIndex((i) => i - 1);
+  }
+
+  if (chatMode && step !== 'places') {
+    return (
+      <div className="questions">
+        <div className="questions-header"><button type="button" className="btn btn-ghost" onClick={onBack}>← Back</button><div className="brand-mark">Travel Agent</div></div>
+        <InteractiveTripChat
+          initialDestination={(selectedDestination?.city ?? city) || undefined}
+          onPreferForm={() => setChatMode(false)}
+          savedState={chatState}
+          onStateChange={setChatState}
+          onReady={(trip) => {
+            setChatData(trip);
+            setCity(trip.destination ?? city);
+            setDaysText(trip.tripLength?.range ? `${trip.tripLength.range[0]}-${trip.tripLength.range[1]}` : String(trip.tripLength?.days ?? ''));
+            setAccommodation(trip.accommodation);
+            setNotBooked(!trip.hasAccommodation);
+            setStepIndex(steps.indexOf('places'));
+          }}
+        />
+      </div>
+    );
   }
 
   return (
