@@ -41,18 +41,28 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     setInput('');
     setError('');
 
+    const normalized = content.toLowerCase().replace(/[.!?]+$/g, '').trim();
+    const uncertain = /^(?:not sure|unsure|i (?:do not|don't|dont) know|idk|no idea|whatever you recommend|you (?:choose|decide)|any)$/.test(normalized);
+    if (!data.tripLength && data.destination && uncertain) {
+      const updated = { ...data, tripLength: { days: 4, range: [3, 4] as [number, number], flexible: true } };
+      setData(updated);
+      setMessages([...nextMessages, { role: 'assistant', content: `No problem — I’d suggest 3–4 days for ${data.destination}, which gives you enough time for the highlights without rushing. Have you already booked a place to stay?` }]);
+      return;
+    }
+
     if (data.hasAccommodation === null) {
-      const normalized = content.toLowerCase().replace(/[.!?]+$/g, '').trim();
       const negativeBooking = /^(?:no|nope|nah|not yet|i (?:have not|haven't|havent) booked(?: anything| a place)?(?: yet)?|nothing booked(?: yet)?)$/.test(normalized);
       const positiveBooking = /^(?:yes|yeah|yep|i (?:have|already have)|i(?:'ve|ve) booked(?: a place| somewhere)?)$/.test(normalized);
       if (negativeBooking || positiveBooking) {
         const updated = { ...data, hasAccommodation: positiveBooking };
+        const readyWithoutAddress = negativeBooking && Boolean(updated.destination && updated.tripLength);
         setData(updated);
+        setComplete(readyWithoutAddress);
         setMessages([...nextMessages, {
           role: 'assistant',
           content: positiveBooking
             ? 'Okay — please confirm the address below. I use it to anchor each day, estimate travel time, and keep your itinerary compact.'
-            : 'Okay — no problem. What kinds of activities interest you most, such as history, food, nature, beaches, nightlife, or shopping?',
+            : 'Okay — no problem. I have everything I need, so you can continue to the place suggestions.',
         }]);
         return;
       }
@@ -73,7 +83,14 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       setComplete(result.complete);
       setMessages((current) => [...current, { role: 'assistant', content: result.assistantMessage }]);
     } catch {
-      setError('I couldn’t process that answer. Please try again.');
+      const clarification = !data.destination
+        ? 'I didn’t quite catch the destination. Which city, region, or country would you like to visit?'
+        : !data.tripLength
+          ? `No problem — I’d usually suggest 3–4 days for ${data.destination}. Would that work for you?`
+          : data.hasAccommodation === null
+            ? 'I didn’t quite catch that. Have you already booked a place to stay? You can answer yes or no.'
+            : 'I didn’t quite understand that, but we can keep going. Could you rephrase it in a few words?';
+      setMessages((current) => [...current, { role: 'assistant', content: clarification }]);
     } finally {
       setLoading(false);
     }
@@ -100,7 +117,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
           <p><strong>Confirm where you’re staying</strong><br />We use this location to anchor each day, estimate travel distances, and keep your itinerary compact.</p>
           <AddressSearchMap city={data.destination} value={null} onConfirm={(accommodation) => {
             const updated = { ...data, accommodation };
-            const isReady = Boolean(updated.destination && updated.tripLength && updated.interests.length && updated.budget);
+            const isReady = Boolean(updated.destination && updated.tripLength);
             setData(updated);
             setComplete(isReady);
             setMessages((current) => [...current, { role: 'assistant', content: `Location confirmed. I’ll use ${accommodation.address} as the starting point for your daily routes.` }]);

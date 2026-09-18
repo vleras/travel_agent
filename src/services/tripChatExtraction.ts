@@ -42,11 +42,12 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   }
   data.interests = Array.isArray(data.interests) ? data.interests.filter((item): item is Interest => allowedInterests.has(item)) : [];
   data.extraPreferences = Array.isArray(data.extraPreferences) ? data.extraPreferences.filter((v): v is string => typeof v === 'string').slice(0, 10) : [];
-  result.complete = Boolean(data.destination?.trim() && data.tripLength && data.hasAccommodation !== null && (!data.hasAccommodation || Boolean(data.accommodation)) && data.interests.length && data.budget?.trim());
+  result.complete = Boolean(data.destination?.trim() && data.tripLength && data.hasAccommodation !== null && (!data.hasAccommodation || Boolean(data.accommodation)));
   if (result.complete) {
     const duration = data.tripLength?.range ? `${data.tripLength.range[0]}–${data.tripLength.range[1]} days` : `${data.tripLength?.days} days`;
     result.missing = [];
-    result.assistantMessage = `Great — I have everything I need: ${duration} in ${data.destination}, ${data.hasAccommodation ? data.accommodation?.address : 'no booked accommodation yet'}, interests in ${data.interests.join(', ')}, and a ${data.budget} budget. Your trip is ready for attraction choices.`;
+    const extras = [data.interests.length ? `interests in ${data.interests.join(', ')}` : '', data.budget ? `${data.budget} budget` : ''].filter(Boolean).join(', ');
+    result.assistantMessage = `Great — I have everything I need: ${duration} in ${data.destination}${extras ? `, ${extras}` : ''}. Your trip is ready for attraction choices.`;
   }
   return result;
 }
