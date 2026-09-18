@@ -72,6 +72,7 @@ export default function App() {
     setError(null);
     setProgress({ step: 'idle', message: '' });
     setChatNotes([]);
+    setHideGlobalChat(false);
   }, []);
 
   async function startAgent(tripInput: TripInput) {
@@ -127,7 +128,11 @@ export default function App() {
       {screen === 'questions' && path === 'B' && !picked && (
         <DestinationPicker
           onBack={resetToEntry}
-          onSelect={(dest) => setPicked(dest)}
+          onSelect={(dest) => {
+            clearQuestionState();
+            setChatNotes([]);
+            setPicked(dest);
+          }}
         />
       )}
 
@@ -137,6 +142,8 @@ export default function App() {
           selectedDestination={picked}
           onBack={() => {
             if (path === 'B' && picked) {
+              clearQuestionState();
+              setChatNotes([]);
               setPicked(null);
               return;
             }
