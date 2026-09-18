@@ -18,11 +18,19 @@ export interface TripChatResult { assistantMessage: string; data: TripChatData; 
 const allowedInterests = new Set<Interest>(['museums','food','art','nature','nightlife','shopping','beach','architecture','photography']);
 
 export async function extractTripChat(messages: TripChatMessage[], current: TripChatData): Promise<TripChatResult> {
-  const response = await fetch('/api/deepseek/trip-chat', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, current }), signal: AbortSignal.timeout(65000),
-  });
-  if (!response.ok) throw new Error('Trip chat request failed');
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await fetch('/api/deepseek/trip-chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, current }), signal: AbortSignal.timeout(65000),
+      });
+      if (response.ok || response.status < 500) break;
+    } catch {
+      if (attempt === 1) throw new Error('Trip chat request failed');
+    }
+  }
+  if (!response?.ok) throw new Error('Trip chat request failed');
   const result = await response.json() as TripChatResult;
   const data = result.data;
   data.accommodation = current.accommodation ?? null;

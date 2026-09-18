@@ -39,8 +39,26 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     const nextMessages: TripChatMessage[] = [...messages, { role: 'user', content }];
     setMessages(nextMessages);
     setInput('');
-    setLoading(true);
     setError('');
+
+    if (data.hasAccommodation === null) {
+      const normalized = content.toLowerCase().replace(/[.!?]+$/g, '').trim();
+      const negativeBooking = /^(?:no|nope|nah|not yet|i (?:have not|haven't|havent) booked(?: anything| a place)?(?: yet)?|nothing booked(?: yet)?)$/.test(normalized);
+      const positiveBooking = /^(?:yes|yeah|yep|i (?:have|already have)|i(?:'ve|ve) booked(?: a place| somewhere)?)$/.test(normalized);
+      if (negativeBooking || positiveBooking) {
+        const updated = { ...data, hasAccommodation: positiveBooking };
+        setData(updated);
+        setMessages([...nextMessages, {
+          role: 'assistant',
+          content: positiveBooking
+            ? 'Okay — please confirm the address below. I use it to anchor each day, estimate travel time, and keep your itinerary compact.'
+            : 'Okay — no problem. What kinds of activities interest you most, such as history, food, nature, beaches, nightlife, or shopping?',
+        }]);
+        return;
+      }
+    }
+
+    setLoading(true);
     try {
       const result = await extractTripChat(nextMessages, data);
       if (result.complete && result.data.destination) {

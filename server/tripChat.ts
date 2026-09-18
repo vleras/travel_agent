@@ -14,7 +14,9 @@ export async function tripChatHandler(req: IncomingMessage, res: ServerResponse,
       raw += chunk;
       if (raw.length > 50000) return send(413, { error: 'Conversation too large' });
     }
-    const body = JSON.parse(raw) as { messages?: unknown; current?: unknown };
+    let body: { messages?: unknown; current?: unknown };
+    try { body = JSON.parse(raw) as { messages?: unknown; current?: unknown }; }
+    catch { return send(400, { error: 'Invalid request JSON' }); }
     if (!Array.isArray(body.messages) || body.messages.length > 40) return send(400, { error: 'Invalid conversation' });
     const messages = body.messages.filter((m): m is { role: 'user' | 'assistant'; content: string } =>
       Boolean(m) && typeof m === 'object' && ['user', 'assistant'].includes((m as { role?: string }).role ?? '') && typeof (m as { content?: unknown }).content === 'string' && (m as { content: string }).content.length <= 4000,
@@ -40,10 +42,19 @@ export async function tripChatHandler(req: IncomingMessage, res: ServerResponse,
     const upstream = await response.json() as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> };
     const choice = upstream.choices?.[0];
     if (!choice?.message?.content || choice.finish_reason === 'length') return send(502, { error: 'Incomplete response' });
-    const result = JSON.parse(choice.message.content) as Record<string, unknown>;
+    const content = choice.message.content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    let result: Record<string, unknown>;
+    try {
+      result = JSON.parse(content) as Record<string, unknown>;
+    } catch {
+      const object = content.match(/\{[\s\S]*\}/)?.[0];
+      if (!object) return send(502, { error: 'DeepSeek returned invalid JSON' });
+      try { result = JSON.parse(object) as Record<string, unknown>; }
+      catch { return send(502, { error: 'DeepSeek returned invalid JSON' }); }
+    }
     if (typeof result.assistantMessage !== 'string' || typeof result.data !== 'object' || !result.data) return send(502, { error: 'Invalid response' });
     return send(200, result);
-  } catch (error) {
-    return send(error instanceof SyntaxError ? 400 : 502, { error: 'Unable to continue trip chat' });
+  } catch {
+    return send(502, { error: 'Unable to continue trip chat' });
   }
 }
