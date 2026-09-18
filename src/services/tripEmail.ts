@@ -1,5 +1,19 @@
-import { minutesToLabel } from './geo';
+import { haversineKm } from './geo';
 import type { DayItinerary, ItineraryStop, TripInput } from '../types';
+
+interface TripBaseLocation {
+  lat: number;
+  lon: number;
+}
+
+function distanceFromBaseLabel(
+  stop: ItineraryStop,
+  base: TripBaseLocation,
+): string {
+  const distanceKm = haversineKm(base.lat, base.lon, stop.lat, stop.lon);
+  if (distanceKm < 0.1) return '< 0.1 km from base';
+  return `${distanceKm.toFixed(1)} km from base`;
+}
 
 /** Google Maps pin for a stop (lat/lon). */
 export function googleMapsUrl(stop: Pick<ItineraryStop, 'lat' | 'lon' | 'name'>): string {
@@ -10,6 +24,7 @@ export function googleMapsUrl(stop: Pick<ItineraryStop, 'lat' | 'lon' | 'name'>)
 export function buildTripEmailBody(
   input: TripInput,
   itinerary: DayItinerary[],
+  base: TripBaseLocation,
 ): string {
   const lines: string[] = [
     `Your trip to ${input.destination_city}`,
@@ -32,7 +47,7 @@ export function buildTripEmailBody(
       // FormSubmit escapes HTML, so we can't wrap the name in <a>.
       // Put the Maps URL right after the name (Gmail linkifies the URL).
       lines.push(
-        `  • ${stop.name} ${googleMapsUrl(stop)} — ${minutesToLabel(stop.duration_min)}`,
+        `  • ${stop.name} ${googleMapsUrl(stop)} — ${distanceFromBaseLabel(stop, base)}`,
       );
     }
     lines.push('');
@@ -42,9 +57,13 @@ export function buildTripEmailBody(
   return lines.join('\n');
 }
 
-export function buildTripEmail(input: TripInput, itinerary: DayItinerary[]) {
+export function buildTripEmail(
+  input: TripInput,
+  itinerary: DayItinerary[],
+  base: TripBaseLocation,
+) {
   const subject = `Your ${itinerary.length}-day plan for ${input.destination_city}`;
-  const body = buildTripEmailBody(input, itinerary);
+  const body = buildTripEmailBody(input, itinerary, base);
   return { subject, body };
 }
 
@@ -61,13 +80,14 @@ export async function sendTripPlanEmail(
   to: string,
   input: TripInput,
   itinerary: DayItinerary[],
+  base: TripBaseLocation,
 ): Promise<SendTripEmailResult> {
   const trimmed = to.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
     return { ok: false, error: 'Enter a valid email address.' };
   }
 
-  const { subject, body } = buildTripEmail(input, itinerary);
+  const { subject, body } = buildTripEmail(input, itinerary, base);
 
   try {
     const res = await fetch(

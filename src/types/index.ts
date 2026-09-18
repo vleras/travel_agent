@@ -59,6 +59,8 @@ export interface TripInput {
   custom_preferences: string | null;
   /** Places the traveler explicitly picked to visit. */
   must_visit_places?: string[];
+  /** Full selected-place records, including generated visit durations. */
+  must_visit_attractions?: Attraction[];
   pace: Pace;
   day_start_time: string;
   breakfast_time: BreakfastOption;

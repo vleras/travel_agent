@@ -62,7 +62,8 @@ export function minutesToLabel(mins: number): string {
   if (mins < 60) return `${mins} min`;
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return m === 0 ? `${h} hr${h > 1 ? 's' : ''}` : `${h}.${Math.round(m / 6)} hrs`;
+  const hours = `${h} hr${h > 1 ? 's' : ''}`;
+  return m === 0 ? hours : `${hours} ${m} min`;
 }
 
 export function paceStopsPerDay(pace: 'relaxed' | 'balanced' | 'packed'): number {

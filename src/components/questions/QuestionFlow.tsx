@@ -56,13 +56,17 @@ function attractionToHighlight(a: Attraction): DestinationHighlight {
   };
 }
 
-function curatedPlacesForCity(city: string): DestinationHighlight[] {
+function curatedAttractionsForCity(city: string): Attraction[] {
   const key = city.toLowerCase().trim();
   const match = Object.keys(fallbackAttractions).find(
     (k) => key.includes(k) || k.includes(key),
   );
   if (!match) return [];
-  return withoutFoodPlaces(fallbackAttractions[match]).map(attractionToHighlight);
+  return fallbackAttractions[match];
+}
+
+function curatedPlacesForCity(city: string): DestinationHighlight[] {
+  return withoutFoodPlaces(curatedAttractionsForCity(city)).map(attractionToHighlight);
 }
 
 function mergePlaceLists(
@@ -320,6 +324,13 @@ export function QuestionFlow({
       selectedPlaces.length > 0
         ? `Must-visit places: ${selectedPlaces.join(', ')}`
         : null;
+    const curatedAttractions = curatedAttractionsForCity(city);
+    const selectedAttractions = selectedPlaces.flatMap((name) => {
+      const normalized = name.trim().toLowerCase();
+      const match = generatedPlaces.find((place) => place.name.trim().toLowerCase() === normalized) ??
+        curatedAttractions.find((place) => place.name.trim().toLowerCase() === normalized);
+      return match ? [{ ...match }] : [];
+    });
 
     onComplete({
       destination_city: city.trim(),
@@ -336,6 +347,7 @@ export function QuestionFlow({
       interests: chatData?.interests ?? selectedDestination?.interests ?? [],
       custom_preferences: [placeNote, chatData?.travelDates ? `Travel dates: ${chatData.travelDates}` : null, ...(chatData?.extraPreferences ?? [])].filter(Boolean).join('; ') || null,
       must_visit_places: selectedPlaces,
+      must_visit_attractions: selectedAttractions,
       pace: DEFAULT_PACE,
       day_start_time: '09:00',
       breakfast_time: 'skip',

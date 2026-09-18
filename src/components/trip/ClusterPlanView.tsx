@@ -271,6 +271,7 @@ export function ClusterPlanView({
       trimmed,
       input,
       itineraryRef.current,
+      { lat: baseLat, lon: baseLon },
     );
     setEmailSending(false);
 

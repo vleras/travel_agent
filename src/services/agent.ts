@@ -50,10 +50,13 @@ function namesMatch(a: string, b: string): boolean {
 function resolveMustVisitAttractions(
   city: string,
   names: string[],
+  selected: Attraction[] = [],
 ): Attraction[] {
   if (!names.length) return [];
   const curated = getFallbackAttractions(city);
   return names.map((name) => {
+    const supplied = selected.find((a) => namesMatch(a.name, name));
+    if (supplied) return { ...supplied, name: supplied.name };
     const match = curated.find((a) => namesMatch(a.name, name));
     if (match) return { ...match, name: match.name };
     return {
@@ -75,33 +78,72 @@ function clusterCentroid(
   };
 }
 
-/** Nearest-neighbor tour starting from an anchor (usually hotel/base). */
-function orderByNearestNeighbor(
-  stops: ScoredAttraction[],
-  startLat: number,
-  startLon: number,
-): ScoredAttraction[] {
-  const remaining = [...stops];
-  const ordered: ScoredAttraction[] = [];
-  let lat = startLat;
-  let lon = startLon;
+/** Sum of the direct distances between every pair of stops in one day. */
+function clusterSpreadKm(stops: ScoredAttraction[]): number {
+  let spread = 0;
+  for (let i = 0; i < stops.length; i++) {
+    for (let j = i + 1; j < stops.length; j++) {
+      spread += haversineKm(stops[i].lat, stops[i].lon, stops[j].lat, stops[j].lon);
+    }
+  }
+  return spread;
+}
 
-  while (remaining.length) {
-    let bestIdx = 0;
-    let bestDist = Infinity;
-    for (let i = 0; i < remaining.length; i++) {
-      const dist = haversineKm(lat, lon, remaining[i].lat, remaining[i].lon);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIdx = i;
+/**
+ * Greedy centroid assignment can strand two stops on opposite sides of a
+ * cluster boundary. Repeatedly apply the best cross-day swap until no swap
+ * makes the two affected days geographically tighter.
+ */
+function refineClustersBySwap(
+  source: ScoredAttraction[][],
+): ScoredAttraction[][] {
+  const clusters = source.map((day) => [...day]);
+  const maxPasses = Math.max(1, clusters.reduce((sum, day) => sum + day.length, 0));
+
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let bestGain = 0.05;
+    let bestSwap: [number, number, number, number] | null = null;
+
+    for (let a = 0; a < clusters.length; a++) {
+      for (let b = a + 1; b < clusters.length; b++) {
+        const before = clusterSpreadKm(clusters[a]) + clusterSpreadKm(clusters[b]);
+        for (let i = 0; i < clusters[a].length; i++) {
+          for (let j = 0; j < clusters[b].length; j++) {
+            const nextA = [...clusters[a]];
+            const nextB = [...clusters[b]];
+            [nextA[i], nextB[j]] = [nextB[j], nextA[i]];
+            const gain = before - clusterSpreadKm(nextA) - clusterSpreadKm(nextB);
+            if (gain > bestGain) {
+              bestGain = gain;
+              bestSwap = [a, i, b, j];
+            }
+          }
+        }
       }
     }
-    const [picked] = remaining.splice(bestIdx, 1);
-    ordered.push(picked);
-    lat = picked.lat;
-    lon = picked.lon;
+
+    if (!bestSwap) break;
+    const [a, i, b, j] = bestSwap;
+    [clusters[a][i], clusters[b][j]] = [clusters[b][j], clusters[a][i]];
   }
-  return ordered;
+
+  return clusters;
+}
+
+/** Stable closest-to-farthest ordering from the accommodation/base. */
+function orderByDistanceFromBase(
+  stops: ScoredAttraction[],
+  baseLat: number,
+  baseLon: number,
+): ScoredAttraction[] {
+  return stops
+    .map((stop, index) => ({
+      stop,
+      index,
+      distance: haversineKm(baseLat, baseLon, stop.lat, stop.lon),
+    }))
+    .sort((a, b) => a.distance - b.distance || a.index - b.index)
+    .map(({ stop }) => stop);
 }
 
 /**
@@ -194,8 +236,11 @@ function clusterByProximity(
     clusters[bestDay].push(place);
   }
 
+  // Revisit greedy boundary decisions while preserving stops per day.
+  const refinedClusters = refineClustersBySwap(clusters);
+
   // Order days by neighborhood distance from the hotel/base.
-  const orderedDays = [...clusters].sort((a, b) => {
+  const orderedDays = [...refinedClusters].sort((a, b) => {
     const ca = clusterCentroid(a);
     const cb = clusterCentroid(b);
     if (!ca && !cb) return 0;
@@ -207,9 +252,9 @@ function clusterByProximity(
     );
   });
 
-  // Compact walking order within each day.
+  // Visit stops from closest to farthest from the accommodation/base.
   return orderedDays.map((day) =>
-    orderByNearestNeighbor(day, baseLat, baseLon),
+    orderByDistanceFromBase(day, baseLat, baseLon),
   );
 }
 
@@ -405,7 +450,13 @@ function buildDay(
     city: string;
   },
 ): DayItinerary {
-  const stops = assignTimeSlots(attractions, {
+  // Re-apply after revisions, which may have moved a stop between days.
+  const orderedAttractions = orderByDistanceFromBase(
+    attractions,
+    baseLat,
+    baseLon,
+  );
+  const stops = assignTimeSlots(orderedAttractions, {
     dayStartTime: schedule.dayStartTime,
     breakfastTime: schedule.breakfastTime,
     baseLat,
@@ -671,6 +722,7 @@ export async function runTravelAgent(
   const mustVisitAttractions = resolveMustVisitAttractions(
     input.destination_city,
     mustVisitNames,
+    input.must_visit_attractions,
   );
 
   let attractions: Attraction[] = [];
