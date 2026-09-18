@@ -4,6 +4,7 @@ export interface TripChatData {
   destination: string | null;
   tripLength: { days: number; range: [number, number] | null; flexible: boolean } | null;
   hasAccommodation: boolean | null;
+  accommodationQuery: string | null;
   accommodationPreference: string | null;
   accommodation: TripAccommodation | null;
   interests: Interest[];
@@ -34,6 +35,7 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   const result = await response.json() as TripChatResult;
   const data = result.data;
   data.accommodation = current.accommodation ?? null;
+  data.accommodationQuery = data.accommodationQuery ?? current.accommodationQuery ?? null;
   if (!data || typeof result.assistantMessage !== 'string') throw new Error('Invalid trip chat response');
   let invalidTripLength = false;
   if (data.tripLength) {
@@ -46,6 +48,9 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   if (invalidTripLength) {
     result.assistantMessage = 'Please choose a trip length between 1 and 30 days. If you’re unsure, I recommend a flexible 3–4 day trip.';
     result.missing = Array.from(new Set([...(result.missing ?? []), 'tripLength']));
+  }
+  if (data.hasAccommodation && data.accommodationQuery && !data.accommodation) {
+    result.assistantMessage = 'Got it.';
   }
   result.complete = Boolean(data.destination?.trim() && data.tripLength && data.hasAccommodation !== null && (!data.hasAccommodation || Boolean(data.accommodation)));
   if (result.complete) {

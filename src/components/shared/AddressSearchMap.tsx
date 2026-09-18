@@ -11,6 +11,7 @@ interface AddressSearchMapProps {
   value: TripAccommodation | null;
   onConfirm: (accommodation: TripAccommodation) => void;
   onChange?: () => void;
+  initialQuery?: string;
 }
 
 const pin = L.divIcon({
@@ -20,8 +21,8 @@ const pin = L.divIcon({
   iconAnchor: [11, 11],
 });
 
-export function AddressSearchMap({ city, value, onConfirm, onChange }: AddressSearchMapProps) {
-  const [query, setQuery] = useState('');
+export function AddressSearchMap({ city, value, onConfirm, onChange, initialQuery = '' }: AddressSearchMapProps) {
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [selected, setSelected] = useState<GeocodeResult | null>(null);
   const [searching, setSearching] = useState(false);
@@ -77,11 +78,25 @@ export function AddressSearchMap({ city, value, onConfirm, onChange }: AddressSe
   return (
     <section className="address-search">
       <label htmlFor="hotel-address">Hotel or address</label>
-      <input id="hotel-address" type="search" autoComplete="off" value={query} placeholder={`Search an accommodation or address in ${city}`} onChange={(event) => {
-        setQuery(event.target.value);
-        setSelected(null);
-      }} />
-      <p className="address-search-status" role="status">{searching ? 'Searching addresses…' : error}</p>
+      <div className="address-input-shell">
+        <svg className="address-input-icon" viewBox="0 0 24 24" aria-hidden>
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4 4" />
+        </svg>
+        <input id="hotel-address" type="search" autoComplete="off" value={query} placeholder={`Search an accommodation or address in ${city}`} onChange={(event) => {
+          setQuery(event.target.value);
+          setSelected(null);
+        }} />
+        {searching ? <span className="address-input-spinner" aria-hidden /> : query && (
+          <button type="button" className="address-input-clear" aria-label="Clear address" onClick={() => {
+            setQuery('');
+            setSelected(null);
+            setResults([]);
+            setError('');
+          }}>×</button>
+        )}
+      </div>
+      {(searching || error) && <p className="address-search-status" role="status">{searching ? 'Searching addresses…' : error}</p>}
       {results.length > 0 && (
         <ul className="suggestions address-results">
           {results.map((result) => (

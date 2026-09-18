@@ -30,6 +30,7 @@ interface QuestionFlowProps {
   selectedDestination?: DestinationCard | null;
   onBack: () => void;
   onComplete: (input: TripInput) => void;
+  onGlobalChatSuppressionChange?: (hidden: boolean) => void;
 }
 
 const STEPS_A: QuestionStep[] = [
@@ -162,6 +163,7 @@ export function QuestionFlow({
   selectedDestination,
   onBack,
   onComplete,
+  onGlobalChatSuppressionChange,
 }: QuestionFlowProps) {
   const steps = path === 'A' ? STEPS_A : STEPS_B;
   const saved = useMemo(() => loadQuestionState(path), [path]);
@@ -193,6 +195,11 @@ export function QuestionFlow({
   const [generatingCity, setGeneratingCity] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const placesRequest = useRef(0);
+
+  useEffect(() => {
+    onGlobalChatSuppressionChange?.(chatMode || step === 'places');
+    return () => onGlobalChatSuppressionChange?.(false);
+  }, [chatMode, onGlobalChatSuppressionChange, step]);
 
   async function loadGeneratedPlaces(targetCity = city.trim()) {
     if (!targetCity) return;

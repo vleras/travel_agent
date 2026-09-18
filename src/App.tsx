@@ -49,6 +49,7 @@ export default function App() {
   });
   const [error, setError] = useState<string | null>(null);
   const [chatNotes, setChatNotes] = useState<string[]>(boot.chatNotes);
+  const [hideGlobalChat, setHideGlobalChat] = useState(false);
 
   useEffect(() => {
     saveAppState({
@@ -103,7 +104,10 @@ export default function App() {
   }
 
   const cityHint = picked?.city ?? input?.destination_city ?? null;
-  const showGlobalChat = screen !== 'entry' && screen !== 'trip';
+  const showGlobalChat = screen !== 'entry' && screen !== 'trip' && !hideGlobalChat;
+  const handleGlobalChatSuppression = useCallback((hidden: boolean) => {
+    setHideGlobalChat(hidden);
+  }, []);
 
   return (
     <div className="app-shell">
@@ -141,6 +145,7 @@ export default function App() {
           onComplete={(tripInput) => {
             void startAgent(tripInput);
           }}
+          onGlobalChatSuppressionChange={handleGlobalChatSuppression}
         />
       )}
 

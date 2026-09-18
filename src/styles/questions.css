@@ -1050,8 +1050,17 @@
 
 
 .address-search { display: grid; gap: 0.75rem; }
-.address-search > label { font-weight: 700; color: var(--ink); }
-.address-search-status { min-height: 1.35rem; margin: 0; color: var(--muted); }
+.address-search > label { font-size: .9rem; font-weight: 700; color: var(--ink); }
+.address-input-shell { min-height: 58px; display: flex; align-items: center; gap: .75rem; padding: 0 .9rem 0 1rem; border: 1.5px solid rgba(31,111,104,.24); border-radius: 18px; background: white; box-shadow: 0 8px 24px rgba(15,47,44,.06); transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.address-input-shell:focus-within { border-color: var(--sea-bright); box-shadow: 0 0 0 4px rgba(42,157,143,.12), 0 12px 28px rgba(15,47,44,.09); transform: translateY(-1px); }
+.address-input-icon { width: 1.3rem; height: 1.3rem; flex: 0 0 auto; fill: none; stroke: var(--sea); stroke-width: 1.8; stroke-linecap: round; }
+.address-input-shell input { width: 100%; min-width: 0; padding: 1rem 0; border: 0; outline: 0; appearance: none; background: transparent; color: var(--ink); font: 500 1rem/1.35 var(--font-body); }
+.address-input-shell input::-webkit-search-cancel-button { display: none; }
+.address-input-shell input::placeholder { color: #83918e; font-weight: 400; }
+.address-input-clear { width: 2rem; height: 2rem; display: grid; place-items: center; flex: 0 0 auto; padding: 0 0 .12rem; border: 0; border-radius: 10px; background: var(--foam); color: var(--sea); font: 500 1.45rem/1 var(--font-body); cursor: pointer; transition: background 160ms ease, transform 160ms ease; }
+.address-input-clear:hover { background: rgba(42,157,143,.16); transform: scale(1.04); }
+.address-input-spinner { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; border: 2px solid rgba(31,111,104,.18); border-top-color: var(--sea); border-radius: 50%; animation: address-spin .75s linear infinite; }
+.address-search-status { margin: -.15rem .2rem 0; color: var(--muted); font-size: .88rem; }
 .address-results { max-height: 15rem; overflow-y: auto; }
 .address-preview, .address-search--confirmed { display: grid; gap: 0.75rem; }
 .address-map { width: 100%; height: 260px; min-height: 260px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
@@ -1095,3 +1104,8 @@
 .interactive-chat-address { margin: 0 1.4rem 1rem; padding: 1rem; border: 1px solid rgba(31,111,104,.18); border-radius: 18px; background: var(--foam); }
 .interactive-chat-address > p { margin: 0 0 1rem; color: var(--muted); line-height: 1.5; }
 .interactive-chat-address > p strong { color: var(--ink); }
+.interactive-address-status { padding: .85rem 1rem; }
+.address-verifying { display: flex; align-items: center; gap: .7rem; color: var(--ink); }
+.address-verifying-spinner { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; border: 2px solid rgba(31,111,104,.2); border-top-color: var(--teal); border-radius: 50%; animation: address-spin .75s linear infinite; }
+.address-background-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+@keyframes address-spin { to { transform: rotate(360deg); } }

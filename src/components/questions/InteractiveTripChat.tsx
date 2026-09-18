@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { extractTripChat, type TripChatData, type TripChatMessage } from '../../services/tripChatExtraction';
-import { geocode } from '../../services/nominatim';
-import { AddressSearchMap } from '../shared/AddressSearchMap';
+import { findAccommodation, geocode } from '../../services/nominatim';
 
 export interface TripChatState { messages: TripChatMessage[]; data: TripChatData; complete: boolean }
 
@@ -14,7 +13,7 @@ interface InteractiveTripChatProps {
 }
 
 const emptyData = (destination?: string): TripChatData => ({
-  destination: destination || null, tripLength: null, hasAccommodation: null, accommodationPreference: null, accommodation: null,
+  destination: destination || null, tripLength: null, hasAccommodation: null, accommodationQuery: null, accommodationPreference: null, accommodation: null,
   interests: [], budget: null, travelDates: null, extraPreferences: [],
 });
 
@@ -28,14 +27,50 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   const [loading, setLoading] = useState(false);
   const [complete, setComplete] = useState(() => savedState?.complete ?? false);
   const [error, setError] = useState('');
+  const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'failed'>('idle');
   const endRef = useRef<HTMLDivElement>(null);
+  const verifiedAddressKey = useRef('');
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
   useEffect(() => { onStateChange({ messages, data, complete }); }, [messages, data, complete, onStateChange]);
 
+  useEffect(() => {
+    const query = data.accommodationQuery?.trim();
+    const city = data.destination?.trim();
+    if (!data.hasAccommodation || data.accommodation || !query || !city) return;
+    const key = `${query}|${city}`.toLowerCase();
+    if (verifiedAddressKey.current === key) return;
+    verifiedAddressKey.current = key;
+    let cancelled = false;
+    setAddressStatus('checking');
+    void findAccommodation(query, city).then((matches) => {
+      if (cancelled) return;
+      const match = matches[0];
+      if (!match) {
+        setAddressStatus('failed');
+        setMessages((current) => [...current, {
+          role: 'assistant',
+          content: `I couldn’t verify “${query}”. Please send the hotel name or full address again with the city.`,
+        }]);
+        return;
+      }
+      const accommodation = { address: match.display_name, latitude: match.lat, longitude: match.lon };
+      setData((current) => ({ ...current, accommodation }));
+      setComplete(Boolean(data.destination && data.tripLength));
+      setAddressStatus('idle');
+    }).catch(() => {
+      if (!cancelled) setAddressStatus('failed');
+    });
+    return () => { cancelled = true; };
+  }, [data]);
+
   async function send() {
     const content = input.trim();
     if (!content || loading) return;
+    if (addressStatus === 'failed') {
+      verifiedAddressKey.current = '';
+      setAddressStatus('idle');
+    }
     const nextMessages: TripChatMessage[] = [...messages, { role: 'user', content }];
     setMessages(nextMessages);
     setInput('');
@@ -61,7 +96,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         setMessages([...nextMessages, {
           role: 'assistant',
           content: positiveBooking
-            ? 'Okay — please confirm the address below. I use it to anchor each day, estimate travel time, and keep your itinerary compact.'
+            ? 'Okay — what’s the hotel name or address? I’ll verify it here in the chat.'
             : 'Okay — no problem. I have everything I need, so you can continue to the place suggestions.',
         }]);
         return;
@@ -109,21 +144,15 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
           </div>
         ))}
         {loading && <div className="interactive-chat-message interactive-chat-message--assistant chatbot-typing">Thinking…</div>}
+        {addressStatus === 'checking' && (
+          <div className="interactive-chat-message interactive-chat-message--assistant address-verifying" role="status">
+            <span className="address-verifying-spinner" aria-hidden />
+            <span>Verifying location…</span>
+          </div>
+        )}
         {error && <div className="interactive-chat-error" role="alert">{error}</div>}
         <div ref={endRef} />
       </div>
-      {data.hasAccommodation && !data.accommodation && data.destination && (
-        <div className="interactive-chat-address">
-          <p><strong>Confirm where you’re staying</strong><br />We use this location to anchor each day, estimate travel distances, and keep your itinerary compact.</p>
-          <AddressSearchMap city={data.destination} value={null} onConfirm={(accommodation) => {
-            const updated = { ...data, accommodation };
-            const isReady = Boolean(updated.destination && updated.tripLength);
-            setData(updated);
-            setComplete(isReady);
-            setMessages((current) => [...current, { role: 'assistant', content: `Location confirmed. I’ll use ${accommodation.address} as the starting point for your daily routes.` }]);
-          }} />
-        </div>
-      )}
       {!complete ? (
         <form className="interactive-chat-compose" onSubmit={(event) => { event.preventDefault(); void send(); }}>
           <div className="interactive-chat-input-shell">
