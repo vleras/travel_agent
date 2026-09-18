@@ -34,7 +34,7 @@ export async function fetchPlacePhotoUrls(
 }
 
 /**
- * Cover image for a place — Pexels only.
+ * Cover image for a place from Pexels or Wikimedia Commons.
  * When multiple photos load, swipe or use arrows to browse them.
  */
 export function PlaceImage({

@@ -35,13 +35,18 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   const data = result.data;
   data.accommodation = current.accommodation ?? null;
   if (!data || typeof result.assistantMessage !== 'string') throw new Error('Invalid trip chat response');
+  let invalidTripLength = false;
   if (data.tripLength) {
     const range = data.tripLength.range;
     const invalidRange = range && (!Number.isInteger(range[0]) || !Number.isInteger(range[1]) || range[0] < 1 || range[1] > 30 || range[0] > range[1]);
-    if (!Number.isInteger(data.tripLength.days) || data.tripLength.days < 1 || data.tripLength.days > 30 || invalidRange) data.tripLength = null;
+    if (!Number.isInteger(data.tripLength.days) || data.tripLength.days < 1 || data.tripLength.days > 30 || invalidRange) { data.tripLength = null; invalidTripLength = true; }
   }
   data.interests = Array.isArray(data.interests) ? data.interests.filter((item): item is Interest => allowedInterests.has(item)) : [];
   data.extraPreferences = Array.isArray(data.extraPreferences) ? data.extraPreferences.filter((v): v is string => typeof v === 'string').slice(0, 10) : [];
+  if (invalidTripLength) {
+    result.assistantMessage = 'Please choose a trip length between 1 and 30 days. If you’re unsure, I recommend a flexible 3–4 day trip.';
+    result.missing = Array.from(new Set([...(result.missing ?? []), 'tripLength']));
+  }
   result.complete = Boolean(data.destination?.trim() && data.tripLength && data.hasAccommodation !== null && (!data.hasAccommodation || Boolean(data.accommodation)));
   if (result.complete) {
     const duration = data.tripLength?.range ? `${data.tripLength.range[0]}–${data.tripLength.range[1]} days` : `${data.tripLength?.days} days`;

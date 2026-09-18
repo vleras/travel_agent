@@ -182,7 +182,8 @@ const accommodationListings = [{
 
 /** Explicit search: match the requested stay/address, never just nearby hotels. */
 export async function findAccommodation(query: string, city: string): Promise<GeocodeResult[]> {
-  const destination = (await nominatimSearch(city, 1, { featuretype: 'city' })).results[0];
+  const cityLookup = await nominatimSearch(city, 1, { featuretype: 'city' });
+  const destination = cityLookup.results[0] ?? (await nominatimSearch(city, 1)).results[0];
   if (!destination?.boundingbox) throw new Error('Destination lookup unavailable');
   const [south, north, west, east] = destination.boundingbox.map(Number);
   if (![south, north, west, east].every(Number.isFinite)) throw new Error('Invalid destination bounds');
@@ -194,23 +195,45 @@ export async function findAccommodation(query: string, city: string): Promise<Ge
   const cleanedQuery = nameWords.join(' ');
   if (!cleanedQuery) return [];
   const stays = new Set(['hotel', 'hostel', 'guest_house', 'apartment', 'apartments', 'motel', 'chalet']);
-  const isNumberedAddress = /\d/.test(cleanedQuery);
+  const numericWords = nameWords.filter(w => /^\d+[a-z]?$/i.test(w));
+  // Four-to-six digit values are normally postal codes, not house numbers.
+  // Treating Tirana's "1000" as a house number rejected the entire street.
+  const houseNumberWords = numericWords.filter(w => !/^\d{4,6}$/.test(w));
+  const isNumberedAddress = houseNumberWords.length > 0;
+  const looksLikeAddress = /(?:^|\s)(rruga|rruge|street|st|road|rd|avenue|ave|boulevard|blvd)(?:\s|$)/i.test(cleanedQuery) ||
+    query.includes(',') || numericWords.length > 0;
   const significantWords = nameWords.filter(w => !['hotel', 'hostel', 'guest', 'house', 'apartment', 'apartments', 'motel'].includes(w));
   const matchesQuery = (r: GeocodeResult) => {
     if (!withinDestination(r)) return false;
-    if (isNumberedAddress) {
-      const addressWords = normalizePlaceName(`${r.address?.road ?? ''} ${r.address?.house_number ?? ''}`).split(' ');
-      return Boolean(r.address?.house_number) && nameWords.every(w => addressWords.includes(w));
+    if (looksLikeAddress) {
+      const searchable = new Set(normalizePlaceName([
+        r.name,
+        r.display_name,
+        r.address?.road,
+        r.address?.house_number,
+        r.address?.postcode,
+        r.address?.neighbourhood,
+        r.address?.suburb,
+      ].filter(Boolean).join(' ')).split(' '));
+      const addressWords = significantWords.filter(w => !/^\d+$/.test(w) && !['rruga', 'rruge', 'street', 'st', 'road', 'rd'].includes(w));
+      const textMatches = addressWords.length >= 2 && addressWords.every(w => searchable.has(w));
+      const numberMatches = !isNumberedAddress || houseNumberWords.every(w => searchable.has(w));
+      return textMatches && numberMatches;
     }
     const resultWords = normalizePlaceName(r.name ?? r.display_name.split(',')[0]).split(' ');
     return stays.has(r.type ?? '') && significantWords.length > 0 && significantWords.every(w => resultWords.includes(w));
   };
-  const initial = await nominatimSearch(`${cleanedQuery}, ${city.trim()}`, 10, options);
-  let matches = initial.results.filter(matchesQuery);
-  if (!matches.length && !isNumberedAddress) {
-    // A city already in the entered name must not be duplicated in the query.
-    const alternative = await nominatimSearch(cleanedQuery, 10, options);
-    matches = alternative.results.filter(matchesQuery);
+  const withoutPostalCode = nameWords.filter(w => !/^\d{4,6}$/.test(w)).join(' ');
+  const searchQueries = [...new Set([
+    `${cleanedQuery}, ${city.trim()}`,
+    withoutPostalCode && withoutPostalCode !== cleanedQuery ? `${withoutPostalCode}, ${city.trim()}` : '',
+    cleanedQuery,
+  ].filter(Boolean))];
+  let matches: GeocodeResult[] = [];
+  for (const searchQuery of searchQueries) {
+    const response = await nominatimSearch(searchQuery, 10, options);
+    matches = response.results.filter(matchesQuery);
+    if (matches.length) break;
   }
   if (matches.length) return matches;
   const listing = accommodationListings.find(l => normalizePlaceName(l.city) === normalizePlaceName(city) &&

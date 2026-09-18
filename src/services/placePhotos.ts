@@ -1,7 +1,7 @@
 /**
- * Place photos from Pexels only (browser-safe).
- * No Unsplash / Wikimedia / other fallbacks.
+ * Browser-safe place photos from Pexels and Wikimedia Commons.
  * Search: https://api.pexels.com/v1/search (~200 req/hour).
+ * Commons is used as a no-key fallback when Pexels has too few matches.
  */
 
 export interface PlacePhotoQuery {
@@ -29,7 +29,7 @@ const inflight = new Map<string, Promise<string[]>>();
 
 function cacheKey(q: PlacePhotoQuery): string {
   return [
-    'v11',
+    'v12',
     q.name,
     q.city ?? '',
     q.category ?? '',
@@ -63,6 +63,21 @@ export function photoSourceFromUrl(url: string): PhotoSourceInfo | null {
         href: id
           ? `https://www.pexels.com/photo/${id}/`
           : 'https://www.pexels.com',
+      };
+    }
+    if (host === 'upload.wikimedia.org' || host.endsWith('.wikimedia.org')) {
+      const parts = u.pathname.split('/').filter(Boolean);
+      // Thumbnail URLs end in /Original_file.jpg/1400px-Original_file.jpg.
+      const filename = decodeURIComponent(
+        u.pathname.includes('/thumb/')
+          ? (parts.at(-2) ?? '')
+          : (parts.at(-1) ?? ''),
+      );
+      return {
+        label: 'Wikimedia Commons',
+        href: filename
+          ? `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(filename)}`
+          : 'https://commons.wikimedia.org',
       };
     }
     return { label: host };
@@ -183,6 +198,75 @@ async function searchPexels(query: string): Promise<PexelsPhoto[]> {
   }
 }
 
+type CommonsImageInfo = {
+  url?: string;
+  thumburl?: string;
+  width?: number;
+  height?: number;
+  thumbwidth?: number;
+  thumbheight?: number;
+  mime?: string;
+};
+
+type CommonsPage = {
+  title?: string;
+  imageinfo?: CommonsImageInfo[];
+};
+
+function commonsQueries(name: string, city?: string): string[] {
+  const n = cleanName(name);
+  if (!n) return [];
+  const cityBit = city?.trim();
+  return cityBit ? [`"${n}" ${cityBit}`, `"${n}"`, `${n} ${cityBit}`] : [`"${n}"`, n];
+}
+
+function isUsableCommonsImage(info: CommonsImageInfo): boolean {
+  const mime = info.mime ?? '';
+  if (!/^image\/(jpeg|png|webp)$/i.test(mime)) return false;
+  const width = info.thumbwidth ?? info.width ?? 0;
+  const height = info.thumbheight ?? info.height ?? 0;
+  if (width > 0 && width < 700) return false;
+  if (height > 0 && height < 400) return false;
+  return width <= 0 || height <= 0 || width / height >= 1.15;
+}
+
+async function searchCommons(query: string): Promise<CommonsPage[]> {
+  const url = new URL('https://commons.wikimedia.org/w/api.php');
+  url.searchParams.set('action', 'query');
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('formatversion', '2');
+  url.searchParams.set('origin', '*');
+  url.searchParams.set('generator', 'search');
+  url.searchParams.set('gsrsearch', query);
+  url.searchParams.set('gsrnamespace', '6');
+  url.searchParams.set('gsrlimit', String(PER_PAGE));
+  url.searchParams.set('prop', 'imageinfo');
+  url.searchParams.set('iiprop', 'url|size|mime');
+  url.searchParams.set('iiurlwidth', '1400');
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6500);
+  try {
+    const res = await fetch(url.toString(), {
+      headers: { Accept: 'application/json' },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      console.error('[Wikimedia Commons]', { query, status: res.status, results: 0 });
+      return [];
+    }
+    const data = (await res.json()) as { query?: { pages?: CommonsPage[] } };
+    const pages = data.query?.pages ?? [];
+    console.log('[Wikimedia Commons]', { query, results: pages.length });
+    return pages;
+  } catch (err) {
+    console.error('[Wikimedia Commons] Request failed', { query, err });
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function searchAll(q: PlacePhotoQuery): Promise<string[]> {
   const queries = [...new Set(pexelsQueries(q.name, q.city))].filter(Boolean);
   const urls: string[] = [];
@@ -214,11 +298,31 @@ async function searchAll(q: PlacePhotoQuery): Promise<string[]> {
     }
   }
 
+  // Commons often has exact landmark photos that stock-photo search misses.
+  if (urls.length < TARGET_PLACE_PHOTOS) {
+    const queries = [...new Set(commonsQueries(q.name, q.city))];
+    for (const query of queries) {
+      if (urls.length >= TARGET_PLACE_PHOTOS) break;
+      const pages = await searchCommons(query);
+      for (const page of pages) {
+        if (urls.length >= TARGET_PLACE_PHOTOS) break;
+        const info = page.imageinfo?.[0];
+        if (!info || !isUsableCommonsImage(info)) continue;
+        const src = info.thumburl || info.url;
+        if (!src || !/^https:\/\//i.test(src)) continue;
+        const fp = imageFingerprint(src);
+        if (seen.has(fp)) continue;
+        seen.add(fp);
+        urls.push(src);
+      }
+    }
+  }
+
   return urls.slice(0, TARGET_PLACE_PHOTOS);
 }
 
 /**
- * Fetch ~10 place photos from Pexels (cached per place).
+ * Fetch ~10 place photos from Pexels and Wikimedia Commons (cached per place).
  * Signature kept compatible with existing callers (name, city, category, …).
  */
 export async function fetchPlacePhotoUrls(

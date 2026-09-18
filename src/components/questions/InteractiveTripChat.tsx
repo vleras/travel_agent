@@ -71,7 +71,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     setLoading(true);
     try {
       const result = await extractTripChat(nextMessages, data);
-      if (result.complete && result.data.destination) {
+      if (result.data.destination && result.data.destination !== data.destination) {
         const destination = await geocode(result.data.destination);
         if (!destination.result) {
           result.complete = false;
