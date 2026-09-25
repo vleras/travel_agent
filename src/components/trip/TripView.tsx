@@ -315,8 +315,9 @@ export function TripView({
               <div className="food-suggestion-grid">
                 {foodByDay[activeDay].map(({ place, reason }) => (
                   <article className="food-card" key={place.id}>
-                    <div><strong>{place.name}</strong><span>{place.category === 'cafe' ? 'Café' : 'Restaurant'}</span></div>
+                    <div><strong>{place.name}</strong><span>{place.category === 'cafe' ? 'Café' : 'Restaurant'} {place.recommended && <em className="food-badge">Wikivoyage pick</em>}</span></div>
                     <p>{reason}</p>
+                    {place.wikiDescription && <small>{place.wikiDescription}</small>}
                     {place.cuisine && <small>{place.cuisine}</small>}
                   </article>
                 ))}

@@ -4,7 +4,8 @@ import { fallbackAttractions } from '../../data/fallbackAttractions';
 import { parseDaysInput } from '../../data/scheduleOptions';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
 import { generateAttractions } from '../../services/gemini';
-import { autocompletePlaces, type GeocodeResult } from '../../services/nominatim';
+import { autocompletePlaces, geocode, type GeocodeResult } from '../../services/nominatim';
+import { getNearbyFoodPlacesForCity } from '../../services/placesFood';
 import {
   loadQuestionState,
   saveQuestionState,
@@ -196,6 +197,26 @@ export function QuestionFlow({
   );
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [generatedPlaces, setGeneratedPlaces] = useState<Attraction[]>([]);
+  const [foodPlaces, setFoodPlaces] = useState<Attraction[]>([]);
+  const [foodLoading, setFoodLoading] = useState(false);
+  useEffect(() => {
+    setFoodPlaces([]);
+    if (step !== 'places' || !city.trim()) return;
+    let cancelled = false;
+    setFoodLoading(true);
+    void (async () => {
+      const { result } = await geocode(city.trim());
+      if (cancelled) return;
+      const places = await getNearbyFoodPlacesForCity(city.trim(), result ? { lat: result.lat, lon: result.lon } : undefined);
+      if (!cancelled) setFoodPlaces(places.map(place => ({
+        name: place.name, category: place.category === 'cafe' ? 'Cafés' : 'Restaurants',
+        lat: place.lat, lon: place.lon, typical_visit_duration_minutes: place.category === 'cafe' ? 30 : 60,
+        recommended: place.recommended, wikiDescription: place.wikiDescription,
+        description: [place.cuisine ? `Cuisine: ${place.cuisine.replace(/;/g, ', ')}.` : 'A nearby place to stop for food or drinks.', place.openingHours ? `Hours: ${place.openingHours}.` : ''].filter(Boolean).join(' '),
+      })));
+    })().catch(() => { /* Keep sightseeing available when food search fails. */ }).finally(() => { if (!cancelled) setFoodLoading(false); });
+    return () => { cancelled = true; };
+  }, [city, step]);
   const [placeCategory, setPlaceCategory] = useState('all');
   const [generatingCity, setGeneratingCity] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -290,7 +311,7 @@ export function QuestionFlow({
     if (step === 'days') return parsedDays != null;
     if (step === 'hotel') return accommodation != null;
     if (step === 'places') {
-      const hasPlaces = placesForCity(city, selectedDestination).length > 0 || generatedPlaces.length > 0;
+      const hasPlaces = placesForCity(city, selectedDestination).length > 0 || generatedPlaces.length > 0 || foodPlaces.length > 0;
       return generatingCity !== city.trim() && hasPlaces && selectedPlaces.length > 0;
     }
     return true;
@@ -304,16 +325,16 @@ export function QuestionFlow({
 
   const availablePlaces = useMemo(
     () =>
-      withoutFoodPlaces(
+      mergePlaceLists(withoutFoodPlaces(
         mergePlaceLists(
           placesForCity(city, selectedDestination),
           generatedPlaces.map(attractionToHighlight),
         ),
-      ),
-    [city, selectedDestination, generatedPlaces],
+      ), foodPlaces.map(attractionToHighlight)),
+    [city, selectedDestination, generatedPlaces, foodPlaces],
   );
   const categoryKey = (category: string) => category.trim().toLowerCase();
-  const categories = [...new Map(availablePlaces.map(place => [categoryKey(place.category), place.category.trim()])).entries()]
+  const categories = [...new Map([...availablePlaces.map(place => [categoryKey(place.category), place.category.trim()] as [string, string]), ['cafés', 'Cafés'] as [string, string], ['restaurants', 'Restaurants'] as [string, string]]).entries()]
     .filter(([key]) => key).sort((a, b) => a[1].localeCompare(b[1]));
   const activeCategory = categories.some(([key]) => key === placeCategory) ? placeCategory : 'all';
   const visiblePlaces = activeCategory === 'all' ? availablePlaces : availablePlaces.filter(place => categoryKey(place.category) === activeCategory);
@@ -341,7 +362,7 @@ export function QuestionFlow({
     const curatedAttractions = curatedAttractionsForCity(city);
     const selectedAttractions = selectedPlaces.flatMap((name) => {
       const normalized = name.trim().toLowerCase();
-      const match = generatedPlaces.find((place) => place.name.trim().toLowerCase() === normalized) ??
+      const match = foodPlaces.find((place) => place.name.trim().toLowerCase() === normalized) ?? generatedPlaces.find((place) => place.name.trim().toLowerCase() === normalized) ??
         curatedAttractions.find((place) => place.name.trim().toLowerCase() === normalized);
       return match ? [{ ...match }] : [];
     });
@@ -568,6 +589,8 @@ export function QuestionFlow({
             </p>
             <PlacesGuideChat city={city} selectedCount={selectedPlaces.length} />
             <div className="question-body">
+              {foodLoading && <p className="hint" role="status">Finding cafés and restaurants nearby…</p>}
+              {foodPlaces.length > 0 && <p className="hint">Food places from <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a> and <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.</p>}
               {generatingCity === city.trim() && availablePlaces.length === 0 ? (
                 <p className="hint" role="status" style={{ margin: 0 }}>
                   Generating attraction cards for {city}…
@@ -606,6 +629,7 @@ export function QuestionFlow({
                     )}
                   </div>
                   <div className="place-pick-grid">
+                    {visiblePlaces.length === 0 && <p className="hint" role="status">{foodLoading ? 'Loading places for this category…' : 'No places found in this category. Try another filter or retry the food search.'}</p>}
                     {visiblePlaces.map((spot) => {
                       const active = selectedPlaces.includes(spot.name);
                       return (
@@ -631,6 +655,7 @@ export function QuestionFlow({
                               <div className="place-pick-title">
                                 <strong>{spot.name}</strong>
                                 <span className="category-pill">{spot.category}</span>
+                                {spot.recommended && <span className="category-pill food-badge">Wikivoyage pick</span>}
                               </div>
                               <p>{spot.description}</p>
                               <span className="place-pick-status">

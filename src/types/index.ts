@@ -17,6 +17,8 @@ export interface DestinationHighlight {
   name: string;
   category: string;
   description: string;
+  recommended?: boolean;
+  wikiDescription?: string;
 }
 
 export interface DestinationCard {
@@ -100,6 +102,8 @@ export interface ItineraryStop {
   distance_to_next_km?: number;
   image_url?: string;
   is_meal?: boolean;
+  recommended?: boolean;
+  wikiDescription?: string;
 }
 
 export interface DayItinerary {

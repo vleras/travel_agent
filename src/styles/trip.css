@@ -1135,3 +1135,4 @@
 .food-card div { display: flex; justify-content: space-between; gap: .5rem; }
 .food-card span, .food-card small, .food-attribution { color: #6b7280; font-size: .78rem; }
 .food-card p { margin: .35rem 0 0; font-size: .86rem; }
+.food-badge { display: inline-block; margin-left: .35rem; padding: .15rem .4rem; border-radius: 999px; background: #eadcfb; color: #65439a; font-size: .68rem; font-style: normal; font-weight: 600; }
