@@ -9,6 +9,7 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import type { DayItinerary } from '../../types';
+import type { FoodPick } from '../../services/placesFood';
 import 'leaflet/dist/leaflet.css';
 
 const stopIcon = (n: number) =>
@@ -54,6 +55,7 @@ interface DayMapProps {
   day: DayItinerary;
   hotelLat: number;
   hotelLon: number;
+  food?: FoodPick[];
 }
 
 const breakfastIcon = L.divIcon({
@@ -63,7 +65,9 @@ const breakfastIcon = L.divIcon({
   iconAnchor: [14, 14],
 });
 
-export function DayMap({ day, hotelLat, hotelLon }: DayMapProps) {
+const foodIcon = L.divIcon({ className: '', html: '<div style="width:28px;height:28px;border-radius:50%;background:#8b5cf6;color:white;display:grid;place-items:center;font:700 13px Outfit,sans-serif;border:2px solid white;box-shadow:0 4px 10px rgba(0,0,0,.25)">☕</div>', iconSize: [28, 28], iconAnchor: [14, 14] });
+
+export function DayMap({ day, hotelLat, hotelLon, food = [] }: DayMapProps) {
   const sightStops = day.stops.filter((s) => !s.is_meal);
   const mealStops = day.stops.filter((s) => s.is_meal);
   const route: [number, number][] = [
@@ -114,6 +118,11 @@ export function DayMap({ day, hotelLat, hotelLon }: DayMapProps) {
             <br />
             {stop.time_slot} · {stop.category}
           </Popup>
+        </Marker>
+      ))}
+      {food.map(({ place, reason }) => (
+        <Marker key={`food-${place.id}`} position={[place.lat, place.lon]} icon={foodIcon}>
+          <Popup><strong>{place.name}</strong><br />{place.category} · {reason}</Popup>
         </Marker>
       ))}
       {sightStops.length > 0 && (

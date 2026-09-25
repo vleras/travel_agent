@@ -4,6 +4,7 @@ import { normalizeBreakfastTime } from '../../data/scheduleOptions';
 import { resolvePlaceAsStop } from '../../services/chatbot';
 import { formatDayTab, formatTripRange } from '../../services/geo';
 import { rescheduleDayStops } from '../../services/agent';
+import { getFoodSuggestions, type FoodPick } from '../../services/placesFood';
 import type {
   AgentOutput,
   DayItinerary,
@@ -43,6 +44,7 @@ export function TripView({
     useState<BreakfastPlace | null>(null);
   const [detail, setDetail] = useState<DetailTarget | null>(null);
   const [chatNotes, setChatNotes] = useState<string[]>(initialChatNotes);
+  const [foodByDay, setFoodByDay] = useState<Record<number, FoodPick[]>>({});
 
   useEffect(() => {
     setItinerary(output.itinerary);
@@ -51,6 +53,19 @@ export function TripView({
   useEffect(() => {
     setDetail(null);
   }, [activeDay]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(itinerary.map(async (d, index) => {
+      const stops = d.stops.filter((s) => !s.is_meal);
+      if (!stops.length) return [index, [] as FoodPick[]] as const;
+      const lat = stops.reduce((sum, s) => sum + s.lat, 0) / stops.length;
+      const lon = stops.reduce((sum, s) => sum + s.lon, 0) / stops.length;
+      const picks = await getFoodSuggestions({ city: input.destination_city, day: index + 1, lat, lon, attractions: stops.map((s) => ({ name: s.name, category: s.category })), preferences: { interests: input.interests, budget: input.budget, customPreferences: input.custom_preferences } });
+      return [index, picks] as const;
+    })).then((entries) => { if (!cancelled) setFoodByDay(Object.fromEntries(entries)); });
+    return () => { cancelled = true; };
+  }, [input, itinerary]);
 
   const day = itinerary[activeDay];
   if (!day) return null;
@@ -288,11 +303,27 @@ export function TripView({
               day={day}
               hotelLat={output.metadata.hotel_lat}
               hotelLon={output.metadata.hotel_lon}
+              food={foodByDay[activeDay]}
             />
           </div>
         )}
 
         <div className="list-pane">
+          {(foodByDay[activeDay]?.length ?? 0) > 0 && (
+            <section className="food-suggestions" aria-labelledby="eat-nearby-heading">
+              <h2 id="eat-nearby-heading">Eat nearby</h2>
+              <div className="food-suggestion-grid">
+                {foodByDay[activeDay].map(({ place, reason }) => (
+                  <article className="food-card" key={place.id}>
+                    <div><strong>{place.name}</strong><span>{place.category === 'cafe' ? 'Café' : 'Restaurant'}</span></div>
+                    <p>{reason}</p>
+                    {place.cuisine && <small>{place.cuisine}</small>}
+                  </article>
+                ))}
+              </div>
+              <small className="food-attribution">Places: Geoapify / OpenStreetMap contributors</small>
+            </section>
+          )}
           <ItineraryList
             day={day}
             output={{ ...output, itinerary }}
@@ -355,7 +386,7 @@ export function TripView({
             .slice(0, 6);
           return names.length
             ? `Focusing Day ${idx + 1}. Current stops: ${names.join(', ')}. Tap any stop for its page, or tell me to move one.`
-            : `Opened Day ${idx + 1}. It’s light so far — ask to add a place or show cafés/parks/nightlife.`;
+            : `Opened Day ${idx + 1}. It’s light so far — ask to add a place or show cafés/parks.`;
         }}
         onMoveStop={(stopName, toDay) => {
           const targetIdx = toDay - 1;

@@ -1111,3 +1111,10 @@
     min-height: 320px;
   }
 }
+.food-suggestions { margin: 0 0 1rem; padding: 1rem; border: 1px solid rgba(31,111,104,.18); border-radius: 14px; background: #fffdf8; }
+.food-suggestions h2 { margin: 0 0 .75rem; font-size: 1.05rem; }
+.food-suggestion-grid { display: grid; gap: .6rem; }
+.food-card { padding: .7rem; border-radius: 10px; background: #f7f1e8; }
+.food-card div { display: flex; justify-content: space-between; gap: .5rem; }
+.food-card span, .food-card small, .food-attribution { color: #6b7280; font-size: .78rem; }
+.food-card p { margin: .35rem 0 0; font-size: .86rem; }
