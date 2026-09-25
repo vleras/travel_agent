@@ -21,6 +21,7 @@ import type {
 import { PlaceImage } from '../shared/PlaceImage';
 import { AddressSearchMap } from '../shared/AddressSearchMap';
 import { PlacePickDetail } from './PlacePickDetail';
+import { locateSight } from '../../services/sightLocation';
 import { InteractiveTripChat, type TripChatState } from './InteractiveTripChat';
 import type { TripChatData } from '../../services/tripChatExtraction';
 import '../../styles/questions.css';
@@ -244,6 +245,17 @@ export function QuestionFlow({
       if (request !== placesRequest.current) return;
       const sightseeing = withoutFoodPlaces(generated.attractions);
       setGeneratedPlaces(sightseeing);
+      // Resolve coordinates now, in the background, so they're cached before
+      // the Places screen renders (render-time lookup is only a fallback).
+      void Promise.all(
+        sightseeing.map(async (place) =>
+          Number.isFinite(place.lat) && Number.isFinite(place.lon)
+            ? place
+            : { ...place, ...((await locateSight(place.name, targetCity)) ?? {}) },
+        ),
+      ).then((located) => {
+        if (request === placesRequest.current) setGeneratedPlaces(located);
+      });
       if (!sightseeing.length) {
         setGenerationError(`We couldn’t generate attractions for ${targetCity}. Please try again.`);
       }

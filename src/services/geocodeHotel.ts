@@ -1,5 +1,6 @@
 import { geocodeMany, type GeocodeResult } from './nominatim';
 import { haversineKm } from './geo';
+import { locatePlaces } from './sightLocation';
 
 export interface HotelMatch extends GeocodeResult { approximate: boolean }
 const cache = new Map<string, HotelMatch[]>();
@@ -39,11 +40,12 @@ async function geoapify(text: string): Promise<HotelMatch[]> {
 export function geocodeHotel(input: string, destination = ''): Promise<HotelMatch[]> {
   const text = normalizeHotelInput(input);
   const city = normalizeHotelInput(destination);
-  const key = `hotel-v1|${city.toLowerCase()}|${text.toLowerCase()}`;
+  const key = `hotel-v2|${city.toLowerCase()}|${text.toLowerCase()}`;
   if (cache.has(key)) return Promise.resolve(cache.get(key)!);
   if (pending.has(key)) return pending.get(key)!;
+  let center: GeocodeResult | undefined;
+  let fromLocator = false;
   const work = (async () => {
-    let center: GeocodeResult | undefined;
     if (city) {
       center = (await geoapify(city))[0];
       if (!center) center = (await geocodeMany(city, 1)).results[0];
@@ -51,6 +53,20 @@ export function geocodeHotel(input: string, destination = ''): Promise<HotelMatc
       if (!center) return [];
     }
     const valid = (matches: HotelMatch[]) => matches.filter(m => Number.isFinite(m.lat) && Number.isFinite(m.lon) && Math.abs(m.lat) <= 90 && Math.abs(m.lon) <= 180 && (!center || haversineKm(center.lat, center.lon, m.lat, m.lon) <= 50));
+    // Named accommodation first: shared locator (Photon → Geoapify → Nominatim).
+    if (city) {
+      // "Hotel X, Rruga Y 12": search the name, use the rest as a bias hint.
+      const comma = text.indexOf(',');
+      const hotelName = comma > 0 ? text.slice(0, comma).trim() : text;
+      const hint = comma > 0 ? text.slice(comma + 1).trim() : undefined;
+      const named = await locatePlaces(hotelName, city, 'accommodation', { biasHint: hint || undefined });
+      if (named.length) {
+        fromLocator = true;
+        return named.slice(0, 3).map(({ lat, lon, name, display_name }) => ({
+          lat, lon, name, display_name, type: 'accommodation', approximate: false,
+        }));
+      }
+    }
     let approximate = valid(await geoapify(text));
     const exact = approximate.filter(m => !m.approximate);
     if (exact.length) return exact.slice(0, 3);
@@ -63,6 +79,8 @@ export function geocodeHotel(input: string, destination = ''): Promise<HotelMatc
     }
     return approximate.slice(0, 3);
   })().catch(() => [] as HotelMatch[]).then(matches => {
+    const first = matches[0];
+    if (first && center && !fromLocator) console.info('[locate]', { kind: 'accommodation', name: text, city, provider: 'address-fallback', distanceKm: Number(haversineKm(center.lat, center.lon, first.lat, first.lon).toFixed(2)), match: first.display_name, approximate: first.approximate });
     if (matches.length) cache.set(key, matches);
     return matches;
   }).finally(() => pending.delete(key));

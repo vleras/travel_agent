@@ -1,5 +1,6 @@
 import { haversineKm } from './geo';
 import { locateSight } from './sightLocation';
+import { mentionsPlace, sharesStem } from './nameMatch';
 /**
  * Browser-safe place photos from Pexels and Wikimedia Commons.
  * Search: https://api.pexels.com/v1/search (~200 req/hour).
@@ -418,46 +419,9 @@ async function searchCommons(query: string): Promise<CommonsPage[]> {
   }
 }
 
-const STOPWORDS = new Set(['the', 'and', 'of', 'de', 'la', 'le', 'el', 'del', 'di', 'des', 'du', 'von']);
-
-function fold(value: string): string {
-  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-}
-
-function distinctiveTokens(name: string): string[] {
-  return fold(cleanName(name))
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
-}
-
-/**
- * Text (file title / alt) must name this exact place: every distinctive word
- * of the name (one may be missing for long names). "Pyramid of Tirana"
- * therefore rejects photos of the Giza pyramids.
- */
-function mentionsPlace(text: string, name: string): boolean {
-  const tokens = distinctiveTokens(name);
-  if (!tokens.length) return false;
-  const hay = fold(text);
-  const hits = tokens.filter((t) => hay.includes(t)).length;
-  return hits >= (tokens.length >= 3 ? tokens.length - 1 : tokens.length);
-}
-
-/**
- * Language-independent name check for geosearch: some word in the title
- * shares a 4-letter stem with a distinctive name token ("Piramida" ~ "Pyramid"
- * via "pira", folding y→i). Short tokens must match whole.
- */
+/** Geosearch name check (any language): some title word shares a stem with the name. */
 function sharesNameStem(title: string, name: string): boolean {
-  const stem = (w: string) => w.replace(/y/g, 'i').slice(0, 4);
-  const words = fold(title.replace(/^File:/i, '').replace(/\.[a-z0-9]+$/i, ''))
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean);
-  return distinctiveTokens(name).some((token) =>
-    words.some((w) =>
-      token.length >= 4 && w.length >= 4 ? stem(w) === stem(token) : w === token,
-    ),
-  );
+  return sharesStem(title.replace(/^File:/i, '').replace(/\.[a-z0-9]+$/i, ''), name);
 }
 
 /** Files filed under a Commons category, e.g. Category:Pyramid of Tirana. */
