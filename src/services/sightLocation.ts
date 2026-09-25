@@ -1,7 +1,18 @@
 import { geocode } from './nominatim';
 import { haversineKm } from './geo';
-import { distinctiveTokens, fold, matchesName, sharesStem } from './nameMatch';
+import { TYPE_WORDS, distinctiveTokens, fold, matchesName, sharesStem, sharesStrongStem } from './nameMatch';
 import { lookupCityCenter } from '../data/cityCenters';
+import { createLimiter, type Priority } from './requestQueue';
+
+// Photon answers bursts (a page of ~40 sights) with 503s: 4 at a time, and
+// retry 503/429 after 1 s, then 3 s, then 8 s.
+const photonLimiter = createLimiter({
+  name: 'Photon',
+  concurrency: 4,
+  retryStatuses: [503, 429],
+  backoffMs: [1000, 3000, 8000],
+});
+const photonFetch = (url: string, prio?: () => Priority) => photonLimiter.fetch(url, prio);
 
 /**
  * Shared POI locator for sights and hotels.
@@ -46,8 +57,9 @@ type Candidate = {
 /** Features that are never a sight ("Lana Riverside Residences", "Art Hotel"). */
 const NOT_A_SIGHT = new Set([
   'hotel', 'guest_house', 'apartment', 'apartments', 'hostel', 'motel', 'chalet',
-  'residential', 'house', 'detached', 'office', 'commercial', 'company',
+  'residential', 'house', 'detached', 'company',
 ]);
+const HOUSING_WORDS = /\b(?:residences?|apartments?|suites|hotel|hostel|rooms|villas?)\b/i;
 
 const LOCAL_NAME_KEYS = new Set(['tourism', 'historic', 'amenity']);
 const LOCAL_NAME_RADIUS_KM = 2;
@@ -110,7 +122,7 @@ export function cityCenter(city: string): Promise<Point | null> {
     try {
       const url = new URL('https://photon.komoot.io/api/');
       url.search = new URLSearchParams({ q: city, limit: '1', lang: 'en', osm_tag: 'place' }).toString();
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const res = await photonFetch(url.toString());
       if (res.ok) {
         const data = (await res.json()) as { features?: { geometry?: { coordinates?: number[] } }[] };
         const [lon, lat] = data.features?.[0]?.geometry?.coordinates ?? [];
@@ -131,7 +143,12 @@ export function cityCenter(city: string): Promise<Point | null> {
 const valid = (c: Candidate) =>
   Number.isFinite(c.lat) && Number.isFinite(c.lon) && Math.abs(c.lat) <= 90 && Math.abs(c.lon) <= 180;
 
-async function photon(name: string, center: Point, kind: PlaceKind): Promise<Candidate[]> {
+async function photon(
+  name: string,
+  center: Point,
+  kind: PlaceKind,
+  prio?: () => Priority,
+): Promise<Candidate[]> {
   try {
     const url = new URL('https://photon.komoot.io/api/');
     url.searchParams.set('q', name);
@@ -148,7 +165,7 @@ async function photon(name: string, center: Point, kind: PlaceKind): Promise<Can
       [center.lon - dLon, center.lat - dLat, center.lon + dLon, center.lat + dLat].map((n) => n.toFixed(4)).join(','),
     );
     if (kind === 'accommodation') url.searchParams.set('osm_tag', 'tourism');
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await photonFetch(url.toString(), prio);
     if (!res.ok) return [];
     const data = (await res.json()) as {
       features?: {
@@ -293,7 +310,7 @@ export async function locatePlaces(
   name: string,
   city: string,
   kind: PlaceKind = 'sight',
-  options: { biasHint?: string } = {},
+  options: { biasHint?: string; priority?: () => Priority } = {},
 ): Promise<LocatedPlace[]> {
   const center = await cityCenter(city);
   if (!center) return [];
@@ -304,20 +321,31 @@ export async function locatePlaces(
   const cityTokens = distinctiveTokens(city);
   const nameHasCity = cityTokens.some((t) => fold(name).includes(t));
 
+  // Name words minus the city and type words, longest first ("Kokonozi" for "Kokonozi Mosque").
+  const core = distinctiveTokens(name)
+    .filter((t) => !cityTokens.includes(t) && !TYPE_WORDS.has(t))
+    .sort((a, b) => b.length - a.length);
+
   const matchPath = (c: Candidate): MatchPath | null => {
     if (nameHasCity && !cityTokens.some((t) => fold(`${c.name} ${c.display_name}`).includes(t))) {
       return null;
     }
-    if (kind === 'sight' && (c.osmKey === 'building' || c.osmKey === 'landuse' || (c.osmValue && NOT_A_SIGHT.has(c.osmValue)))) {
-      return null;
+    if (kind === 'sight') {
+      if (c.osmValue && NOT_A_SIGHT.has(c.osmValue)) return null;
+      // Housing named like the sight ("Lana Riverside Residences"), unless asked for.
+      const label = `${c.nameEn ?? ''} ${c.name}`;
+      if (HOUSING_WORDS.test(label) && !HOUSING_WORDS.test(name)) return null;
     }
     // English name first, then the local name / full label.
-    if (c.nameEn && matchesName(c.nameEn, name)) return 'english-name';
-    if (matchesName(`${c.name} ${c.display_name}`, name)) return 'name';
+    if (c.nameEn && matchesName(c.nameEn, name, city)) return 'english-name';
+    // Match the POI's own name, not its address ("Art Hotel, Rruga e Kavajës").
+    if (matchesName(c.name || c.display_name, name, city)) return 'name';
     // Local-name path: a real POI near the center or another located sight
     // that shares a stem ("Sheshi Skënderbej" for "Skanderbeg Square").
     if (!c.osmKey || !LOCAL_NAME_KEYS.has(c.osmKey)) return null;
-    if (!sharesStem(`${c.nameEn ?? ''} ${c.name}`, name)) return null;
+    // The shared stem must be the name's most specific (longest) word, so a
+    // plain "Market" or "National" never carries the match.
+    if (!core.length || !sharesStrongStem(`${c.nameEn ?? ''} ${c.name}`, core[0])) return null;
     return anchors.some((a) => haversineKm(a.lat, a.lon, c.lat, c.lon) <= LOCAL_NAME_RADIUS_KM)
       ? 'local-name'
       : null;
@@ -332,7 +360,11 @@ export async function locatePlaces(
       .filter((c): c is typeof c & { matchPath: MatchPath } => c.matchPath != null);
 
   const providers: [LocateProvider, () => Promise<Candidate[]>][] = [
-    ['photon', () => photon(name, bias, kind)],
+    ['photon', () => photon(name, bias, kind, options.priority)],
+    // Photon often misses "Kokonozi Mosque" but finds "Kokonozi" (Xhamia e Kokonozit).
+    ...(kind === 'sight' && core.length && core.join(' ') !== fold(name)
+      ? [['photon', () => photon(core.join(' '), bias, kind, options.priority)] as [LocateProvider, () => Promise<Candidate[]>]]
+      : []),
     ['geoapify', () => geoapify(name, city, bias, kind)],
     ['nominatim', () => queuedNominatim(`${name}, ${city}`)],
   ];
@@ -357,8 +389,16 @@ export async function locatePlaces(
 }
 
 /** Coordinates for a sight (cached in memory + localStorage, in-flight deduped). */
-export function locateSight(name: string, city: string): Promise<Point | null> {
+/** Sights whose detail page is open: their Photon requests run before cards'. */
+const boostedSights = new Set<string>();
+
+export function locateSight(
+  name: string,
+  city: string,
+  priority: Priority = 'low',
+): Promise<Point | null> {
   const key = `${city}|${name}`.trim().toLowerCase();
+  if (priority === 'high') boostedSights.add(key);
   if (memory.has(key)) return Promise.resolve(memory.get(key)!);
   const stored = loadStore()[key];
   if (stored) {
@@ -367,7 +407,9 @@ export function locateSight(name: string, city: string): Promise<Point | null> {
   }
   const inflight = pending.get(key);
   if (inflight) return inflight;
-  const work = locatePlaces(name, city, 'sight')
+  const work = locatePlaces(name, city, 'sight', {
+    priority: () => (boostedSights.has(key) ? 'high' : 'low'),
+  })
     .then((hits) => (hits[0] ? { lat: hits[0].lat, lon: hits[0].lon } : null))
     .catch(() => null)
     .then((point) => {

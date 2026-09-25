@@ -92,6 +92,10 @@ function PhotoGallery({
       wikidataId,
       wikipediaTag,
       commonsTag,
+      priority: 'high',
+      onProgress: (partial) => {
+        if (!cancelled) setPhotos(partial.slice(0, 10));
+      },
     }).then((urls) => {
       if (!cancelled) setPhotos(urls.slice(0, 10));
     });
@@ -113,6 +117,7 @@ function PhotoGallery({
         wikidataId={wikidataId}
         wikipediaTag={wikipediaTag}
         commonsTag={commonsTag}
+        priority="high"
       />
     );
   }

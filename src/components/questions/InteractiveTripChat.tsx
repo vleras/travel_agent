@@ -4,6 +4,10 @@ import { geocode } from '../../services/nominatim';
 import { geocodeHotel, type HotelMatch } from '../../services/geocodeHotel';
 import { parseDaysInput } from '../../data/scheduleOptions';
 import { sanitizeAssistantText } from '../../services/sanitizeAssistantText';
+import { parseLocationInput } from '../../services/parseLocation';
+import { cityCenter } from '../../services/sightLocation';
+import { haversineKm } from '../../services/geo';
+import { MapPicker } from '../shared/MapPicker';
 
 export interface TripChatState { messages: TripChatMessage[]; data: TripChatData; complete: boolean }
 
@@ -32,7 +36,11 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   const [error, setError] = useState('');
   const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'failed'>('idle');
   const [hotelMatches, setHotelMatches] = useState<HotelMatch[]>([]);
+  const [picker, setPicker] = useState<{ lat: number; lon: number } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const awaitingHotel = Boolean(data.hasAccommodation && !data.accommodation && data.destination && data.tripLength);
+  // Offer exact-location options when we only found an area, or nothing.
+  const offerExact = awaitingHotel && (hotelMatches.some((m) => m.approximate) || addressStatus === 'failed');
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
   useEffect(() => { onStateChange({ messages, data, complete }); }, [messages, data, complete, onStateChange]);
@@ -78,6 +86,26 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     setMessages(current => [...current, { role: 'user', content: match.approximate ? `Use the center of ${match.display_name}` : `Yes, ${match.display_name}` }, { role: 'assistant', content: 'Location confirmed. You can continue to choose places.' }]);
   }
 
+  /** Pasted coordinates, a Google Maps link, or a map pick. Must lie near the destination. */
+  async function usePinnedLocation(lat: number, lon: number, source: string) {
+    const city = data.destination ?? '';
+    const center = city ? await cityCenter(city) : null;
+    if (center && haversineKm(center.lat, center.lon, lat, lon) > 50) {
+      setMessages(current => [...current, { role: 'assistant', content: `That point is more than 50 km from ${city}. Check the link or pick the spot on the map.` }]);
+      return;
+    }
+    const label = `Pinned location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+    console.info('[locate]', { kind: 'accommodation', name: label, city, provider: source, distanceKm: center ? Number(haversineKm(center.lat, center.lon, lat, lon).toFixed(2)) : null });
+    setPicker(null);
+    chooseHotel({ lat, lon, name: label, display_name: label, approximate: false });
+  }
+
+  async function openPicker() {
+    const approx = hotelMatches.find((m) => m.approximate);
+    const center = approx ?? (data.destination ? await cityCenter(data.destination) : null);
+    if (center) setPicker({ lat: center.lat, lon: center.lon });
+  }
+
   function rejectHotel() {
     setHotelMatches([]);
     setData(current => ({ ...current, accommodationQuery: null, accommodation: null }));
@@ -98,6 +126,21 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     if (!content || loading || addressStatus === 'checking') return;
     if (hotelMatches.length === 1 && /^(yes|yeah|correct)$/i.test(content)) { setInput(''); chooseHotel(hotelMatches[0]); return; }
     if (hotelMatches.length && /^(no|nope)$/i.test(content)) { setInput(''); rejectHotel(); return; }
+    if (awaitingHotel) {
+      const parsed = parseLocationInput(content);
+      if (parsed) {
+        setInput('');
+        setMessages(current => [...current, { role: 'user', content }]);
+        if (parsed.kind === 'short-link') {
+          setMessages(current => [...current, { role: 'assistant', content: 'I can’t open short Google Maps links. Open it, copy the full link from the address bar (or the coordinates), and paste that here.' }]);
+          return;
+        }
+        setHotelMatches([]);
+        setAddressStatus('idle');
+        await usePinnedLocation(parsed.lat, parsed.lon, content.includes('http') ? 'google-maps-link' : 'coordinates');
+        return;
+      }
+    }
     const nextMessages: TripChatMessage[] = [...messages, { role: 'user', content }];
     setMessages(nextMessages);
     setInput('');
@@ -207,6 +250,11 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
           </button>)}
           <button type="button" className="btn btn-ghost" onClick={rejectHotel}>{hotelMatches.length === 1 ? 'No' : 'None of these'}</button>
         </div>}
+        {offerExact && !picker && <div className="interactive-chat-message interactive-chat-message--assistant">
+          For an exact spot, paste coordinates (e.g. 41.3275, 19.8187) or a Google Maps link, or{' '}
+          <button type="button" className="chat-form-link" onClick={() => void openPicker()}>pick it on the map</button>.
+        </div>}
+        {picker && <MapPicker center={picker} onCancel={() => setPicker(null)} onConfirm={(lat, lon) => void usePinnedLocation(lat, lon, 'map-pick')} />}
         {(hotelMatches.length > 0 || addressStatus !== 'idle') && <button type="button" className="btn btn-ghost" onClick={skipHotel}>Continue without hotel location</button>}
         <div ref={endRef} />
       </div>

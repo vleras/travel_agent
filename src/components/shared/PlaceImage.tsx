@@ -20,6 +20,8 @@ interface PlaceImageProps {
   className?: string;
   /** Geocode sights without coordinates so photo lookup can match by location. */
   locate?: boolean;
+  /** Detail-page hero: load immediately and ahead of cards. Cards wait until scrolled into view. */
+  priority?: 'high' | 'low';
   /** When true (default), allow swiping / arrows across multiple photos. */
   swipeable?: boolean;
 }
@@ -52,8 +54,33 @@ export function PlaceImage({
   commonsTag,
   className,
   locate,
+  priority = 'low',
   swipeable = true,
 }: PlaceImageProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(priority === 'high');
+
+  // Cards only start their photo lookup once they're near the viewport.
+  useEffect(() => {
+    if (visible) return;
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible]);
+
   const [index, setIndex] = useState(0);
   const [queue, setQueue] = useState<string[]>([]);
   const [failed, setFailed] = useState(false);
@@ -61,6 +88,7 @@ export function PlaceImage({
   const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
+    if (!visible) return;
     let cancelled = false;
     setFailed(false);
     setLoading(true);
@@ -74,7 +102,14 @@ export function PlaceImage({
         wikipediaTag,
         commonsTag,
         locate,
+        priority,
         limit: CARD_PHOTOS,
+        // Show the first photo (usually the Wikidata main image) right away.
+        onProgress: (partial) => {
+          if (cancelled || imageUrl || !partial.length) return;
+          setQueue((current) => (current.length ? current : partial));
+          setLoading(false);
+        },
       });
       if (cancelled) return;
       const list = imageUrl
@@ -100,6 +135,8 @@ export function PlaceImage({
     wikipediaTag,
     commonsTag,
     locate,
+    priority,
+    visible,
   ]);
 
   const src = queue[index] ?? '';
@@ -114,6 +151,7 @@ export function PlaceImage({
   if (failed || (!src && !loading)) {
     return (
       <div
+        ref={rootRef}
         className={className}
         style={{
           display: 'grid',
@@ -135,6 +173,7 @@ export function PlaceImage({
   if (loading && !src) {
     return (
       <div
+        ref={rootRef}
         className={className}
         style={{
           background:
@@ -149,6 +188,7 @@ export function PlaceImage({
 
   return (
     <div
+      ref={rootRef}
       className={`place-img-swipe ${className ?? ''}`}
       onTouchStart={(e) => {
         touchStartX.current = e.changedTouches[0]?.clientX ?? null;

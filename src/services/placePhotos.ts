@@ -1,4 +1,5 @@
 import { haversineKm } from './geo';
+import { createLimiter, type Priority } from './requestQueue';
 import { locateSight } from './sightLocation';
 import { mentionsPlace, sharesStem } from './nameMatch';
 /**
@@ -21,6 +22,10 @@ export interface PlacePhotoQuery {
   limit?: number;
   /** Geocode curated sights without lat/lon so location steps apply. */
   locate?: boolean;
+  /** 'high' for the open detail page: its requests run before cards'. */
+  priority?: Priority;
+  /** Called as photos are found (the Wikidata main image usually comes first). */
+  onProgress?: (urls: string[]) => void;
 }
 
 export type PhotoSourceInfo = {
@@ -212,12 +217,16 @@ function isVisibleQuality(photo: PexelsPhoto): boolean {
 
 /** After a 429 (hourly quota), skip Pexels for a while instead of failing every call. */
 let pexelsPausedUntil = 0;
+let pexelsNoticeShown = false;
 
 async function searchPexels(query: string, page = 1): Promise<PexelsPhoto[]> {
   if (Date.now() < pexelsPausedUntil) return [];
   const apiKey = (import.meta.env.VITE_PEXELS_API_KEY as string | undefined)?.trim();
-  if (!apiKey) {
-    console.error('[Pexels] Missing VITE_PEXELS_API_KEY. Add it to .env and restart Vite.');
+  if (!apiKey || apiKey === 'off') {
+    if (!pexelsNoticeShown) {
+      pexelsNoticeShown = true;
+      console.info('[Pexels] Disabled (no VITE_PEXELS_API_KEY); using Wikimedia Commons only.');
+    }
     return [];
   }
 
@@ -277,40 +286,21 @@ async function searchPexels(query: string, page = 1): Promise<PexelsPhoto[]> {
 
 /**
  * Wikimedia (Commons + Wikidata) limiter: a page of ~40 cards would otherwise
- * fire hundreds of requests at once and get 429s. At most 4 in flight; on a
- * 429 everyone waits 20 s and the request is retried once.
+ * fire hundreds of requests at once and get 429s. At most 4 in flight, the
+ * open detail page first; 429/503 pause the queue and retry (2 s, then 8 s).
  */
-const WIKI_CONCURRENCY = 4;
-let wikiActive = 0;
-let wikiPausedUntil = 0;
-const wikiWaiting: (() => void)[] = [];
+const wikimedia = createLimiter({
+  name: 'Wikimedia',
+  concurrency: 4,
+  retryStatuses: [429, 503],
+  backoffMs: [2000, 8000],
+});
 
-async function acquireWikiSlot(): Promise<void> {
-  if (wikiActive >= WIKI_CONCURRENCY) await new Promise<void>((resolve) => wikiWaiting.push(resolve));
-  wikiActive++;
-}
+type Prio = () => Priority;
+const lowPriority: Prio = () => 'low';
 
-function releaseWikiSlot() {
-  wikiActive--;
-  wikiWaiting.shift()?.();
-}
-
-async function wikiFetch(input: string, init?: RequestInit): Promise<Response> {
-  for (let attempt = 0; ; attempt++) {
-    await acquireWikiSlot();
-    let res: Response;
-    try {
-      const pause = wikiPausedUntil - Date.now();
-      if (pause > 0) await new Promise((r) => setTimeout(r, pause));
-      // Timeouts start after the slot is acquired, not while queued.
-      res = await fetch(input, { ...init, signal: AbortSignal.timeout(8000) });
-    } finally {
-      releaseWikiSlot();
-    }
-    if (res.status !== 429 || attempt >= 1) return res;
-    if (Date.now() >= wikiPausedUntil) console.warn('[Wikimedia] Rate limited; pausing requests for 20 s.');
-    wikiPausedUntil = Math.max(wikiPausedUntil, Date.now() + 20000);
-  }
+function wikiFetch(url: string, prio: Prio = lowPriority): Promise<Response> {
+  return wikimedia.fetch(url, prio);
 }
 
 type CommonsImageInfo = {
@@ -334,7 +324,7 @@ function hasCoords(q: PlacePhotoQuery): q is PlacePhotoQuery & { lat: number; lo
 }
 
 /** Shared Commons query runner: returns pages with imageinfo (+ coordinates). */
-async function commonsPages(params: Record<string, string>): Promise<CommonsPage[]> {
+async function commonsPages(params: Record<string, string>, prio: Prio = lowPriority): Promise<CommonsPage[]> {
   const url = new URL('https://commons.wikimedia.org/w/api.php');
   url.search = new URLSearchParams({
     action: 'query',
@@ -347,7 +337,7 @@ async function commonsPages(params: Record<string, string>): Promise<CommonsPage
     ...params,
   }).toString();
   try {
-    const res = await wikiFetch(url.toString(), { signal: AbortSignal.timeout(6500) });
+    const res = await wikiFetch(url.toString(), prio);
     if (!res.ok) return [];
     const data = (await res.json()) as { query?: { pages?: CommonsPage[] } };
     return data.query?.pages ?? [];
@@ -362,7 +352,12 @@ type WikidataMatch = { image?: string; category?: string };
  * Find the place on Wikidata by name, confirmed by its coordinates (P625)
  * lying within 1 km. Returns its main image (P18) and Commons category (P373).
  */
-async function wikidataMatch(name: string, lat: number, lon: number): Promise<WikidataMatch | null> {
+async function wikidataMatch(
+  name: string,
+  lat: number,
+  lon: number,
+  prio: Prio = lowPriority,
+): Promise<WikidataMatch | null> {
   try {
     const search = new URL('https://www.wikidata.org/w/api.php');
     search.search = new URLSearchParams({
@@ -373,7 +368,7 @@ async function wikidataMatch(name: string, lat: number, lon: number): Promise<Wi
       format: 'json',
       origin: '*',
     }).toString();
-    const found = (await (await wikiFetch(search.toString(), { signal: AbortSignal.timeout(6000) })).json()) as {
+    const found = (await (await wikiFetch(search.toString(), prio)).json()) as {
       search?: { id: string }[];
     };
     const ids = (found.search ?? []).map((e) => e.id);
@@ -388,7 +383,7 @@ async function wikidataMatch(name: string, lat: number, lon: number): Promise<Wi
       origin: '*',
     }).toString();
     type Claim = { mainsnak?: { datavalue?: { value?: unknown } } };
-    const data = (await (await wikiFetch(get.toString(), { signal: AbortSignal.timeout(6000) })).json()) as {
+    const data = (await (await wikiFetch(get.toString(), prio)).json()) as {
       entities?: Record<string, { claims?: Record<string, Claim[]> }>;
     };
     // Keep search ranking order; take the first entity close enough.
@@ -431,7 +426,7 @@ function isUsableCommonsImage(info: CommonsImageInfo): boolean {
   return width <= 0 || height <= 0 || width / height >= 1.15;
 }
 
-async function searchCommons(query: string): Promise<CommonsPage[]> {
+async function searchCommons(query: string, prio: Prio = lowPriority): Promise<CommonsPage[]> {
   const url = new URL('https://commons.wikimedia.org/w/api.php');
   url.searchParams.set('action', 'query');
   url.searchParams.set('format', 'json');
@@ -445,13 +440,8 @@ async function searchCommons(query: string): Promise<CommonsPage[]> {
   url.searchParams.set('iiprop', 'url|size|mime');
   url.searchParams.set('iiurlwidth', '1400');
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 6500);
   try {
-    const res = await wikiFetch(url.toString(), {
-      headers: { Accept: 'application/json' },
-      signal: ctrl.signal,
-    });
+    const res = await wikiFetch(url.toString(), prio);
     if (!res.ok) {
       console.error('[Wikimedia Commons]', { query, status: res.status, results: 0 });
       return [];
@@ -463,8 +453,6 @@ async function searchCommons(query: string): Promise<CommonsPage[]> {
   } catch (err) {
     console.error('[Wikimedia Commons] Request failed', { query, err });
     return [];
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -474,16 +462,25 @@ function sharesNameStem(title: string, name: string): boolean {
 }
 
 /** Files filed under a Commons category, e.g. Category:Pyramid of Tirana. */
-function commonsCategoryFiles(category: string): Promise<CommonsPage[]> {
-  return commonsPages({
-    generator: 'categorymembers',
-    gcmtitle: `Category:${category.replace(/^Category:/i, '')}`,
-    gcmtype: 'file',
-    gcmlimit: String(PER_PAGE * 2),
-  });
+function commonsCategoryFiles(category: string, prio: Prio = lowPriority): Promise<CommonsPage[]> {
+  return commonsPages(
+    {
+      generator: 'categorymembers',
+      gcmtitle: `Category:${category.replace(/^Category:/i, '')}`,
+      gcmtype: 'file',
+      gcmlimit: String(PER_PAGE * 2),
+    },
+    prio,
+  );
 }
 
+/** Places whose detail page is open: their queued requests jump ahead of cards. */
+const boosted = new Set<string>();
+/** Progress listeners per place, so the first photo can show before the rest load. */
+const progress = new Map<string, Set<(urls: string[]) => void>>();
+
 async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
+  const prio: Prio = () => (boosted.has(key) ? 'high' : 'low');
   const food = isFoodPlace(q.category);
   const target = food ? FOOD_PHOTOS : LANDMARK_PHOTOS;
   const urls: string[] = [];
@@ -499,6 +496,8 @@ async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
     seen.add(fp);
     claimedBy.set(fp, key);
     urls.push(src);
+    const snapshot = urls.slice();
+    progress.get(key)?.forEach((cb) => cb(snapshot));
   };
 
   if (q.imageUrl && /images\.pexels\.com|pexels\.com/i.test(q.imageUrl)) add(q.imageUrl);
@@ -542,9 +541,9 @@ async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
   const runCommons = async () => {
     if (!food && hasCoords(q)) {
       // 1–2. Wikidata entity confirmed by location: main image, then its category.
-      const match = await wikidataMatch(q.name, q.lat, q.lon);
-      if (match?.image) addCommons(await commonsPages({ titles: `File:${match.image}` }), false);
-      addCommons(await commonsCategoryFiles(match?.category ?? q.name), false);
+      const match = await wikidataMatch(q.name, q.lat, q.lon, prio);
+      if (match?.image) addCommons(await commonsPages({ titles: `File:${match.image}` }, prio), false);
+      addCommons(await commonsCategoryFiles(match?.category ?? q.name, prio), false);
       // 3. Geotagged files: within 50 m, or within 150 m and sharing a name stem.
       if (!full()) {
         const pages = await commonsPages({
@@ -554,7 +553,7 @@ async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
           ggsnamespace: '6',
           ggslimit: String(PER_PAGE * 2),
           prop: 'imageinfo|coordinates',
-        });
+        }, prio);
         const { lat, lon } = q;
         addCommons(
           pages.filter((page) => {
@@ -568,12 +567,12 @@ async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
         );
       }
     } else if (!food) {
-      addCommons(await commonsCategoryFiles(q.name), false);
+      addCommons(await commonsCategoryFiles(q.name, prio), false);
     }
     // 4. Text search, name rules + distance check.
     for (const query of [...new Set(commonsQueries(q.name, q.city))]) {
       if (full()) break;
-      addCommons(await searchCommons(query), true);
+      addCommons(await searchCommons(query, prio), true);
     }
   };
 
@@ -621,12 +620,28 @@ export async function fetchPlacePhotoUrls(
   const cached = resultCache.get(key);
   if (cached) return cut(cached);
 
+  if (extras?.priority === 'high') {
+    boosted.add(key);
+    // Also boost a location lookup a card may already have queued.
+    if (extras.locate && q.city && !hasCoords(q) && !isFoodPlace(q.category)) void locateSight(q.name, q.city, 'high');
+  }
+  const onProgress = extras?.onProgress;
+  const listener = onProgress ? (urls: string[]) => onProgress(cut(urls)) : null;
+  if (listener) {
+    if (!progress.has(key)) progress.set(key, new Set());
+    progress.get(key)!.add(listener);
+  }
+  const done = <T,>(value: T) => {
+    if (listener) progress.get(key)?.delete(listener);
+    return value;
+  };
+
   const pending = inflight.get(key);
-  if (pending) return pending.then(cut);
+  if (pending) return pending.then(cut).then(done);
 
   const promise = (async () => {
     if (extras?.locate && !hasCoords(q) && q.city && !isFoodPlace(q.category)) {
-      const point = await locateSight(q.name, q.city);
+      const point = await locateSight(q.name, q.city, extras?.priority);
       if (point) {
         q.lat = point.lat;
         q.lon = point.lon;
@@ -645,5 +660,5 @@ export async function fetchPlacePhotoUrls(
     });
 
   inflight.set(key, promise);
-  return promise.then(cut);
+  return promise.then(cut).then(done);
 }

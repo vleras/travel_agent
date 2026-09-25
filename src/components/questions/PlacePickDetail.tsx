@@ -115,6 +115,13 @@ export function PlacePickDetail({
 
     void fetchPlacePhotoUrls(spot.name, city, spot.category, spot.lat, spot.lon, {
       locate: true,
+      priority: 'high',
+      // Show the first photo (usually the Wikidata main image) while the rest load.
+      onProgress: (partial) => {
+        if (cancelled) return;
+        setPhotos(partial.slice(0, 10));
+        setLoadingPhotos(false);
+      },
     }).then((urls) => {
       if (!cancelled) {
         setPhotos(urls.slice(0, 10));
@@ -260,6 +267,7 @@ export function PlacePickDetail({
           lat={spot.lat}
           lon={spot.lon}
           locate
+          priority="high"
         />
       )}
 
