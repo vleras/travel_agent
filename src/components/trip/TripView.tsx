@@ -322,7 +322,6 @@ export function TripView({
                   </article>
                 ))}
               </div>
-              <small className="food-attribution">Places: Geoapify / OpenStreetMap contributors</small>
             </section>
           )}
           <ItineraryList

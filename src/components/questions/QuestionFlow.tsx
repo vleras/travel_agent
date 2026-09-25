@@ -54,6 +54,9 @@ function attractionToHighlight(a: Attraction): DestinationHighlight {
     name: a.name,
     category: a.category,
     description: a.description,
+    address: a.address,
+    lat: a.lat,
+    lon: a.lon,
   };
 }
 
@@ -210,7 +213,7 @@ export function QuestionFlow({
       const places = await getNearbyFoodPlacesForCity(city.trim(), result ? { lat: result.lat, lon: result.lon } : undefined);
       if (!cancelled) setFoodPlaces(places.map(place => ({
         name: place.name, category: place.category === 'cafe' ? 'Cafés' : 'Restaurants',
-        lat: place.lat, lon: place.lon, typical_visit_duration_minutes: place.category === 'cafe' ? 30 : 60,
+        lat: place.lat, lon: place.lon, address: place.address, typical_visit_duration_minutes: place.category === 'cafe' ? 30 : 60,
         recommended: place.recommended, wikiDescription: place.wikiDescription,
         description: [place.cuisine ? `Cuisine: ${place.cuisine.replace(/;/g, ', ')}.` : 'A nearby place to stop for food or drinks.', place.openingHours ? `Hours: ${place.openingHours}.` : ''].filter(Boolean).join(' '),
       })));
@@ -590,7 +593,6 @@ export function QuestionFlow({
             <PlacesGuideChat city={city} selectedCount={selectedPlaces.length} />
             <div className="question-body">
               {foodLoading && <p className="hint" role="status">Finding cafés and restaurants nearby…</p>}
-              {foodPlaces.length > 0 && <p className="hint">Food places from <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a> and <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.</p>}
               {generatingCity === city.trim() && availablePlaces.length === 0 ? (
                 <p className="hint" role="status" style={{ margin: 0 }}>
                   Generating attraction cards for {city}…
@@ -650,6 +652,9 @@ export function QuestionFlow({
                               name={spot.name}
                               city={city}
                               category={spot.category}
+                              lat={spot.lat}
+                              lon={spot.lon}
+                              locate
                             />
                             <div className="place-pick-copy">
                               <div className="place-pick-title">

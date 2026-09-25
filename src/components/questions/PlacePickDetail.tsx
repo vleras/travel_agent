@@ -113,7 +113,9 @@ export function PlacePickDetail({
     setWiki(null);
     setLoadingPhotos(true);
 
-    void fetchPlacePhotoUrls(spot.name, city, spot.category).then((urls) => {
+    void fetchPlacePhotoUrls(spot.name, city, spot.category, spot.lat, spot.lon, {
+      locate: true,
+    }).then((urls) => {
       if (!cancelled) {
         setPhotos(urls.slice(0, 10));
         setLoadingPhotos(false);
@@ -126,7 +128,7 @@ export function PlacePickDetail({
     return () => {
       cancelled = true;
     };
-  }, [spot.name, spot.category, city]);
+  }, [spot.name, spot.category, spot.lat, spot.lon, city]);
 
   useEffect(() => {
     if (lightbox == null) return;
@@ -255,16 +257,32 @@ export function PlacePickDetail({
           name={spot.name}
           city={city}
           category={spot.category}
+          lat={spot.lat}
+          lon={spot.lon}
+          locate
         />
       )}
 
       <header className="highlight-story-titlebar">
         <span className="category-pill">{spot.category}</span>
         <h1>{spot.name}</h1>
-        <p>
-          {city}
-          {country ? `, ${country}` : ''}
-        </p>
+        <a
+          className="place-pick-location"
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+            [spot.name, spot.address, city, country].filter(Boolean).join(', '),
+          )}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open in Google Maps"
+        >
+          <span aria-hidden>📍</span>
+          <span>
+            {spot.address ? `${spot.address}, ` : ''}
+            {city}
+            {country ? `, ${country}` : ''}
+          </span>
+          <span className="place-pick-location-cta">Open in Google Maps ↗</span>
+        </a>
         {wiki?.description && (
           <p className="highlight-story-wiki-desc">{wiki.description}</p>
         )}

@@ -1,3 +1,5 @@
+import { haversineKm } from './geo';
+import { locateSight } from './sightLocation';
 /**
  * Browser-safe place photos from Pexels and Wikimedia Commons.
  * Search: https://api.pexels.com/v1/search (~200 req/hour).
@@ -14,6 +16,10 @@ export interface PlacePhotoQuery {
   wikidataId?: string;
   wikipediaTag?: string;
   commonsTag?: string;
+  /** Max photos to return (defaults to the full gallery). */
+  limit?: number;
+  /** Geocode curated sights without lat/lon so location steps apply. */
+  locate?: boolean;
 }
 
 export type PhotoSourceInfo = {
@@ -21,15 +27,27 @@ export type PhotoSourceInfo = {
   href?: string;
 };
 
-const TARGET_PLACE_PHOTOS = 10;
+/** Gallery sizes: landmarks up to 8 (source order), food spots keep 10. */
+const LANDMARK_PHOTOS = 8;
+const FOOD_PHOTOS = 10;
+/** Cards (PlaceImage) only ever show this many. */
+export const CARD_PHOTOS = 3;
 const PER_PAGE = 15;
 
 const resultCache = new Map<string, string[]>();
 const inflight = new Map<string, Promise<string[]>>();
+/** Photo fingerprint → cache key of the place that already uses it. */
+const claimedBy = new Map<string, string>();
+
+function hashString(value: string): number {
+  let h = 0;
+  for (let i = 0; i < value.length; i++) h = (h * 31 + value.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
 
 function cacheKey(q: PlacePhotoQuery): string {
   return [
-    'v12',
+    'v17',
     q.name,
     q.city ?? '',
     q.category ?? '',
@@ -90,13 +108,60 @@ function cleanName(name: string): string {
   return name.replace(/\s+/g, ' ').trim();
 }
 
-/** Straightforward queries: place name, plus name+city when city is known. */
-function pexelsQueries(name: string, city?: string): string[] {
+const FOOD_RE = /caf[eé]|coffee|espresso|restaurant|bakery|brunch|bistro|bar\b|pub|food|breakfast|pizz|grill|diner|eatery/i;
+const FOOD_ALT_RE = /caf[eé]|coffee|espresso|latte|cappuccino|restaurant|food|dish|meal|plate|bakery|pastr|bread|croissant|breakfast|brunch|dining|table|interior|barista|drink|cup|menu|chef|kitchen|pizza|burger|salad|dessert|cake/i;
+
+function isFoodPlace(category?: string): boolean {
+  return FOOD_RE.test(category ?? '');
+}
+
+/** Short English word Pexels understands for the place's category. */
+function categoryTerm(category?: string): string {
+  const c = (category ?? '').toLowerCase();
+  if (/coffee/.test(c)) return 'coffee shop';
+  if (/caf/.test(c)) return 'cafe';
+  if (/bakery/.test(c)) return 'bakery';
+  if (/brunch|breakfast/.test(c)) return 'breakfast';
+  if (/restaurant|food|grill|pizz|bistro/.test(c)) return 'restaurant';
+  return c.replace(/[^a-z ]/g, ' ').trim();
+}
+
+function nameTokens(name: string): string[] {
+  return cleanName(name)
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((t) => t.length >= 3);
+}
+
+/**
+ * Always anchor the name with city/category context: a bare name like
+ * "Costa" otherwise returns coastlines instead of the café.
+ */
+function pexelsQueries(name: string, city?: string, category?: string): string[] {
   const n = cleanName(name);
   if (!n) return [];
   const cityBit = city?.trim();
-  if (cityBit) return [n, `${n} ${cityBit}`];
-  return [n];
+  const term = categoryTerm(category);
+  const queries: string[] = [];
+  if (term) queries.push(`${n} ${term}${cityBit ? ` ${cityBit}` : ''}`);
+  if (cityBit) queries.push(`${n} ${cityBit}`);
+  // Generic, on-topic fallback for food spots Pexels won't know by name.
+  if (isFoodPlace(category) && term) queries.push(`${term} interior`, `${term} food`);
+  return queries;
+}
+
+/** Generic fallbacks return the same stock photos for every café, so each place reads a different page. */
+function isGenericQuery(query: string, name: string): boolean {
+  return !query.toLowerCase().includes(cleanName(name).toLowerCase());
+}
+
+/** Does a stock photo's alt text plausibly show this place? */
+function pexelsRelevant(photo: PexelsPhoto, q: PlacePhotoQuery): boolean {
+  const alt = (photo.alt ?? '').toLowerCase();
+  if (!alt) return false;
+  if (isFoodPlace(q.category)) return FOOD_ALT_RE.test(alt);
+  const tokens = [...nameTokens(q.name), ...nameTokens(q.city ?? '')];
+  return tokens.some((t) => alt.includes(t));
 }
 
 type PexelsPhoto = {
@@ -144,7 +209,7 @@ function isVisibleQuality(photo: PexelsPhoto): boolean {
   return true;
 }
 
-async function searchPexels(query: string): Promise<PexelsPhoto[]> {
+async function searchPexels(query: string, page = 1): Promise<PexelsPhoto[]> {
   const apiKey = (import.meta.env.VITE_PEXELS_API_KEY as string | undefined)?.trim();
   if (!apiKey) {
     console.error('[Pexels] Missing VITE_PEXELS_API_KEY. Add it to .env and restart Vite.');
@@ -154,7 +219,7 @@ async function searchPexels(query: string): Promise<PexelsPhoto[]> {
   const url = new URL('https://api.pexels.com/v1/search');
   url.searchParams.set('query', query);
   url.searchParams.set('per_page', String(PER_PAGE));
-  url.searchParams.set('page', '1');
+  url.searchParams.set('page', String(page));
   url.searchParams.set('orientation', 'landscape');
 
   const ctrl = new AbortController();
@@ -211,13 +276,99 @@ type CommonsImageInfo = {
 type CommonsPage = {
   title?: string;
   imageinfo?: CommonsImageInfo[];
+  coordinates?: { lat?: number; lon?: number }[];
 };
+
+function hasCoords(q: PlacePhotoQuery): q is PlacePhotoQuery & { lat: number; lon: number } {
+  return Number.isFinite(q.lat) && Number.isFinite(q.lon);
+}
+
+/** Shared Commons query runner: returns pages with imageinfo (+ coordinates). */
+async function commonsPages(params: Record<string, string>): Promise<CommonsPage[]> {
+  const url = new URL('https://commons.wikimedia.org/w/api.php');
+  url.search = new URLSearchParams({
+    action: 'query',
+    format: 'json',
+    formatversion: '2',
+    origin: '*',
+    prop: 'imageinfo',
+    iiprop: 'url|size|mime',
+    iiurlwidth: '1400',
+    ...params,
+  }).toString();
+  try {
+    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6500) });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { query?: { pages?: CommonsPage[] } };
+    return data.query?.pages ?? [];
+  } catch {
+    return [];
+  }
+}
+
+type WikidataMatch = { image?: string; category?: string };
+
+/**
+ * Find the place on Wikidata by name, confirmed by its coordinates (P625)
+ * lying within 1 km. Returns its main image (P18) and Commons category (P373).
+ */
+async function wikidataMatch(name: string, lat: number, lon: number): Promise<WikidataMatch | null> {
+  try {
+    const search = new URL('https://www.wikidata.org/w/api.php');
+    search.search = new URLSearchParams({
+      action: 'wbsearchentities',
+      search: cleanName(name),
+      language: 'en',
+      limit: '7',
+      format: 'json',
+      origin: '*',
+    }).toString();
+    const found = (await (await fetch(search.toString(), { signal: AbortSignal.timeout(6000) })).json()) as {
+      search?: { id: string }[];
+    };
+    const ids = (found.search ?? []).map((e) => e.id);
+    if (!ids.length) return null;
+
+    const get = new URL('https://www.wikidata.org/w/api.php');
+    get.search = new URLSearchParams({
+      action: 'wbgetentities',
+      ids: ids.join('|'),
+      props: 'claims',
+      format: 'json',
+      origin: '*',
+    }).toString();
+    type Claim = { mainsnak?: { datavalue?: { value?: unknown } } };
+    const data = (await (await fetch(get.toString(), { signal: AbortSignal.timeout(6000) })).json()) as {
+      entities?: Record<string, { claims?: Record<string, Claim[]> }>;
+    };
+    // Keep search ranking order; take the first entity close enough.
+    for (const id of ids) {
+      const claims = data.entities?.[id]?.claims;
+      const coord = claims?.P625?.[0]?.mainsnak?.datavalue?.value as
+        | { latitude?: number; longitude?: number }
+        | undefined;
+      if (coord?.latitude == null || coord.longitude == null) continue;
+      if (haversineKm(lat, lon, coord.latitude, coord.longitude) > 1) continue;
+      const image = claims?.P18?.[0]?.mainsnak?.datavalue?.value;
+      const category = claims?.P373?.[0]?.mainsnak?.datavalue?.value;
+      return {
+        image: typeof image === 'string' ? image : undefined,
+        category: typeof category === 'string' ? category : undefined,
+      };
+    }
+  } catch {
+    /* fall through to text search */
+  }
+  return null;
+}
 
 function commonsQueries(name: string, city?: string): string[] {
   const n = cleanName(name);
   if (!n) return [];
   const cityBit = city?.trim();
-  return cityBit ? [`"${n}" ${cityBit}`, `"${n}"`, `${n} ${cityBit}`] : [`"${n}"`, n];
+  // Never search the bare name when we know the city: it drifts to unrelated
+  // subjects (e.g. "Costa" → coastlines).
+  return cityBit ? [`"${n}" ${cityBit}`, `${n} ${cityBit}`] : [`"${n}"`];
 }
 
 function isUsableCommonsImage(info: CommonsImageInfo): boolean {
@@ -240,7 +391,7 @@ async function searchCommons(query: string): Promise<CommonsPage[]> {
   url.searchParams.set('gsrsearch', query);
   url.searchParams.set('gsrnamespace', '6');
   url.searchParams.set('gsrlimit', String(PER_PAGE));
-  url.searchParams.set('prop', 'imageinfo');
+  url.searchParams.set('prop', 'imageinfo|coordinates');
   url.searchParams.set('iiprop', 'url|size|mime');
   url.searchParams.set('iiurlwidth', '1400');
 
@@ -267,58 +418,162 @@ async function searchCommons(query: string): Promise<CommonsPage[]> {
   }
 }
 
-async function searchAll(q: PlacePhotoQuery): Promise<string[]> {
-  const queries = [...new Set(pexelsQueries(q.name, q.city))].filter(Boolean);
+const STOPWORDS = new Set(['the', 'and', 'of', 'de', 'la', 'le', 'el', 'del', 'di', 'des', 'du', 'von']);
+
+function fold(value: string): string {
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+
+function distinctiveTokens(name: string): string[] {
+  return fold(cleanName(name))
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+}
+
+/**
+ * Text (file title / alt) must name this exact place: every distinctive word
+ * of the name (one may be missing for long names). "Pyramid of Tirana"
+ * therefore rejects photos of the Giza pyramids.
+ */
+function mentionsPlace(text: string, name: string): boolean {
+  const tokens = distinctiveTokens(name);
+  if (!tokens.length) return false;
+  const hay = fold(text);
+  const hits = tokens.filter((t) => hay.includes(t)).length;
+  return hits >= (tokens.length >= 3 ? tokens.length - 1 : tokens.length);
+}
+
+/**
+ * Language-independent name check for geosearch: some word in the title
+ * shares a 4-letter stem with a distinctive name token ("Piramida" ~ "Pyramid"
+ * via "pira", folding y→i). Short tokens must match whole.
+ */
+function sharesNameStem(title: string, name: string): boolean {
+  const stem = (w: string) => w.replace(/y/g, 'i').slice(0, 4);
+  const words = fold(title.replace(/^File:/i, '').replace(/\.[a-z0-9]+$/i, ''))
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  return distinctiveTokens(name).some((token) =>
+    words.some((w) =>
+      token.length >= 4 && w.length >= 4 ? stem(w) === stem(token) : w === token,
+    ),
+  );
+}
+
+/** Files filed under a Commons category, e.g. Category:Pyramid of Tirana. */
+function commonsCategoryFiles(category: string): Promise<CommonsPage[]> {
+  return commonsPages({
+    generator: 'categorymembers',
+    gcmtitle: `Category:${category.replace(/^Category:/i, '')}`,
+    gcmtype: 'file',
+    gcmlimit: String(PER_PAGE * 2),
+  });
+}
+
+async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
+  const food = isFoodPlace(q.category);
+  const target = food ? FOOD_PHOTOS : LANDMARK_PHOTOS;
   const urls: string[] = [];
   const seen = new Set<string>();
+  const full = () => urls.length >= target;
+  // Skip photos another place already shows, so two places never share images.
+  const add = (src: string | undefined) => {
+    if (full() || !src || !/^https:\/\//i.test(src)) return;
+    const fp = imageFingerprint(src);
+    if (seen.has(fp)) return;
+    const owner = claimedBy.get(fp);
+    if (owner != null && owner !== key) return;
+    seen.add(fp);
+    claimedBy.set(fp, key);
+    urls.push(src);
+  };
 
-  // Prefer a known Pexels seed if present
-  if (
-    q.imageUrl &&
-    /^https:\/\//i.test(q.imageUrl) &&
-    /images\.pexels\.com|pexels\.com/i.test(q.imageUrl)
-  ) {
-    seen.add(imageFingerprint(q.imageUrl));
-    urls.push(q.imageUrl);
-  }
+  if (q.imageUrl && /images\.pexels\.com|pexels\.com/i.test(q.imageUrl)) add(q.imageUrl);
 
-  for (const query of queries) {
-    if (urls.length >= TARGET_PLACE_PHOTOS) break;
-    const photos = await searchPexels(query);
-    for (const photo of photos) {
-      if (urls.length >= TARGET_PLACE_PHOTOS) break;
-      if (!isLandscape(photo) || !isVisibleQuality(photo)) continue;
-      const src =
-        photo.src?.large || photo.src?.large2x || photo.src?.medium;
-      if (!src || !/^https:\/\//i.test(src)) continue;
-      const fp = imageFingerprint(src);
-      if (seen.has(fp)) continue;
-      seen.add(fp);
-      urls.push(src);
+  const addCommons = (pages: CommonsPage[], requireName: boolean) => {
+    for (const page of pages) {
+      const info = page.imageinfo?.[0];
+      if (!info || !isUsableCommonsImage(info)) continue;
+      if (requireName && !mentionsPlace(page.title ?? '', q.name)) continue;
+      // Text matches geotagged far from the place are a different place.
+      const at = page.coordinates?.[0];
+      if (
+        requireName &&
+        hasCoords(q) &&
+        at?.lat != null &&
+        at.lon != null &&
+        haversineKm(q.lat, q.lon, at.lat, at.lon) > 2
+      ) {
+        continue;
+      }
+      add(info.thumburl || info.url);
     }
-  }
+  };
 
-  // Commons often has exact landmark photos that stock-photo search misses.
-  if (urls.length < TARGET_PLACE_PHOTOS) {
-    const queries = [...new Set(commonsQueries(q.name, q.city))];
-    for (const query of queries) {
-      if (urls.length >= TARGET_PLACE_PHOTOS) break;
-      const pages = await searchCommons(query);
-      for (const page of pages) {
-        if (urls.length >= TARGET_PLACE_PHOTOS) break;
-        const info = page.imageinfo?.[0];
-        if (!info || !isUsableCommonsImage(info)) continue;
-        const src = info.thumburl || info.url;
-        if (!src || !/^https:\/\//i.test(src)) continue;
-        const fp = imageFingerprint(src);
-        if (seen.has(fp)) continue;
-        seen.add(fp);
-        urls.push(src);
+  const runPexels = async () => {
+    for (const query of [...new Set(pexelsQueries(q.name, q.city, q.category))]) {
+      if (full()) break;
+      const generic = isGenericQuery(query, q.name);
+      // Landmarks only use stock photos whose description names the place.
+      if (!food && generic) continue;
+      const page = generic ? 1 + (hashString(key) % 8) : 1;
+      for (const photo of await searchPexels(query, page)) {
+        if (!isLandscape(photo) || !isVisibleQuality(photo)) continue;
+        const alt = photo.alt ?? '';
+        if (food ? !pexelsRelevant(photo, q) : !mentionsPlace(alt, q.name)) continue;
+        add(photo.src?.large || photo.src?.large2x || photo.src?.medium);
       }
     }
+  };
+
+  const runCommons = async () => {
+    if (!food && hasCoords(q)) {
+      // 1–2. Wikidata entity confirmed by location: main image, then its category.
+      const match = await wikidataMatch(q.name, q.lat, q.lon);
+      if (match?.image) addCommons(await commonsPages({ titles: `File:${match.image}` }), false);
+      addCommons(await commonsCategoryFiles(match?.category ?? q.name), false);
+      // 3. Geotagged files: within 50 m, or within 150 m and sharing a name stem.
+      if (!full()) {
+        const pages = await commonsPages({
+          generator: 'geosearch',
+          ggscoord: `${q.lat}|${q.lon}`,
+          ggsradius: '150',
+          ggsnamespace: '6',
+          ggslimit: String(PER_PAGE * 2),
+          prop: 'imageinfo|coordinates',
+        });
+        const { lat, lon } = q;
+        addCommons(
+          pages.filter((page) => {
+            const at = page.coordinates?.[0];
+            if (at?.lat == null || at.lon == null) return false;
+            const m = haversineKm(lat, lon, at.lat, at.lon) * 1000;
+            if (m <= 50) return true;
+            return m <= 150 && sharesNameStem(page.title ?? '', q.name);
+          }),
+          false,
+        );
+      }
+    } else if (!food) {
+      addCommons(await commonsCategoryFiles(q.name), false);
+    }
+    // 4. Text search, name rules + distance check.
+    for (const query of [...new Set(commonsQueries(q.name, q.city))]) {
+      if (full()) break;
+      addCommons(await searchCommons(query), true);
+    }
+  };
+
+  // Landmarks: real Commons photos first; food spots: stock photos first.
+  if (food) {
+    await runPexels();
+    await runCommons();
+  } else {
+    await runCommons();
+    await runPexels();
   }
 
-  return urls.slice(0, TARGET_PLACE_PHOTOS);
+  return urls.slice(0, target);
 }
 
 /**
@@ -345,14 +600,27 @@ export async function fetchPlacePhotoUrls(
     commonsTag: extras?.commonsTag,
   };
 
-  const key = cacheKey(q);
+  const limit = extras?.limit;
+  const cut = (urls: string[]) => (limit ? urls.slice(0, limit) : urls);
+
+  // Key before geocoding so the card and detail page share one result.
+  const key = cacheKey(q) + (extras?.locate ? '|locate' : '');
   const cached = resultCache.get(key);
-  if (cached) return cached;
+  if (cached) return cut(cached);
 
   const pending = inflight.get(key);
-  if (pending) return pending;
+  if (pending) return pending.then(cut);
 
-  const promise = searchAll(q)
+  const promise = (async () => {
+    if (extras?.locate && !hasCoords(q) && q.city && !isFoodPlace(q.category)) {
+      const point = await locateSight(q.name, q.city);
+      if (point) {
+        q.lat = point.lat;
+        q.lon = point.lon;
+      }
+    }
+    return searchAll(q, key);
+  })()
     .then((urls) => {
       resultCache.set(key, urls);
       inflight.delete(key);
@@ -364,5 +632,5 @@ export async function fetchPlacePhotoUrls(
     });
 
   inflight.set(key, promise);
-  return promise;
+  return promise.then(cut);
 }

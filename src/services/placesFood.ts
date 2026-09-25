@@ -11,11 +11,12 @@ export interface FoodPlace {
   recommended?: boolean;
   wikiDescription?: string;
   price?: string;
+  address?: string;
 }
 
 export interface FoodPick { place: FoodPlace; reason: string }
 
-const VERSION = 'food-v2';
+const VERSION = 'food-v3';
 const memory = new Map<string, FoodPick[]>();
 
 function key(city: string, day: number, lat: number, lon: number) {
@@ -36,6 +37,14 @@ function writeCache(k: string, value: FoodPick[]) {
   try { localStorage.setItem(k, JSON.stringify(value)); } catch { /* storage unavailable */ }
 }
 
+function addressOf(raw: any): string | undefined {
+  const t = raw.tags ?? {};
+  const street = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
+  const osm = [street, t['addr:city']].filter(Boolean).join(', ');
+  const line = raw.address_line2 ?? raw.formatted ?? osm;
+  return line ? String(line).trim() || undefined : undefined;
+}
+
 function normalize(raw: any, source: FoodPlace['source'], index: number): FoodPlace | null {
   const lat = Number(raw.lat ?? raw.location?.lat ?? raw.center?.lat);
   const lon = Number(raw.lon ?? raw.location?.lon ?? raw.center?.lon);
@@ -44,7 +53,7 @@ function normalize(raw: any, source: FoodPlace['source'], index: number): FoodPl
   const category = /cafe|coffee/i.test(String(raw.category ?? raw.categories ?? raw.tags?.amenity)) ? 'cafe' : 'restaurant';
   return { id: `${source}:${raw.place_id ?? raw.id ?? `${lat},${lon},${index}`}`, name, lat, lon, category,
     cuisine: raw.cuisine ?? raw.tags?.cuisine, openingHours: raw.opening_hours ?? raw.tags?.opening_hours,
-    website: raw.website ?? raw.tags?.website, source };
+    website: raw.website ?? raw.tags?.website, address: addressOf(raw), source };
 }
 
 async function overpass(lat: number, lon: number): Promise<FoodPlace[]> {

@@ -26,6 +26,39 @@ function distanceLabel(km: number | undefined, hasHotel: boolean): string {
   return `${km.toFixed(1)} km from ${hasHotel ? 'your address' : 'city center'}`;
 }
 
+function googleMapsSearchUrl(name: string, address: string | undefined, city: string): string {
+  const query = [name, address || city].filter(Boolean).join(', ');
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+/** Clickable name + address card that opens the place in Google Maps. */
+function LocationCard({
+  name,
+  address,
+  city,
+}: {
+  name: string;
+  address?: string;
+  city: string;
+}) {
+  return (
+    <a
+      className="place-location-card"
+      href={googleMapsSearchUrl(name, address, city)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Open in Google Maps"
+    >
+      <span className="place-location-pin" aria-hidden>📍</span>
+      <span className="place-location-text">
+        <strong>{name}</strong>
+        <span>{address || city}</span>
+      </span>
+      <span className="place-location-cta">Google Maps ↗</span>
+    </a>
+  );
+}
+
 function PhotoGallery({
   name,
   city,
@@ -254,6 +287,7 @@ export function PlaceDetailPage({
               Exact location
             </p>
             <MiniMap lat={place.lat} lon={place.lon} className="breakfast-detail-map" />
+            <LocationCard name={place.name} address={place.address} city={city} />
           </div>
 
           <div className="breakfast-detail-links">
@@ -347,6 +381,7 @@ export function PlaceDetailPage({
             Exact location
           </p>
           <MiniMap lat={stop.lat} lon={stop.lon} className="breakfast-detail-map" />
+          <LocationCard name={stop.name} city={city} />
         </div>
 
         <div className="breakfast-detail-links">

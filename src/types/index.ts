@@ -19,6 +19,9 @@ export interface DestinationHighlight {
   description: string;
   recommended?: boolean;
   wikiDescription?: string;
+  address?: string;
+  lat?: number;
+  lon?: number;
 }
 
 export interface DestinationCard {
@@ -89,6 +92,7 @@ export interface Attraction {
   lat?: number;
   lon?: number;
   image_url?: string;
+  address?: string;
 }
 
 export interface ItineraryStop {

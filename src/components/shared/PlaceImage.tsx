@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  CARD_PHOTOS,
   fetchPlacePhotoUrls as fetchPhotos,
   photoSourceFromUrl,
   type PlacePhotoQuery,
@@ -17,6 +18,8 @@ interface PlaceImageProps {
   wikipediaTag?: string;
   commonsTag?: string;
   className?: string;
+  /** Geocode sights without coordinates so photo lookup can match by location. */
+  locate?: boolean;
   /** When true (default), allow swiping / arrows across multiple photos. */
   swipeable?: boolean;
 }
@@ -48,6 +51,7 @@ export function PlaceImage({
   wikipediaTag,
   commonsTag,
   className,
+  locate,
   swipeable = true,
 }: PlaceImageProps) {
   const [index, setIndex] = useState(0);
@@ -69,6 +73,8 @@ export function PlaceImage({
         wikidataId,
         wikipediaTag,
         commonsTag,
+        locate,
+        limit: CARD_PHOTOS,
       });
       if (cancelled) return;
       const list = imageUrl
@@ -93,6 +99,7 @@ export function PlaceImage({
     wikidataId,
     wikipediaTag,
     commonsTag,
+    locate,
   ]);
 
   const src = queue[index] ?? '';

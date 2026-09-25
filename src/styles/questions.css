@@ -1109,3 +1109,24 @@
 .address-verifying-spinner { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; border: 2px solid rgba(31,111,104,.2); border-top-color: var(--teal); border-radius: 50%; animation: address-spin .75s linear infinite; }
 .address-background-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
 @keyframes address-spin { to { transform: rotate(360deg); } }
+
+.place-pick-location {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.2rem 0 0.4rem;
+  color: inherit;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+
+.place-pick-location:hover span:nth-child(2) {
+  text-decoration: underline;
+}
+
+.place-pick-location-cta {
+  color: var(--sea);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
