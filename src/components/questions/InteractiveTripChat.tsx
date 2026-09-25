@@ -19,7 +19,7 @@ const emptyData = (destination?: string): TripChatData => ({
 
 export function InteractiveTripChat({ initialDestination, onPreferForm, onReady, savedState, onStateChange }: InteractiveTripChatProps) {
   const opening = initialDestination
-    ? `${initialDestination} sounds great! How many days are you planning, and are your dates flexible?`
+    ? `${initialDestination} sounds great! How many days are you planning?`
     : "Let's plan your trip! Where are you thinking of traveling?";
   const [messages, setMessages] = useState<TripChatMessage[]>(() => savedState?.messages ?? [{ role: 'assistant', content: opening }]);
   const [data, setData] = useState<TripChatData>(() => savedState?.data ?? emptyData(initialDestination));
