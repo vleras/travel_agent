@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { DestinationHighlight } from '../../types';
 import { planStoryPhotos } from '../../services/storyPhotoPlan';
 import { PlaceImage, fetchPlacePhotoUrls } from '../shared/PlaceImage';
+import { photoSourceFromUrl } from '../../services/placePhotos';
 import '../../styles/questions.css';
 import '../../styles/placeImage.css';
 
@@ -173,6 +174,7 @@ export function PlacePickDetail({
     reverseSplitIndex,
   } = plan;
   const hero = photos[heroIndex] ?? plan.hero;
+  const heroCredit = hero ? photoSourceFromUrl(hero) : null;
   const canSwipeHero = photos.length > 1;
 
   function shiftHero(delta: number) {
@@ -223,6 +225,22 @@ export function PlacePickDetail({
               onError={() => dropPhoto(hero)}
             />
           </button>
+          {heroCredit &&
+            (heroCredit.href ? (
+              <a
+                className="place-img-credit"
+                href={heroCredit.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={heroCredit.label}
+              >
+                {heroCredit.label}
+              </a>
+            ) : (
+              <span className="place-img-credit" title={heroCredit.label}>
+                {heroCredit.label}
+              </span>
+            ))}
           {canSwipeHero && (
             <>
               <button

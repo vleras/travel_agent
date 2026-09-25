@@ -1,7 +1,7 @@
 import { haversineKm } from './geo';
 import { createLimiter, type Priority } from './requestQueue';
 import { locateSight } from './sightLocation';
-import { mentionsPlace, sharesStem } from './nameMatch';
+import { distinctiveTokens, fold, matchesName, mentionsPlace, sharesStem } from './nameMatch';
 /**
  * Browser-safe place photos from Pexels and Wikimedia Commons.
  * Search: https://api.pexels.com/v1/search (~200 req/hour).
@@ -53,7 +53,7 @@ function hashString(value: string): number {
 
 function cacheKey(q: PlacePhotoQuery): string {
   return [
-    'v17',
+    'v19',
     q.name,
     q.city ?? '',
     q.category ?? '',
@@ -68,15 +68,30 @@ function cacheKey(q: PlacePhotoQuery): string {
 export function imageFingerprint(url: string): string {
   try {
     const u = new URL(url);
+    // Same Commons file as original or thumbnail (Openverse links originals).
+    if (u.hostname.endsWith('.wikimedia.org')) {
+      const parts = u.pathname.split('/').filter(Boolean);
+      const file = u.pathname.includes('/thumb/') ? parts.at(-2) : parts.at(-1);
+      return `commons:${decodeURIComponent(file ?? '').toLowerCase()}`;
+    }
     return `${u.hostname.replace(/^www\./, '')}${u.pathname}`.toLowerCase();
   } catch {
     return url.replace(/\?.*$/, '').toLowerCase();
   }
 }
 
-/** Human-readable credit + optional page link inferred from a photo URL. */
+/** Creator + license per photo URL, filled in as Openverse/Commons results are accepted. */
+const credits = new Map<string, { creator?: string; license?: string; source: string; href?: string }>();
+
+function creditLabel(c: { creator?: string; license?: string; source: string }): string {
+  return [c.creator ? `© ${c.creator}` : null, c.license, c.source].filter(Boolean).join(' · ');
+}
+
+/** Human-readable credit + optional page link for a photo URL. */
 export function photoSourceFromUrl(url: string): PhotoSourceInfo | null {
   if (!url) return null;
+  const credit = credits.get(url);
+  if (credit) return { label: creditLabel(credit), href: credit.href };
   try {
     const u = new URL(url);
     const host = u.hostname.replace(/^www\./, '').toLowerCase();
@@ -303,6 +318,134 @@ function wikiFetch(url: string, prio: Prio = lowPriority): Promise<Response> {
   return wikimedia.fetch(url, prio);
 }
 
+const COMMONS_IIPROP = 'url|size|mime|extmetadata';
+const COMMONS_META = 'DateTimeOriginal|DateTime|Categories|Assessments|Artist|LicenseShortName';
+/** Smallest original width we show. */
+const MIN_PHOTO_WIDTH = 1200;
+
+/**
+ * Words that mark archive material rather than a photo of the place today.
+ * A word is ignored when the place's own name contains it ("Old Bazaar").
+ */
+const BAD_PHOTO_WORDS = [
+  'historical', 'old', 'vintage', 'black and white', 'b&w', 'postcard', 'map', 'plan',
+  'drawing', 'engraving', 'sketch', 'stamp', 'lithograph', 'painting',
+];
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripHtml(value: string | undefined): string {
+  return (value ?? '').replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function isBadPhotoText(text: string, placeName: string): boolean {
+  const hay = ` ${text.toLowerCase().replace(/[_\-–,.;:()|]+/g, ' ')} `;
+  const name = ` ${placeName.toLowerCase()} `;
+  return BAD_PHOTO_WORDS.some((w) => hay.includes(` ${w} `) && !name.includes(` ${w} `));
+}
+
+/** Year a Commons photo was taken (or uploaded), if its metadata says. */
+function commonsYear(info: CommonsImageInfo): number | null {
+  const raw = stripHtml(info.extmetadata?.DateTimeOriginal?.value) || stripHtml(info.extmetadata?.DateTime?.value);
+  const year = raw.match(/\b(1[5-9]\d\d|20\d\d)\b/)?.[1];
+  return year ? Number(year) : null;
+}
+
+/** 0 featured, 1 quality, 2 valued, 3 everything else. */
+function commonsRank(info: CommonsImageInfo): number {
+  const a = (info.extmetadata?.Assessments?.value ?? '').toLowerCase();
+  if (a.includes('featured')) return 0;
+  if (a.includes('quality')) return 1;
+  if (a.includes('valued')) return 2;
+  return 3;
+}
+
+function isGoodCommonsPhoto(page: CommonsPage, placeName: string): boolean {
+  const info = page.imageinfo?.[0];
+  if (!info) return false;
+  if ((info.width ?? 0) < MIN_PHOTO_WIDTH) return false;
+  const year = commonsYear(info);
+  if (year != null && year < 2000) return false;
+  const categories = stripHtml(info.extmetadata?.Categories?.value).replace(/\|/g, ' ');
+  return !isBadPhotoText(`${page.title ?? ''} ${categories}`, placeName);
+}
+
+const openverse = createLimiter({
+  name: 'Openverse',
+  concurrency: 2,
+  retryStatuses: [429, 503],
+  backoffMs: [2000, 8000],
+  timeoutMs: 10000,
+});
+
+type OpenverseImage = {
+  url?: string;
+  title?: string;
+  creator?: string;
+  license?: string;
+  license_version?: string;
+  foreign_landing_url?: string;
+  source?: string;
+  width?: number;
+  height?: number;
+  tags?: { name?: string }[];
+};
+
+/** Flickr + Commons photos from Openverse (no key), filtered by name and quality. */
+async function searchOpenverse(q: PlacePhotoQuery, prio: Prio): Promise<OpenverseImage[]> {
+  const url = new URL('https://api.openverse.org/v1/images/');
+  url.search = new URLSearchParams({
+    q: `"${cleanName(q.name)}"${q.city ? ` ${q.city}` : ''}`,
+    source: 'flickr,wikimedia',
+    size: 'large',
+    aspect_ratio: 'wide',
+    mature: 'false',
+    page_size: '20',
+  }).toString();
+  try {
+    const res = await openverse.fetch(url.toString(), prio);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { results?: OpenverseImage[] };
+    const cityWords = q.city ? distinctiveTokens(q.city) : [];
+    const kept = (data.results ?? []).filter((img) => {
+      const tags = (img.tags ?? []).map((t) => t.name ?? '').join(' ');
+      const text = `${img.title ?? ''} ${tags}`;
+      if (!matchesName(text, q.name)) return false;
+      // "Place du Trocadéro from the Eiffel Tower" is a view *from* the place.
+      const title = (img.title ?? '').replace(/_/g, ' ');
+      if (new RegExp(`\\bfrom\\s+(?:the\\s+)?(?:top\\s+of\\s+(?:the\\s+)?)?${escapeRegExp(cleanName(q.name))}`, 'i').test(title)) return false;
+      // Must be in this city (not a replica elsewhere), unless the name already says so.
+      if (cityWords.length && !cityWords.some((w) => fold(`${text} ${q.name}`).includes(w))) return false;
+      if ((img.width ?? 0) < MIN_PHOTO_WIDTH) return false;
+      return !isBadPhotoText(text, q.name);
+    });
+    // Commons files via Openverse carry no date/categories: check them on Commons.
+    const commonsFiles = kept
+      .filter((img) => img.source === 'wikimedia' && img.url)
+      .map((img) => decodeURIComponent(img.url!.split('/').pop() ?? ''));
+    if (!commonsFiles.length) return kept;
+    const pages = await commonsPages({ titles: commonsFiles.map((f) => `File:${f}`).join('|') }, prio);
+    const ok = new Set(
+      pages
+        .filter((page) => isGoodCommonsPhoto(page, q.name))
+        .map((page) => (page.title ?? '').replace(/^File:/, '').replace(/ /g, '_')),
+    );
+    return kept.filter((img) => img.source !== 'wikimedia' || ok.has(decodeURIComponent(img.url!.split('/').pop() ?? '')));
+  } catch {
+    return [];
+  }
+}
+
+function licenseLabel(license?: string, version?: string): string | undefined {
+  if (!license) return undefined;
+  const l = license.toLowerCase();
+  if (l === 'cc0') return 'CC0';
+  if (l === 'pdm') return 'Public domain';
+  return `CC ${license.toUpperCase()}${version ? ` ${version}` : ''}`;
+}
+
 type CommonsImageInfo = {
   url?: string;
   thumburl?: string;
@@ -311,6 +454,8 @@ type CommonsImageInfo = {
   thumbwidth?: number;
   thumbheight?: number;
   mime?: string;
+  descriptionurl?: string;
+  extmetadata?: Record<string, { value?: string } | undefined>;
 };
 
 type CommonsPage = {
@@ -332,7 +477,8 @@ async function commonsPages(params: Record<string, string>, prio: Prio = lowPrio
     formatversion: '2',
     origin: '*',
     prop: 'imageinfo',
-    iiprop: 'url|size|mime',
+    iiprop: COMMONS_IIPROP,
+    iiextmetadatafilter: COMMONS_META,
     iiurlwidth: '1400',
     ...params,
   }).toString();
@@ -437,7 +583,8 @@ async function searchCommons(query: string, prio: Prio = lowPriority): Promise<C
   url.searchParams.set('gsrnamespace', '6');
   url.searchParams.set('gsrlimit', String(PER_PAGE));
   url.searchParams.set('prop', 'imageinfo|coordinates');
-  url.searchParams.set('iiprop', 'url|size|mime');
+  url.searchParams.set('iiprop', COMMONS_IIPROP);
+  url.searchParams.set('iiextmetadatafilter', COMMONS_META);
   url.searchParams.set('iiurlwidth', '1400');
 
   try {
@@ -506,6 +653,7 @@ async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
     for (const page of pages) {
       const info = page.imageinfo?.[0];
       if (!info || !isUsableCommonsImage(info)) continue;
+      if (!isGoodCommonsPhoto(page, q.name)) continue;
       if (requireName && !mentionsPlace(page.title ?? '', q.name)) continue;
       // Text matches geotagged far from the place are a different place.
       const at = page.coordinates?.[0];
@@ -518,7 +666,61 @@ async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
       ) {
         continue;
       }
-      add(info.thumburl || info.url);
+      const src = info.thumburl || info.url;
+      if (src && !credits.has(src)) {
+        credits.set(src, {
+          creator: stripHtml(info.extmetadata?.Artist?.value) || undefined,
+          license: stripHtml(info.extmetadata?.LicenseShortName?.value) || undefined,
+          source: 'Wikimedia Commons',
+          href: info.descriptionurl,
+        });
+      }
+      add(src);
+    }
+  };
+
+  /** Featured, then Quality, then Valued images first; otherwise keep source order. */
+  const byAssessment = (pages: CommonsPage[]) =>
+    pages
+      .map((page, i) => ({ page, i, rank: page.imageinfo?.[0] ? commonsRank(page.imageinfo[0]) : 3 }))
+      .sort((a, b) => a.rank - b.rank || a.i - b.i)
+      .map((x) => x.page);
+
+  const addOpenverse = async () => {
+    for (const img of await searchOpenverse(q, prio)) {
+      if (full() || !img.url) continue;
+      credits.set(img.url, {
+        creator: img.creator?.trim() || undefined,
+        license: licenseLabel(img.license, img.license_version),
+        source: img.source === 'flickr' ? 'Flickr via Openverse' : 'Wikimedia via Openverse',
+        href: img.foreign_landing_url,
+      });
+      add(img.url);
+    }
+  };
+
+  /** Wikipedia's lead image when no location-confirmed Wikidata entity was found. */
+  const wikipediaMainImage = async (): Promise<CommonsPage[]> => {
+    const url = new URL('https://en.wikipedia.org/w/api.php');
+    url.search = new URLSearchParams({
+      action: 'query',
+      format: 'json',
+      formatversion: '2',
+      origin: '*',
+      redirects: '1',
+      titles: cleanName(q.name),
+      prop: 'pageimages',
+      piprop: 'name',
+    }).toString();
+    try {
+      const res = await wikiFetch(url.toString(), prio);
+      if (!res.ok) return [];
+      const data = (await res.json()) as { query?: { pages?: { title?: string; pageimage?: string }[] } };
+      const page = data.query?.pages?.[0];
+      if (!page?.pageimage || !mentionsPlace(page.title ?? '', q.name)) return [];
+      return commonsPages({ titles: `File:${page.pageimage}` }, prio);
+    } catch {
+      return [];
     }
   };
 
@@ -539,12 +741,16 @@ async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
   };
 
   const runCommons = async () => {
+    const commons: CommonsPage[] = [];
     if (!food && hasCoords(q)) {
-      // 1–2. Wikidata entity confirmed by location: main image, then its category.
+      // 1. Main image of the Wikidata entity confirmed by location (else Wikipedia's).
       const match = await wikidataMatch(q.name, q.lat, q.lon, prio);
       if (match?.image) addCommons(await commonsPages({ titles: `File:${match.image}` }, prio), false);
-      addCommons(await commonsCategoryFiles(match?.category ?? q.name, prio), false);
-      // 3. Geotagged files: within 50 m, or within 150 m and sharing a name stem.
+      else addCommons(await wikipediaMainImage(), false);
+      // 2. Openverse (Flickr + Commons), name-matched and filtered.
+      await addOpenverse();
+      // 3. Commons: the entity's category and geotagged files, ranked below.
+      commons.push(...(await commonsCategoryFiles(match?.category ?? q.name, prio)));
       if (!full()) {
         const pages = await commonsPages({
           generator: 'geosearch',
@@ -555,25 +761,30 @@ async function searchAll(q: PlacePhotoQuery, key: string): Promise<string[]> {
           prop: 'imageinfo|coordinates',
         }, prio);
         const { lat, lon } = q;
-        addCommons(
-          pages.filter((page) => {
+        // Within 50 m, or within 150 m and sharing a name stem.
+        commons.push(
+          ...pages.filter((page) => {
             const at = page.coordinates?.[0];
             if (at?.lat == null || at.lon == null) return false;
             const m = haversineKm(lat, lon, at.lat, at.lon) * 1000;
             if (m <= 50) return true;
             return m <= 150 && sharesNameStem(page.title ?? '', q.name);
           }),
-          false,
         );
       }
     } else if (!food) {
-      addCommons(await commonsCategoryFiles(q.name, prio), false);
+      addCommons(await wikipediaMainImage(), false);
+      await addOpenverse();
+      commons.push(...(await commonsCategoryFiles(q.name, prio)));
     }
-    // 4. Text search, name rules + distance check.
+    addCommons(byAssessment(commons), false);
+    // Text search last: name rules + distance check, also ranked.
+    const texted: CommonsPage[] = [];
     for (const query of [...new Set(commonsQueries(q.name, q.city))]) {
       if (full()) break;
-      addCommons(await searchCommons(query, prio), true);
+      texted.push(...(await searchCommons(query, prio)));
     }
+    addCommons(byAssessment(texted), true);
   };
 
   // Landmarks: real Commons photos first; food spots: stock photos first.
