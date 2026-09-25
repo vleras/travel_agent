@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   CARD_PHOTOS,
   fetchPlacePhotoUrls as fetchPhotos,
-  photoSourceFromUrl,
   type PlacePhotoQuery,
 } from '../../services/placePhotos';
 import '../../styles/placeImage.css';
@@ -141,7 +140,6 @@ export function PlaceImage({
 
   const src = queue[index] ?? '';
   const canSwipe = swipeable && queue.length > 1;
-  const source = photoSourceFromUrl(src);
 
   function go(delta: number) {
     if (!queue.length) return;
@@ -216,24 +214,6 @@ export function PlaceImage({
           });
         }}
       />
-      {source &&
-        (source.href ? (
-          <a
-            className="place-img-credit"
-            href={source.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            draggable={false}
-            onClick={(e) => e.stopPropagation()}
-            title={`Photo from ${source.label}`}
-          >
-            {source.label}
-          </a>
-        ) : (
-          <span className="place-img-credit" title={`Photo from ${source.label}`}>
-            {source.label}
-          </span>
-        ))}
       {canSwipe && (
         <>
           <span
