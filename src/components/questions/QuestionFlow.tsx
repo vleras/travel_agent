@@ -196,6 +196,7 @@ export function QuestionFlow({
   );
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [generatedPlaces, setGeneratedPlaces] = useState<Attraction[]>([]);
+  const [placeCategory, setPlaceCategory] = useState('all');
   const [generatingCity, setGeneratingCity] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const placesRequest = useRef(0);
@@ -262,6 +263,7 @@ export function QuestionFlow({
     const targetCity = city.trim();
     placesRequest.current += 1;
     setGeneratedPlaces([]);
+    setPlaceCategory('all');
     setGenerationError(null);
     setGeneratingCity(null);
     setSelectedPlaces([]);
@@ -310,16 +312,21 @@ export function QuestionFlow({
       ),
     [city, selectedDestination, generatedPlaces],
   );
+  const categoryKey = (category: string) => category.trim().toLowerCase();
+  const categories = [...new Map(availablePlaces.map(place => [categoryKey(place.category), place.category.trim()])).entries()]
+    .filter(([key]) => key).sort((a, b) => a[1].localeCompare(b[1]));
+  const activeCategory = categories.some(([key]) => key === placeCategory) ? placeCategory : 'all';
+  const visiblePlaces = activeCategory === 'all' ? availablePlaces : availablePlaces.filter(place => categoryKey(place.category) === activeCategory);
   const allPlacesSelected =
-    availablePlaces.length > 0 &&
-    availablePlaces.every((p) => selectedPlaces.includes(p.name));
+    visiblePlaces.length > 0 &&
+    visiblePlaces.every((p) => selectedPlaces.includes(p.name));
 
   function toggleSelectAllPlaces() {
     if (allPlacesSelected) {
-      setSelectedPlaces([]);
+      setSelectedPlaces(current => current.filter(name => !visiblePlaces.some(place => place.name === name)));
       return;
     }
-    setSelectedPlaces(availablePlaces.map((p) => p.name));
+    setSelectedPlaces(current => [...new Set([...current, ...visiblePlaces.map(place => place.name)])]);
   }
 
   function finish() {
@@ -576,13 +583,21 @@ export function QuestionFlow({
                 </div>
               ) : (
                 <>
+                  <div className="chip-row place-pick-toolbar" role="group" aria-label="Filter places by category">
+                    <button type="button" className={`chip ${activeCategory === 'all' ? 'active' : ''}`} aria-pressed={activeCategory === 'all'} onClick={() => setPlaceCategory('all')}>
+                      All ({availablePlaces.length})
+                    </button>
+                    {categories.map(([key, label]) => <button key={key} type="button" className={`chip ${activeCategory === key ? 'active' : ''}`} aria-pressed={activeCategory === key} onClick={() => setPlaceCategory(key)}>
+                      {label} ({availablePlaces.filter(place => categoryKey(place.category) === key).length})
+                    </button>)}
+                  </div>
                   <div className="chip-row place-pick-toolbar">
                     <button
                       type="button"
                       className={`chip ${allPlacesSelected ? 'active' : ''}`}
                       onClick={toggleSelectAllPlaces}
                     >
-                      {allPlacesSelected ? 'Clear all' : 'Select all'}
+                      {allPlacesSelected ? activeCategory === 'all' ? 'Clear all' : 'Clear visible' : activeCategory === 'all' ? 'Select all' : 'Select visible'}
                     </button>
                     {selectedPlaces.length > 0 && (
                       <span className="hint" style={{ margin: 0 }}>
@@ -591,7 +606,7 @@ export function QuestionFlow({
                     )}
                   </div>
                   <div className="place-pick-grid">
-                    {availablePlaces.map((spot) => {
+                    {visiblePlaces.map((spot) => {
                       const active = selectedPlaces.includes(spot.name);
                       return (
                         <div
