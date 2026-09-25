@@ -146,12 +146,122 @@ function orderByDistanceFromBase(
     .map(({ stop }) => stop);
 }
 
+const REGION_LINK_DISTANCE_KM = 90;
+
+/**
+ * Split a country-sized selection into connected travel regions before making
+ * individual days. This prevents a full city cluster from consuming the day
+ * slots and stranding unrelated long-distance stops together on the last day.
+ */
+function splitIntoTravelRegions(
+  attractions: ScoredAttraction[],
+): ScoredAttraction[][] {
+  const unseen = new Set(attractions.map((_, index) => index));
+  const regions: ScoredAttraction[][] = [];
+
+  while (unseen.size) {
+    const first = unseen.values().next().value as number;
+    unseen.delete(first);
+    const queue = [first];
+    const region: ScoredAttraction[] = [];
+
+    while (queue.length) {
+      const index = queue.shift()!;
+      const place = attractions[index];
+      region.push(place);
+
+      for (const candidate of [...unseen]) {
+        const other = attractions[candidate];
+        if (
+          haversineKm(place.lat, place.lon, other.lat, other.lon) <=
+          REGION_LINK_DISTANCE_KM
+        ) {
+          unseen.delete(candidate);
+          queue.push(candidate);
+        }
+      }
+    }
+
+    regions.push(region);
+  }
+
+  return regions;
+}
+
+function distanceBetweenRegions(
+  a: ScoredAttraction[],
+  b: ScoredAttraction[],
+): number {
+  let closest = Infinity;
+  for (const left of a) {
+    for (const right of b) {
+      closest = Math.min(
+        closest,
+        haversineKm(left.lat, left.lon, right.lat, right.lon),
+      );
+    }
+  }
+  return closest;
+}
+
+/** If there are more distant regions than trip days, merge only nearest ones. */
+function fitRegionsToDayBudget(
+  source: ScoredAttraction[][],
+  days: number,
+): ScoredAttraction[][] {
+  const regions = source.map((region) => [...region]);
+  while (regions.length > days) {
+    let mergeA = 0;
+    let mergeB = 1;
+    let closest = Infinity;
+    for (let a = 0; a < regions.length; a++) {
+      for (let b = a + 1; b < regions.length; b++) {
+        const distance = distanceBetweenRegions(regions[a], regions[b]);
+        if (distance < closest) {
+          closest = distance;
+          mergeA = a;
+          mergeB = b;
+        }
+      }
+    }
+    regions[mergeA].push(...regions[mergeB]);
+    regions.splice(mergeB, 1);
+  }
+  return regions;
+}
+
+function allocateDaysAcrossRegions(
+  regions: ScoredAttraction[][],
+  days: number,
+): number[] {
+  const allocation = regions.map(() => 1);
+  let remaining = Math.max(0, days - regions.length);
+
+  while (remaining > 0) {
+    let best = -1;
+    let highestLoad = -1;
+    for (let i = 0; i < regions.length; i++) {
+      if (allocation[i] >= regions[i].length) continue;
+      const load = regions[i].length / allocation[i];
+      if (load > highestLoad) {
+        highestLoad = load;
+        best = i;
+      }
+    }
+    if (best < 0) break;
+    allocation[best] += 1;
+    remaining -= 1;
+  }
+
+  return allocation;
+}
+
 /**
  * Group nearby places onto the same day.
  * Seeds days with spatially spread anchors, then assigns each stop to the
  * nearest neighborhood cluster and walks a short route within each day.
  */
-function clusterByProximity(
+function clusterOneRegion(
   attractions: ScoredAttraction[],
   days: number,
   pace: Pace,
@@ -256,6 +366,45 @@ function clusterByProximity(
   return orderedDays.map((day) =>
     orderByDistanceFromBase(day, baseLat, baseLon),
   );
+}
+
+function clusterByProximity(
+  attractions: ScoredAttraction[],
+  days: number,
+  pace: Pace,
+  baseLat: number,
+  baseLon: number,
+): ScoredAttraction[][] {
+  if (days <= 0) return [];
+  if (!attractions.length) return Array.from({ length: days }, () => []);
+
+  const regions = fitRegionsToDayBudget(
+    splitIntoTravelRegions(attractions),
+    days,
+  );
+  const dayAllocation = allocateDaysAcrossRegions(regions, days);
+  const clusters = regions.flatMap((region, index) =>
+    clusterOneRegion(
+      region,
+      dayAllocation[index],
+      pace,
+      baseLat,
+      baseLon,
+    ),
+  );
+
+  while (clusters.length < days) clusters.push([]);
+  return clusters.sort((a, b) => {
+    const ca = clusterCentroid(a);
+    const cb = clusterCentroid(b);
+    if (!ca && !cb) return 0;
+    if (!ca) return 1;
+    if (!cb) return -1;
+    return (
+      haversineKm(baseLat, baseLon, ca.lat, ca.lon) -
+      haversineKm(baseLat, baseLon, cb.lat, cb.lon)
+    );
+  });
 }
 
 function dayTotalDistance(
@@ -526,6 +675,16 @@ function reviseClusters(
     for (let other = 0; other < next.length; other++) {
       if (other === dayIdx) continue;
       if (next[other].length >= paceStopsPerDay(pace) + 1) continue;
+      if (
+        next[other].length > 0 &&
+        next[other].every(
+          (stop) =>
+            haversineKm(candidate.lat, candidate.lon, stop.lat, stop.lon) >
+            REGION_LINK_DISTANCE_KM,
+        )
+      ) {
+        continue;
+      }
 
       const trialFrom = day.filter((_, i) => i !== farthestIdx);
       const trialTo = [...next[other], candidate];
