@@ -110,6 +110,46 @@ function saveStore(key: string, value: Point) {
 }
 
 const centers = new Map<string, Promise<Point | null>>();
+/** OSM place type of each resolved destination (city, town, country, island…). */
+const centerTypes = new Map<string, string>();
+
+/** Place types too big to stand in for a hotel's location. */
+const BIG_PLACE_TYPES = new Set([
+  'country', 'state', 'region', 'province', 'county', 'district', 'state_district',
+  'archipelago', 'island', 'continent', 'administrative', 'postcode',
+]);
+
+export function isBigPlaceType(type: string | undefined): boolean {
+  return Boolean(type && BIG_PLACE_TYPES.has(type.toLowerCase()));
+}
+
+/** Whether the destination itself is a country/region, so its center can't be an "area center". */
+export async function isRegionLevel(city: string): Promise<boolean> {
+  await cityCenter(city);
+  return isBigPlaceType(centerTypes.get(cityKey(city)));
+}
+
+/** Short label for a point, e.g. "Triq il-Merkanti, Valletta" (Photon reverse). */
+export async function reverseLabel(lat: number, lon: number): Promise<string | null> {
+  try {
+    const url = new URL('https://photon.komoot.io/reverse');
+    url.search = new URLSearchParams({ lat: String(lat), lon: String(lon), lang: 'en', limit: '1' }).toString();
+    const res = await photonFetch(url.toString());
+    if (!res.ok) return null;
+    const data = (await res.json()) as { features?: { properties?: Record<string, string> }[] };
+    const p = data.features?.[0]?.properties;
+    if (!p) return null;
+    const street = [p.street, p.housenumber].filter(Boolean).join(' ');
+    const place = p.city ?? p.town ?? p.village ?? p.district ?? p.county;
+    const label = [p.name && p.name !== street ? p.name : null, street || null, place]
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(', ');
+    return label || null;
+  } catch {
+    return null;
+  }
+}
 
 /** City center: curated table, then Photon (place features), then Nominatim. */
 export function cityCenter(city: string): Promise<Point | null> {
@@ -118,20 +158,31 @@ export function cityCenter(city: string): Promise<Point | null> {
   if (cached) return cached;
   const work = (async () => {
     const known = lookupCityCenter(city);
-    if (known) return known;
+    if (known) {
+      centerTypes.set(key, 'city');
+      return known;
+    }
     try {
       const url = new URL('https://photon.komoot.io/api/');
       url.search = new URLSearchParams({ q: city, limit: '1', lang: 'en', osm_tag: 'place' }).toString();
       const res = await photonFetch(url.toString());
       if (res.ok) {
-        const data = (await res.json()) as { features?: { geometry?: { coordinates?: number[] } }[] };
-        const [lon, lat] = data.features?.[0]?.geometry?.coordinates ?? [];
-        if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+        const data = (await res.json()) as {
+          features?: { geometry?: { coordinates?: number[] }; properties?: { osm_value?: string } }[];
+        };
+        const first = data.features?.[0];
+        const [lon, lat] = first?.geometry?.coordinates ?? [];
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          centerTypes.set(key, first?.properties?.osm_value ?? '');
+          return { lat, lon };
+        }
       }
     } catch {
       /* fall through */
     }
-    return (await geocode(city)).result;
+    const fallback = (await geocode(city)).result;
+    if (fallback) centerTypes.set(key, fallback.type ?? '');
+    return fallback;
   })();
   centers.set(key, work);
   work.then((p) => {
@@ -297,7 +348,12 @@ export async function locateArea(hint: string, city: string): Promise<LocatedPla
   const hit = (await photon(hint, center, 'sight'))
     .filter(valid)
     .map((c) => ({ ...c, distanceKm: haversineKm(center.lat, center.lon, c.lat, c.lon) }))
-    .find((c) => c.distanceKm <= MAX_FROM_CITY_KM && sharesStem(`${c.nameEn ?? ''} ${c.name}`, hint));
+    .find(
+      (c) =>
+        c.distanceKm <= MAX_FROM_CITY_KM &&
+        !isBigPlaceType(c.osmValue) &&
+        sharesStem(`${c.nameEn ?? ''} ${c.name}`, hint),
+    );
   if (!hit) return null;
   return { ...hit, provider: 'photon', matchPath: 'name' };
 }

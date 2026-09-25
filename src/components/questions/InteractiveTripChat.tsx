@@ -5,7 +5,7 @@ import { geocodeHotel, type HotelMatch } from '../../services/geocodeHotel';
 import { parseDaysInput } from '../../data/scheduleOptions';
 import { sanitizeAssistantText } from '../../services/sanitizeAssistantText';
 import { parseLocationInput } from '../../services/parseLocation';
-import { cityCenter } from '../../services/sightLocation';
+import { cityCenter, reverseLabel } from '../../services/sightLocation';
 import { haversineKm } from '../../services/geo';
 
 export interface TripChatState { messages: TripChatMessage[]; data: TripChatData; complete: boolean }
@@ -58,7 +58,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         setAddressStatus('failed');
         setMessages((current) => [...current, {
           role: 'assistant',
-          content: `I couldn’t locate “${query}” near ${city}. Try another name or address, or continue without a hotel location.`,
+          content: `I couldn’t pin down “${query}” in ${city}. Paste the hotel’s coordinates (e.g. 35.8974, 14.5147) or a Google Maps link, or continue without a hotel location.`,
         }]);
         return;
       }
@@ -92,9 +92,15 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       setMessages(current => [...current, { role: 'assistant', content: `That point is more than 50 km from ${city}. Check the link or coordinates.` }]);
       return;
     }
-    const label = `Pinned location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+    setAddressStatus('checking');
+    const place = await reverseLabel(lat, lon);
+    setAddressStatus('idle');
+    const point = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    const label = place ? `${place} (${point})` : `Pinned location (${point})`;
     console.info('[locate]', { kind: 'accommodation', name: label, city, provider: source, distanceKm: center ? Number(haversineKm(center.lat, center.lon, lat, lon).toFixed(2)) : null });
-    chooseHotel({ lat, lon, name: label, display_name: label, approximate: false });
+    // Confirm before saving, like a name match.
+    setHotelMatches([{ lat, lon, name: label, display_name: label, approximate: false }]);
+    setMessages(current => [...current, { role: 'assistant', content: `Found ${label}. Is that correct?` }]);
   }
 
   function rejectHotel() {
@@ -117,7 +123,9 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     if (!content || loading || addressStatus === 'checking') return;
     if (hotelMatches.length === 1 && /^(yes|yeah|correct)$/i.test(content)) { setInput(''); chooseHotel(hotelMatches[0]); return; }
     if (hotelMatches.length && /^(no|nope)$/i.test(content)) { setInput(''); rejectHotel(); return; }
-    if (awaitingHotel) {
+    // Coordinates and Maps links are read before any search or extraction,
+    // whenever a hotel location is still open (not declined, not set).
+    if (data.destination && data.hasAccommodation !== false && !data.accommodation) {
       const parsed = parseLocationInput(content);
       if (parsed) {
         setInput('');
@@ -128,6 +136,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         }
         setHotelMatches([]);
         setAddressStatus('idle');
+        if (!data.hasAccommodation) setData(current => ({ ...current, hasAccommodation: true }));
         await usePinnedLocation(parsed.lat, parsed.lon, content.includes('http') ? 'google-maps-link' : 'coordinates');
         return;
       }

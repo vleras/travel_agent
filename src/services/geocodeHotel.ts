@@ -1,6 +1,7 @@
 import { geocodeMany, type GeocodeResult } from './nominatim';
 import { haversineKm } from './geo';
-import { cityCenter, locateArea, locatePlaces } from './sightLocation';
+import { cityCenter, isBigPlaceType, isRegionLevel, locateArea, locatePlaces, reverseLabel } from './sightLocation';
+import { parseLocationInput } from './parseLocation';
 import { matchesName } from './nameMatch';
 
 export interface HotelMatch extends GeocodeResult { approximate: boolean }
@@ -41,7 +42,7 @@ async function geoapify(text: string): Promise<HotelMatch[]> {
 export function geocodeHotel(input: string, destination = ''): Promise<HotelMatch[]> {
   const text = normalizeHotelInput(input);
   const city = normalizeHotelInput(destination);
-  const key = `hotel-v3|${city.toLowerCase()}|${text.toLowerCase()}`;
+  const key = `hotel-v4|${city.toLowerCase()}|${text.toLowerCase()}`;
   if (cache.has(key)) return Promise.resolve(cache.get(key)!);
   if (pending.has(key)) return pending.get(key)!;
   let center: GeocodeResult | undefined;
@@ -53,7 +54,22 @@ export function geocodeHotel(input: string, destination = ''): Promise<HotelMatc
       // Never accept an unverified distance when the destination is known.
       if (!center) return [];
     }
-    const valid = (matches: HotelMatch[]) => matches.filter(m => Number.isFinite(m.lat) && Number.isFinite(m.lon) && Math.abs(m.lat) <= 90 && Math.abs(m.lon) <= 180 && (!center || haversineKm(center.lat, center.lon, m.lat, m.lon) <= 50));
+    // Pasted coordinates never go through the name search.
+    const parsed = parseLocationInput(input);
+    if (parsed?.kind === 'coords') {
+      if (center && haversineKm(center.lat, center.lon, parsed.lat, parsed.lon) > 50) return [];
+      fromLocator = true;
+      const label = (await reverseLabel(parsed.lat, parsed.lon)) ?? `${parsed.lat.toFixed(5)}, ${parsed.lon.toFixed(5)}`;
+      console.info('[locate]', { kind: 'accommodation', name: input, city, provider: 'coordinates', match: label });
+      return [{ lat: parsed.lat, lon: parsed.lon, name: label, display_name: label, type: 'coordinates', approximate: false }];
+    }
+    // Country/region-sized matches are never offered as an "area center".
+    const tooBig = (m: HotelMatch) => {
+      if (isBigPlaceType(m.type)) return true;
+      const box = m.boundingbox?.map(Number);
+      return Boolean(box && box.length === 4 && (Math.abs(box[1] - box[0]) > 0.3 || Math.abs(box[3] - box[2]) > 0.3));
+    };
+    const valid = (matches: HotelMatch[]) => matches.filter(m => !tooBig(m) && Number.isFinite(m.lat) && Number.isFinite(m.lon) && Math.abs(m.lat) <= 90 && Math.abs(m.lon) <= 180 && (!center || haversineKm(center.lat, center.lon, m.lat, m.lon) <= 50));
     // Named accommodation first: shared locator (Photon → Geoapify → Nominatim).
     // "Hotel X, Rruga Y 12": search the name, use the rest as a bias hint.
     const comma = text.indexOf(',');
@@ -88,7 +104,9 @@ export function geocodeHotel(input: string, destination = ''): Promise<HotelMatc
         return [{ lat: area.lat, lon: area.lon, name: hint, display_name: `${area.nameEn ?? area.name}, ${city}`, type: 'area', approximate: true }];
       }
     }
-    return center ? [{ ...center, name: city, display_name: city, type: 'city', approximate: true }] : [];
+    // If the destination is itself a country or region, ask for coordinates instead.
+    if (!center || (await isRegionLevel(city))) return [];
+    return [{ ...center, name: city, display_name: city, type: 'city', approximate: true }];
   })().catch(() => [] as HotelMatch[]).then(matches => {
     const first = matches[0];
     if (first && center && !fromLocator) console.info('[locate]', { kind: 'accommodation', name: text, city, provider: 'address-fallback', distanceKm: Number(haversineKm(center.lat, center.lon, first.lat, first.lon).toFixed(2)), match: first.display_name, approximate: first.approximate });
