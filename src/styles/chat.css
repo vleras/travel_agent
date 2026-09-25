@@ -241,15 +241,3 @@
     width: min(100vw - 1.5rem, 360px);
   }
 }
-
-.map-picker {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0.4rem 0;
-}
-
-.map-picker-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}

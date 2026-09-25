@@ -7,7 +7,6 @@ import { sanitizeAssistantText } from '../../services/sanitizeAssistantText';
 import { parseLocationInput } from '../../services/parseLocation';
 import { cityCenter } from '../../services/sightLocation';
 import { haversineKm } from '../../services/geo';
-import { MapPicker } from '../shared/MapPicker';
 
 export interface TripChatState { messages: TripChatMessage[]; data: TripChatData; complete: boolean }
 
@@ -36,7 +35,6 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   const [error, setError] = useState('');
   const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'failed'>('idle');
   const [hotelMatches, setHotelMatches] = useState<HotelMatch[]>([]);
-  const [picker, setPicker] = useState<{ lat: number; lon: number } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const awaitingHotel = Boolean(data.hasAccommodation && !data.accommodation && data.destination && data.tripLength);
   // Offer exact-location options when we only found an area, or nothing.
@@ -86,24 +84,17 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     setMessages(current => [...current, { role: 'user', content: match.approximate ? `Use the center of ${match.display_name}` : `Yes, ${match.display_name}` }, { role: 'assistant', content: 'Location confirmed. You can continue to choose places.' }]);
   }
 
-  /** Pasted coordinates, a Google Maps link, or a map pick. Must lie near the destination. */
+  /** Pasted coordinates or a Google Maps link. Must lie near the destination. */
   async function usePinnedLocation(lat: number, lon: number, source: string) {
     const city = data.destination ?? '';
     const center = city ? await cityCenter(city) : null;
     if (center && haversineKm(center.lat, center.lon, lat, lon) > 50) {
-      setMessages(current => [...current, { role: 'assistant', content: `That point is more than 50 km from ${city}. Check the link or pick the spot on the map.` }]);
+      setMessages(current => [...current, { role: 'assistant', content: `That point is more than 50 km from ${city}. Check the link or coordinates.` }]);
       return;
     }
     const label = `Pinned location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
     console.info('[locate]', { kind: 'accommodation', name: label, city, provider: source, distanceKm: center ? Number(haversineKm(center.lat, center.lon, lat, lon).toFixed(2)) : null });
-    setPicker(null);
     chooseHotel({ lat, lon, name: label, display_name: label, approximate: false });
-  }
-
-  async function openPicker() {
-    const approx = hotelMatches.find((m) => m.approximate);
-    const center = approx ?? (data.destination ? await cityCenter(data.destination) : null);
-    if (center) setPicker({ lat: center.lat, lon: center.lon });
   }
 
   function rejectHotel() {
@@ -250,11 +241,9 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
           </button>)}
           <button type="button" className="btn btn-ghost" onClick={rejectHotel}>{hotelMatches.length === 1 ? 'No' : 'None of these'}</button>
         </div>}
-        {offerExact && !picker && <div className="interactive-chat-message interactive-chat-message--assistant">
-          For an exact spot, paste coordinates (e.g. 41.3275, 19.8187) or a Google Maps link, or{' '}
-          <button type="button" className="chat-form-link" onClick={() => void openPicker()}>pick it on the map</button>.
+        {offerExact && <div className="interactive-chat-message interactive-chat-message--assistant">
+          For an exact spot, paste coordinates (e.g. 41.3275, 19.8187) or a Google Maps link.
         </div>}
-        {picker && <MapPicker center={picker} onCancel={() => setPicker(null)} onConfirm={(lat, lon) => void usePinnedLocation(lat, lon, 'map-pick')} />}
         {(hotelMatches.length > 0 || addressStatus !== 'idle') && <button type="button" className="btn btn-ghost" onClick={skipHotel}>Continue without hotel location</button>}
         <div ref={endRef} />
       </div>
