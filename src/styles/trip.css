@@ -94,7 +94,7 @@
 .cluster-group {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--line);
-  border-radius: 24px;
+  border-radius: 32px;
   padding: 1.15rem 1.2rem 1.25rem;
   box-shadow: var(--shadow);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -269,7 +269,7 @@
   flex-direction: column;
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 26px;
   overflow: hidden;
   background: white;
   padding: 0;
@@ -577,6 +577,23 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+}
+
+.cluster-plan > .trip-topbar {
+  width: 100%;
+  max-width: 1100px;
+  margin-inline: auto;
+  padding-inline: calc(1.25rem + 1.2rem + 1px);
+  flex-wrap: wrap;
+}
+
+.cluster-plan .trip-topbar-left {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.cluster-plan .trip-topbar h1 {
+  white-space: normal;
 }
 
 .day-tabs {
