@@ -18,11 +18,12 @@ function buildPrompt(
   return `You are a travel expert. Generate 20-30 attraction recommendations for ${city} that match these interests: ${interestLine}.${custom}
 
 Do not suggest beaches unless Beach is explicitly listed in the interests.
+Do not suggest nightlife venues such as bars, clubs, or late-night districts.
 Return ONLY a valid JSON array with no preamble:
 [
   {
     "name": "Attraction Name",
-    "category": "Museums|Food|Nature|Nightlife|Shopping|Beach|Architecture|Photography",
+    "category": "Museums|Food|Nature|Shopping|Beach|Architecture|Photography",
     "description": "Brief description (1 sentence)",
     "typical_visit_duration_minutes": 60,
     "why_visit": "Brief explanation"
@@ -51,8 +52,12 @@ function filterByInterests(
   interests: string[],
 ): Attraction[] {
   const wantsBeach = interests.map((i) => i.toLowerCase()).includes('beach');
-  if (wantsBeach) return attractions;
-  return attractions.filter((a) => a.category.toLowerCase() !== 'beach');
+  return attractions.filter((a) => {
+    const category = a.category.toLowerCase();
+    if (category === 'nightlife') return false;
+    if (!wantsBeach && category === 'beach') return false;
+    return true;
+  });
 }
 
 export async function generateAttractions(

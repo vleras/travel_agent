@@ -217,8 +217,9 @@ export function QuestionFlow({
         null,
       );
       if (request !== placesRequest.current) return;
-      setGeneratedPlaces(generated.attractions);
-      if (!generated.attractions.length) {
+      const sightseeing = withoutFoodPlaces(generated.attractions);
+      setGeneratedPlaces(sightseeing);
+      if (!sightseeing.length) {
         setGenerationError(`We couldn’t generate attractions for ${targetCity}. Please try again.`);
       }
     } catch {
@@ -300,7 +301,13 @@ export function QuestionFlow({
   }
 
   const availablePlaces = useMemo(
-    () => mergePlaceLists(placesForCity(city, selectedDestination), generatedPlaces.map(attractionToHighlight)),
+    () =>
+      withoutFoodPlaces(
+        mergePlaceLists(
+          placesForCity(city, selectedDestination),
+          generatedPlaces.map(attractionToHighlight),
+        ),
+      ),
     [city, selectedDestination, generatedPlaces],
   );
   const allPlacesSelected =

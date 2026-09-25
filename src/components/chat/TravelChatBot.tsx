@@ -59,7 +59,7 @@ export function TravelChatBot({
       text: isGroups
         ? 'Look up a place and I’ll suggest which day it fits — photos load after you confirm.'
         : hasTrip
-          ? `Direct the plan anytime — skip breakfast, plan a day, browse cafés/parks/nightlife, or move a stop between days.`
+          ? `Direct the plan anytime — skip breakfast, plan a day, browse cafés/parks, or move a stop between days.`
           : 'Share diet prefs or must-visit places before or during planning.',
     },
   ]);

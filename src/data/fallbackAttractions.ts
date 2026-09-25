@@ -63,7 +63,7 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
     {
       name: 'Trastevere Food Walk',
       category: 'Food',
-      description: 'Charming neighborhood of trattorias and nightlife.',
+      description: 'Charming neighborhood of trattorias and cobbled lanes.',
       typical_visit_duration_minutes: 120,
       lat: 41.8897,
       lon: 12.4695,
@@ -255,14 +255,6 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
       lon: 139.7745,
     },
     {
-      name: 'Shinjuku Golden Gai',
-      category: 'Nightlife',
-      description: 'Tiny alley bars packed into a few blocks.',
-      typical_visit_duration_minutes: 120,
-      lat: 35.694,
-      lon: 139.7048,
-    },
-    {
       name: 'Harajuku Takeshita Street',
       category: 'Shopping',
       description: 'Youth fashion street and crepe stands.',
@@ -333,14 +325,6 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
       typical_visit_duration_minutes: 75,
       lat: 35.644,
       lon: 139.6988,
-    },
-    {
-      name: 'Kabukicho',
-      category: 'Nightlife',
-      description: 'Neon entertainment district of Shinjuku.',
-      typical_visit_duration_minutes: 90,
-      lat: 35.6945,
-      lon: 139.7027,
     },
   ],
   barcelona: [
@@ -473,14 +457,6 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
       lon: 2.1865,
     },
     {
-      name: 'Poble Sec Nightlife',
-      category: 'Nightlife',
-      description: 'Bars and vermouth culture near Montjuïc.',
-      typical_visit_duration_minutes: 120,
-      lat: 41.3735,
-      lon: 2.1625,
-    },
-    {
       name: 'Casa Vicens',
       category: 'Architecture',
       description: "Gaudí's first major house commission.",
@@ -555,14 +531,6 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
       lon: 100.5285,
     },
     {
-      name: 'Khao San Road',
-      category: 'Nightlife',
-      description: 'Backpacker nightlife strip and street food.',
-      typical_visit_duration_minutes: 90,
-      lat: 13.7588,
-      lon: 100.4972,
-    },
-    {
       name: 'Lumphini Park',
       category: 'Nature',
       description: 'Central park with lakes and monitor lizards.',
@@ -601,14 +569,6 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
       typical_visit_duration_minutes: 30,
       lat: 13.7442,
       lon: 100.5405,
-    },
-    {
-      name: 'Rooftop Bars at Sukhumvit',
-      category: 'Nightlife',
-      description: 'Skyline cocktails along Sukhumvit Road.',
-      typical_visit_duration_minutes: 120,
-      lat: 13.7365,
-      lon: 100.5605,
     },
     {
       name: 'Bangkok Art & Culture Centre',
@@ -758,8 +718,8 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
     },
     {
       name: 'Canal Saint-Martin',
-      category: 'Nightlife',
-      description: 'Hip canal banks with bars and picnics.',
+      category: 'Photography',
+      description: 'Tree-lined canal banks for walks and picnics.',
       typical_visit_duration_minutes: 90,
       lat: 48.8708,
       lon: 2.3655,
@@ -827,14 +787,6 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
       typical_visit_duration_minutes: 60,
       lat: 48.8585,
       lon: 2.2945,
-    },
-    {
-      name: 'Pigalle Nightlife',
-      category: 'Nightlife',
-      description: 'Cabarets and late-night bars below Montmartre.',
-      typical_visit_duration_minutes: 120,
-      lat: 48.8822,
-      lon: 2.3372,
     },
     {
       name: 'Place des Vosges',

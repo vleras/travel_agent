@@ -6,11 +6,14 @@ function commons(file: string): string {
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=800`;
 }
 
-/** Sightseeing picks only — no cafés, restaurants, or food halls. */
+/** Sightseeing picks only — no cafés, restaurants, food halls, or nightlife. */
 export function withoutFoodPlaces<T extends { category: string }>(
   list: T[],
 ): T[] {
-  return list.filter((item) => item.category !== 'Food');
+  return list.filter((item) => {
+    const category = item.category.trim().toLowerCase();
+    return category !== 'food' && category !== 'nightlife';
+  });
 }
 
 function fromFallback(cityKey: string): DestinationHighlight[] {
@@ -45,7 +48,7 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
     tags: ['Culture', 'Food', 'Technology'],
     suggestedDays: 5,
     description: 'Blend of ancient temples and cutting-edge technology',
-    interests: ['food', 'museums', 'nightlife'],
+    interests: ['food', 'museums', 'photography'],
     hasBeach: false,
     highlights: fromFallback('tokyo'),
   },
@@ -67,11 +70,11 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
     city: 'Bangkok',
     country: 'Thailand',
     imageUrl: commons('4Y1A1159_Bangkok_(33536795515).jpg'),
-    tagline: 'Street food, temples, nightlife',
+    tagline: 'Street food, temples, markets',
     tags: ['Food', 'Culture', 'Adventure'],
     suggestedDays: 4,
-    description: 'Vibrant street markets, ornate temples, bustling nightlife',
-    interests: ['food', 'nightlife', 'architecture'],
+    description: 'Vibrant street markets, ornate temples, and riverside life',
+    interests: ['food', 'architecture', 'shopping'],
     hasBeach: false,
     highlights: fromFallback('bangkok'),
   },
@@ -108,7 +111,6 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       { name: 'LX Factory', category: 'Art', description: 'Creative hub of shops, galleries, and street art.' },
       { name: 'São Jorge Castle', category: 'Museums', description: 'Hilltop castle with sweeping city and river views.' },
       { name: 'Cascais day trip', category: 'Beach', description: 'Coastal town beaches a short train ride away.' },
-      { name: 'Pink Street nightlife', category: 'Nightlife', description: 'Bars and late-night energy in Cais do Sodré.' },
       { name: 'Pastéis de Belém', category: 'Food', description: 'The original bakery for Portugal’s famous custard tarts.' },
       { name: 'Time Out Market', category: 'Food', description: 'Food hall of top Lisbon chefs under one roof.' },
       { name: 'A Brasileira café', category: 'Food', description: 'Historic Chiado café tied to Fernando Pessoa and espresso culture.' },
@@ -121,10 +123,10 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
     country: 'Netherlands',
     imageUrl: commons('Imagen_de_los_canales_concéntricos_en_Ámsterdam.png'),
     tagline: 'Canals, bikes, museums',
-    tags: ['Culture', 'Art', 'Nightlife'],
+    tags: ['Culture', 'Art', 'Museums'],
     suggestedDays: 3,
     description: 'Compact canal city packed with museums and brown cafés',
-    interests: ['museums', 'art', 'nightlife'],
+    interests: ['museums', 'art', 'photography'],
     hasBeach: false,
     highlights: [
       { name: 'Rijksmuseum', category: 'Museums', description: 'Dutch Masters from Rembrandt to Vermeer.' },
@@ -133,7 +135,6 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       { name: 'Anne Frank House', category: 'Museums', description: 'Moving WWII history in the secret annex.' },
       { name: 'Jordaan stroll', category: 'Photography', description: 'Courtyards, canals, and quiet neighborhood streets.' },
       { name: 'Vondelpark', category: 'Nature', description: 'City park for picnics, bikes, and open-air vibes.' },
-      { name: 'Leidseplein nightlife', category: 'Nightlife', description: 'Theatres, clubs, and late bars.' },
       { name: 'Café Winkel 43', category: 'Food', description: 'Cult spot for Dutch apple pie by the Noordermarkt.' },
       { name: 'Foodhallen', category: 'Food', description: 'Indoor market of local bites, coffee, and street food.' },
       { name: 'De Pijp & Albert Cuyp Market', category: 'Food', description: 'Market stalls, cafés, and neighborhood energy.' },
@@ -158,7 +159,6 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       { name: 'South Bank walk', category: 'Photography', description: 'Thames views from Westminster to Tower Bridge.' },
       { name: 'Hyde Park & Kensington', category: 'Nature', description: 'Royal parks and museum quarter.' },
       { name: 'Shoreditch & Brick Lane', category: 'Art', description: 'Street art, murals, and indie shops.' },
-      { name: 'Soho nightlife', category: 'Nightlife', description: 'Bars, jazz, and late-night energy.' },
       { name: 'Borough Market', category: 'Food', description: 'Historic food market for street eats and coffee.' },
       { name: 'Dishoom Covent Garden', category: 'Food', description: 'Beloved Bombay-style café for breakfast and chai.' },
       { name: 'Monmouth Coffee', category: 'Food', description: 'Cult London coffee roaster near Borough Market.' },
@@ -173,10 +173,10 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       'View_of_Empire_State_Building_from_Rockefeller_Center_New_York_City_dllu_(cropped).jpg',
     ),
     tagline: 'Skyline energy, food, culture',
-    tags: ['City', 'Food', 'Nightlife'],
+    tags: ['City', 'Food', 'Museums'],
     suggestedDays: 5,
     description: 'Borough-hopping through art, parks, and late-night eats',
-    interests: ['museums', 'food', 'nightlife', 'shopping'],
+    interests: ['museums', 'food', 'shopping'],
     hasBeach: false,
     highlights: [
       { name: 'Central Park', category: 'Nature', description: 'Iconic green escape in the middle of Manhattan.' },
@@ -185,7 +185,6 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       { name: 'Brooklyn Bridge walk', category: 'Architecture', description: 'Classic skyline crossing into Brooklyn.' },
       { name: 'High Line', category: 'Nature', description: 'Elevated park through Chelsea’s galleries.' },
       { name: 'Times Square & Broadway', category: 'Art', description: 'Neon lights and theatre marquees.' },
-      { name: 'Lower East Side nightlife', category: 'Nightlife', description: 'Bars and music venues east of downtown.' },
       { name: 'Katz’s Delicatessen', category: 'Food', description: 'Legendary pastrami institution on the Lower East Side.' },
       { name: 'Joe’s Pizza', category: 'Food', description: 'Classic New York slice stop in Greenwich Village.' },
       { name: 'Chelsea Market', category: 'Food', description: 'Food hall under the High Line for bites and coffee.' },
@@ -210,7 +209,6 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       { name: 'Topkapi Palace', category: 'Museums', description: 'Ottoman court overlooking the Golden Horn.' },
       { name: 'Bosphorus cruise', category: 'Photography', description: 'Strait views between Europe and Asia.' },
       { name: 'Basilica Cistern', category: 'Architecture', description: 'Underground forest of columns and water.' },
-      { name: 'Galata & Karaköy nightlife', category: 'Nightlife', description: 'Rooftop bars with skyline views.' },
       { name: 'Karaköy breakfast street', category: 'Food', description: 'Famous kahvaltı spots and waterfront cafés.' },
       { name: 'Spice Bazaar snacks', category: 'Food', description: 'Lokum, börek, and Turkish coffee by the bazaar.' },
       { name: 'Çiya Sofrası', category: 'Food', description: 'Celebrated Anatolian restaurant across the Bosphorus.' },
@@ -226,7 +224,7 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
     tags: ['Culture', 'Architecture', 'Food'],
     suggestedDays: 3,
     description: 'Fairytale streets, castle views, and café culture',
-    interests: ['architecture', 'museums', 'nightlife'],
+    interests: ['architecture', 'museums', 'photography'],
     hasBeach: false,
     highlights: [
       { name: 'Prague Castle', category: 'Architecture', description: 'Hilltop complex with St. Vitus Cathedral.' },
@@ -235,7 +233,6 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       { name: 'Jewish Quarter', category: 'Museums', description: 'Synagogues and centuries of local history.' },
       { name: 'Vyšehrad', category: 'Nature', description: 'Quiet fortress park above the Vltava.' },
       { name: 'Petřín Hill', category: 'Nature', description: 'Gardens and tower views over the city.' },
-      { name: 'Cross Club / nightlife', category: 'Nightlife', description: 'Steampunk clubs and riverside bars.' },
       { name: 'Café Louvre', category: 'Food', description: 'Grand historic café once favored by Kafka and Einstein.' },
       { name: 'Lokál beer hall', category: 'Food', description: 'Fresh Czech lager and classic pub food.' },
       { name: 'Havelská Market snacks', category: 'Food', description: 'Open-air stalls for trdelník and street bites.' },
@@ -260,7 +257,6 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       { name: 'Ancient Agora', category: 'Museums', description: 'Marketplace ruins of democratic Athens.' },
       { name: 'Monastiraki flea market', category: 'Shopping', description: 'Antiques, crafts, and Acropolis views.' },
       { name: 'Glyfada / Vouliagmeni', category: 'Beach', description: 'City beaches and a thermal lake.' },
-      { name: 'Rooftop nightlife', category: 'Nightlife', description: 'Bars with floodlit Acropolis views.' },
       { name: 'Loukoumades stall', category: 'Food', description: 'Honey-soaked doughnuts from a classic Athenian stand.' },
       { name: 'Varvakios Market lunch', category: 'Food', description: 'Central market for fresh seafood and mezze.' },
       { name: 'Brettos bar', category: 'Food', description: 'Colorful bottle-lined bar for ouzo in Plaka.' },
@@ -313,7 +309,6 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
       { name: 'Royal Botanic Garden', category: 'Nature', description: 'Harbour-edge gardens near the Opera House.' },
       { name: 'Manly ferry', category: 'Beach', description: 'Classic ferry ride to a beach suburb.' },
       { name: 'Barangaroo waterfront', category: 'Photography', description: 'Harbour promenade and skyline walks.' },
-      { name: 'Surry Hills nightlife', category: 'Nightlife', description: 'Bars and live music inland from the CBD.' },
       { name: 'Bills Surry Hills', category: 'Food', description: 'Famous café for ricotta hotcakes and easy brunch.' },
       { name: 'Fish Market lunch', category: 'Food', description: 'Fresh seafood counters by the harbour.' },
       { name: 'Pablo & Rusty’s', category: 'Food', description: 'Specialty coffee institution in the CBD.' },
@@ -326,16 +321,16 @@ export const destinationRecommendationsRaw: DestinationCard[] = [
     country: 'South Korea',
     imageUrl: commons('중화전의_낮.jpg'),
     tagline: 'Palaces, K-food, neon nights',
-    tags: ['Culture', 'Food', 'Nightlife'],
+    tags: ['Culture', 'Food', 'Shopping'],
     suggestedDays: 5,
     description: 'Traditional neighborhoods next to hyper-modern districts',
-    interests: ['food', 'nightlife', 'shopping', 'museums'],
+    interests: ['food', 'shopping', 'museums'],
     hasBeach: false,
     highlights: [
       { name: 'Gyeongbokgung Palace', category: 'Architecture', description: 'Grand Joseon palace with changing of the guard.' },
       { name: 'Bukchon Hanok Village', category: 'Photography', description: 'Traditional houses and hillside alleys.' },
       { name: 'Insadong', category: 'Art', description: 'Craft shops, galleries, and quiet courtyards.' },
-      { name: 'Hongdae', category: 'Nightlife', description: 'Street performers, clubs, and indie energy.' },
+      { name: 'Hongdae', category: 'Art', description: 'Street performers, indie shops, and campus energy.' },
       { name: 'N Seoul Tower', category: 'Photography', description: 'City panorama from Namsan.' },
       { name: 'Gangnam & COEX', category: 'Shopping', description: 'Malls, K-beauty, and neon avenues.' },
       { name: 'DMZ day trip', category: 'Museums', description: 'History-focused excursion north of the city.' },
@@ -359,7 +354,6 @@ export const INTEREST_OPTIONS = [
   { id: 'food' as const, label: 'Food' },
   { id: 'art' as const, label: 'Art & History' },
   { id: 'nature' as const, label: 'Nature' },
-  { id: 'nightlife' as const, label: 'Nightlife' },
   { id: 'shopping' as const, label: 'Shopping' },
   { id: 'beach' as const, label: 'Beach' },
   { id: 'architecture' as const, label: 'Architecture' },
