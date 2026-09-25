@@ -210,7 +210,11 @@ function isVisibleQuality(photo: PexelsPhoto): boolean {
   return true;
 }
 
+/** After a 429 (hourly quota), skip Pexels for a while instead of failing every call. */
+let pexelsPausedUntil = 0;
+
 async function searchPexels(query: string, page = 1): Promise<PexelsPhoto[]> {
+  if (Date.now() < pexelsPausedUntil) return [];
   const apiKey = (import.meta.env.VITE_PEXELS_API_KEY as string | undefined)?.trim();
   if (!apiKey) {
     console.error('[Pexels] Missing VITE_PEXELS_API_KEY. Add it to .env and restart Vite.');
@@ -238,6 +242,13 @@ async function searchPexels(query: string, page = 1): Promise<PexelsPhoto[]> {
       console.error('[Pexels] Unauthorized (401). Check VITE_PEXELS_API_KEY.');
       return [];
     }
+    if (res.status === 429) {
+      if (Date.now() >= pexelsPausedUntil) {
+        console.warn('[Pexels] Rate limit reached; using Wikimedia Commons only for 10 minutes.');
+      }
+      pexelsPausedUntil = Date.now() + 10 * 60 * 1000;
+      return [];
+    }
     if (!res.ok) {
       console.error('[Pexels]', { query, status: res.status, results: 0 });
       return [];
@@ -261,6 +272,44 @@ async function searchPexels(query: string, page = 1): Promise<PexelsPhoto[]> {
     return [];
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Wikimedia (Commons + Wikidata) limiter: a page of ~40 cards would otherwise
+ * fire hundreds of requests at once and get 429s. At most 4 in flight; on a
+ * 429 everyone waits 20 s and the request is retried once.
+ */
+const WIKI_CONCURRENCY = 4;
+let wikiActive = 0;
+let wikiPausedUntil = 0;
+const wikiWaiting: (() => void)[] = [];
+
+async function acquireWikiSlot(): Promise<void> {
+  if (wikiActive >= WIKI_CONCURRENCY) await new Promise<void>((resolve) => wikiWaiting.push(resolve));
+  wikiActive++;
+}
+
+function releaseWikiSlot() {
+  wikiActive--;
+  wikiWaiting.shift()?.();
+}
+
+async function wikiFetch(input: string, init?: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    await acquireWikiSlot();
+    let res: Response;
+    try {
+      const pause = wikiPausedUntil - Date.now();
+      if (pause > 0) await new Promise((r) => setTimeout(r, pause));
+      // Timeouts start after the slot is acquired, not while queued.
+      res = await fetch(input, { ...init, signal: AbortSignal.timeout(8000) });
+    } finally {
+      releaseWikiSlot();
+    }
+    if (res.status !== 429 || attempt >= 1) return res;
+    if (Date.now() >= wikiPausedUntil) console.warn('[Wikimedia] Rate limited; pausing requests for 20 s.');
+    wikiPausedUntil = Math.max(wikiPausedUntil, Date.now() + 20000);
   }
 }
 
@@ -298,7 +347,7 @@ async function commonsPages(params: Record<string, string>): Promise<CommonsPage
     ...params,
   }).toString();
   try {
-    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(6500) });
+    const res = await wikiFetch(url.toString(), { signal: AbortSignal.timeout(6500) });
     if (!res.ok) return [];
     const data = (await res.json()) as { query?: { pages?: CommonsPage[] } };
     return data.query?.pages ?? [];
@@ -324,7 +373,7 @@ async function wikidataMatch(name: string, lat: number, lon: number): Promise<Wi
       format: 'json',
       origin: '*',
     }).toString();
-    const found = (await (await fetch(search.toString(), { signal: AbortSignal.timeout(6000) })).json()) as {
+    const found = (await (await wikiFetch(search.toString(), { signal: AbortSignal.timeout(6000) })).json()) as {
       search?: { id: string }[];
     };
     const ids = (found.search ?? []).map((e) => e.id);
@@ -339,7 +388,7 @@ async function wikidataMatch(name: string, lat: number, lon: number): Promise<Wi
       origin: '*',
     }).toString();
     type Claim = { mainsnak?: { datavalue?: { value?: unknown } } };
-    const data = (await (await fetch(get.toString(), { signal: AbortSignal.timeout(6000) })).json()) as {
+    const data = (await (await wikiFetch(get.toString(), { signal: AbortSignal.timeout(6000) })).json()) as {
       entities?: Record<string, { claims?: Record<string, Claim[]> }>;
     };
     // Keep search ranking order; take the first entity close enough.
@@ -399,7 +448,7 @@ async function searchCommons(query: string): Promise<CommonsPage[]> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 6500);
   try {
-    const res = await fetch(url.toString(), {
+    const res = await wikiFetch(url.toString(), {
       headers: { Accept: 'application/json' },
       signal: ctrl.signal,
     });
