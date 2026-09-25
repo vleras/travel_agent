@@ -55,7 +55,7 @@ export function formatTripRange(
   const s = new Date(start + 'T12:00:00');
   const e = new Date(end + 'T12:00:00');
   const opts: Intl.DateTimeFormatOptions = { month: 'numeric', day: 'numeric' };
-  return `${s.toLocaleDateString('en-US', opts)} – ${e.toLocaleDateString('en-US', opts)}`;
+  return `${s.toLocaleDateString('en-US', opts)} to ${e.toLocaleDateString('en-US', opts)}`;
 }
 
 export function minutesToLabel(mins: number): string {

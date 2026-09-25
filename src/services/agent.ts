@@ -490,7 +490,7 @@ function makeBreakfastStop(
     name: 'Breakfast spot',
     category: 'Food',
     description: foodWanted
-      ? `Looking for “${foodWanted}” near your base in ${city} — pick a place from the list.`
+      ? `Looking for “${foodWanted}” near your base in ${city}. Pick a place from the list.`
       : `Pick a bakery, café, or coffee shop near your base in ${city}.`,
     typical_visit_duration_minutes: 45,
     lat: baseLat,
@@ -834,7 +834,7 @@ export async function runTravelAgent(
 
   if (!dest) {
     throw new Error(
-      `Could not locate ${input.destination_city}. OpenStreetMap is busy — try again in a minute.`,
+      `Could not locate ${input.destination_city}. OpenStreetMap is busy. Try again in a minute.`,
     );
   }
 

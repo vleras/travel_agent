@@ -86,7 +86,7 @@ export function ItineraryList({
             id="breakfast-time-live"
             type="text"
             value={breakfastInput}
-            placeholder='e.g. 8 thirty — leave empty to skip'
+            placeholder='e.g. 8 thirty. Leave empty to skip'
             onChange={(e) => {
               const raw = e.target.value.trim();
               if (!raw) {

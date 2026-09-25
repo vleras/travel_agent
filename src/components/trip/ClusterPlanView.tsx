@@ -793,7 +793,7 @@ export function ClusterPlanView({
                   </h2>
                   <p>
                     {sights.length === 0
-                      ? 'Empty day — drag a place here or add from chat'
+                      ? 'Empty day. Drag a place here or add one from chat'
                       : spanKm > 0
                         ? `Within about ${formatKm(spanKm)} of each other`
                         : 'Single stop today'}

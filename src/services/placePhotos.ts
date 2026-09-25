@@ -147,7 +147,7 @@ function isVisibleQuality(photo: PexelsPhoto): boolean {
 async function searchPexels(query: string): Promise<PexelsPhoto[]> {
   const apiKey = (import.meta.env.VITE_PEXELS_API_KEY as string | undefined)?.trim();
   if (!apiKey) {
-    console.error('[Pexels] Missing VITE_PEXELS_API_KEY — add it to .env and restart Vite.');
+    console.error('[Pexels] Missing VITE_PEXELS_API_KEY. Add it to .env and restart Vite.');
     return [];
   }
 
@@ -169,7 +169,7 @@ async function searchPexels(query: string): Promise<PexelsPhoto[]> {
       signal: ctrl.signal,
     });
     if (res.status === 401) {
-      console.error('[Pexels] Unauthorized (401) — check VITE_PEXELS_API_KEY.');
+      console.error('[Pexels] Unauthorized (401). Check VITE_PEXELS_API_KEY.');
       return [];
     }
     if (!res.ok) {

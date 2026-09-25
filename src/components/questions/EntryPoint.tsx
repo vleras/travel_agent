@@ -26,15 +26,15 @@ export function EntryPoint({
           <div className="brand-mark">Travel Agent</div>
           <h1>Do you have a destination in mind, or would you like some suggestions?</h1>
           <p>
-            Build a day-by-day trip that stays geographically compact — then watch
+            Build a day-by-day trip that stays geographically compact. Then watch
             the agent revise itself when a day spreads too far.
           </p>
           <div className="entry-actions">
             <button type="button" className="btn btn-primary" onClick={onKnowDestination}>
-              Yes — I know where
+              I know where
             </button>
             <button type="button" className="btn btn-ghost" onClick={onWantSuggestions}>
-              No — show me options
+              Show me options
             </button>
           </div>
         </div>

@@ -77,7 +77,7 @@ function placeDetailCopy(
 ): string {
   const c = spot.category.toLowerCase();
   if (c.includes('museum')) {
-    return `${spot.name} is one of the cultural anchors of ${destination.city}. Expect collections and rooms that reward a slower visit — plan it as a focused stop rather than a quick glance.`;
+    return `${spot.name} is one of the cultural anchors of ${destination.city}. Take your time exploring the collections and rooms. Plan a focused visit rather than a quick glance.`;
   }
   if (c.includes('architect')) {
     return `${spot.name} is a landmark of ${destination.city}’s built landscape. The structure and the spaces around it are part of the experience, so leave room to approach it from more than one angle.`;
@@ -86,13 +86,13 @@ function placeDetailCopy(
     return `${spot.name} offers a breath of open air in and around ${destination.city}. It’s the kind of stop that resets the pace of a trip between denser city days.`;
   }
   if (c.includes('night')) {
-    return `${spot.name} shows a different side of ${destination.city} after dark — atmosphere, music, and people-watching as much as any single venue.`;
+    return `${spot.name} shows a different side of ${destination.city} after dark. Come for the atmosphere, music, and people-watching.`;
   }
   if (c.includes('shop')) {
     return `${spot.name} is a browsing stop in ${destination.city}: local craft, neighborhood character, and the pleasure of wandering without a strict checklist.`;
   }
   if (c.includes('photo')) {
-    return `${spot.name} is a classic ${destination.city} viewpoint — worth visiting when the light is soft and the streets around it are still waking up or winding down.`;
+    return `${spot.name} is a classic ${destination.city} viewpoint. Visit when the light is soft and the surrounding streets are waking up or winding down.`;
   }
   return `${spot.name} is a highlight travelers keep returning to in ${destination.city}, ${destination.country}. It pairs well with a half-day of nearby walks and other stops on your list.`;
 }
@@ -323,7 +323,7 @@ function HighlightStory({
                 <h2>Looking closer</h2>
                 <p className="highlight-story-detail">
                   {wikiChunks[4] ??
-                    `Wander around ${spot.name} and take in the details — the scale, materials, and how it sits in ${destination.city}.`}
+                    `Wander around ${spot.name} and notice its scale, materials, and place in ${destination.city}.`}
                 </p>
                 {wikiChunks[5] && (
                   <p className="highlight-story-detail">{wikiChunks[5]}</p>
@@ -356,7 +356,7 @@ function HighlightStory({
                 <h2>On the ground</h2>
                 <p className="highlight-story-detail">
                   Give yourself time here. {spot.name} works best when it isn’t
-                  rushed — fold it into a half-day that also includes nearby
+                  rushed. Include it in a half-day that also takes in nearby
                   streets and viewpoints in {destination.city}.
                 </p>
               </div>
@@ -375,7 +375,7 @@ function HighlightStory({
             <p className="highlight-story-detail">
               When you start planning {destination.city},{' '}
               <strong>{spot.name}</strong> can sit on your day-by-day itinerary
-              with timing that matches your pace — alongside other stops you
+              with timing that matches your pace, alongside other stops you
               pick from this city.
             </p>
           </section>
@@ -599,7 +599,7 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
           <div className="dest-preview-body">
             <h3>What you can visit</h3>
             <p className="hint">
-              Tap a place for photos and more — then start planning when you’re ready.
+              Tap a place for photos and details. Start planning when you’re ready.
             </p>
             <div className="dest-highlight-list">
               {preview.highlights.map((spot) => (
@@ -641,7 +641,7 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
       <div className="question-card" style={{ maxWidth: 980 }}>
         <h2>Where should we take you?</h2>
         <p className="hint">
-          Tap a city to see what you can visit — then start planning when you’re ready.
+          Tap a city to see what you can visit. Start planning when you’re ready.
         </p>
         <div className="dest-grid">
           {destinationRecommendations.map((dest) => (

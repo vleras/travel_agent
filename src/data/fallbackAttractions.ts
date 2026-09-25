@@ -143,7 +143,7 @@ export const fallbackAttractions: Record<string, Attraction[]> = {
     {
       name: "Caffè Sant'Eustachio",
       category: 'Food',
-      description: 'Famous Roman espresso bar near the Pantheon — order a gran caffè.',
+      description: 'Famous Roman espresso bar near the Pantheon. Try a gran caffè.',
       typical_visit_duration_minutes: 30,
       lat: 41.8989,
       lon: 12.4753,

@@ -87,7 +87,7 @@ export function BreakfastBrowser({
         <p>
           {nearBase
             ? 'Tap a place to open its page, then add it to your trip.'
-            : 'No hotel set — browsing the city center. Tap a place for full details.'}
+            : 'No hotel set. Showing places in the city center. Tap a place for full details.'}
         </p>
       </div>
 
@@ -131,7 +131,7 @@ export function BreakfastBrowser({
 
       {!loading && !error && filtered.length === 0 && (
         <p className="breakfast-status">
-          No spots match yet — try All, or change what you want to eat.
+          No spots match yet. Try All, or change what you want to eat.
         </p>
       )}
 

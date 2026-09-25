@@ -11,8 +11,8 @@ export function AgentProcessing({ progress }: AgentProcessingProps) {
       <div className="processing-card processing-card--simple">
         <h2>Building your days</h2>
         <p>
-          Assigning your picks across the trip timeline — nearby places prefer
-          the same day when it helps walking.
+          Organizing your picks into days. Nearby places stay together when
+          it makes walking easier.
         </p>
         <div className="processing-status" aria-live="polite">
           <span className="processing-pulse" aria-hidden />

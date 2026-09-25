@@ -47,13 +47,13 @@ export function buildTripEmailBody(
       // FormSubmit escapes HTML, so we can't wrap the name in <a>.
       // Put the Maps URL right after the name (Gmail linkifies the URL).
       lines.push(
-        `  • ${stop.name} ${googleMapsUrl(stop)} — ${distanceFromBaseLabel(stop, base)}`,
+        `  • ${stop.name} ${googleMapsUrl(stop)}, ${distanceFromBaseLabel(stop, base)}`,
       );
     }
     lines.push('');
   }
 
-  lines.push('—', 'Sent from Travel Agent');
+  lines.push('', 'Sent from Travel Agent');
   return lines.join('\n');
 }
 
@@ -126,7 +126,7 @@ export async function sendTripPlanEmail(
   } catch {
     return {
       ok: false,
-      error: 'Network error — check your connection and try again.',
+      error: 'Network error. Check your connection and try again.',
     };
   }
 }

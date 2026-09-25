@@ -153,7 +153,7 @@ function PlacesGuideChat({
         )}
         {selectedCount > 0 && (
           <div className="chatbot-bubble chatbot-bubble--assistant schedule-guide-bubble">
-            Nice — {selectedCount} place{selectedCount === 1 ? '' : 's'} selected.
+            {selectedCount} place{selectedCount === 1 ? '' : 's'} selected.
             Keep tapping to add more, then continue to build your itinerary.
           </div>
         )}
@@ -444,7 +444,7 @@ export function QuestionFlow({
         {step === 'destination' && (
           <>
             <h2>Where are you going?</h2>
-            <p className="hint">Start typing a city — suggestions come from OpenStreetMap.</p>
+            <p className="hint">Start typing a city to see suggestions from OpenStreetMap.</p>
             <div className="question-body">
               <div className="field">
                 <label htmlFor="city">Destination</label>
@@ -501,14 +501,14 @@ export function QuestionFlow({
               </div>
               {parsedDays?.range && (
                 <p className="hint" style={{ margin: 0 }}>
-                  Unsure range noted — we’ll plan for{' '}
+                  Based on your range, we’ll plan for{' '}
                   <strong>{parsedDays.days} days</strong> (middle of{' '}
-                  {parsedDays.range[0]}–{parsedDays.range[1]}).
+                  {parsedDays.range[0]} to {parsedDays.range[1]}).
                 </p>
               )}
               {daysText.trim() && !parsedDays && (
                 <p className="hint" style={{ margin: 0, color: 'var(--coral)' }}>
-                  Enter a number between 1–30, or a range like 3-5.
+                  Enter a number between 1 and 30, or a range like 3 to 5.
                 </p>
               )}
             </div>
@@ -519,7 +519,7 @@ export function QuestionFlow({
           <>
             <h2>Where are you staying?</h2>
             <p className="hint">
-              We anchor every day to your accommodation — or the city center if you haven’t booked.
+              Each day starts from your accommodation, or the city center if you haven’t booked.
             </p>
             <div className="question-body">
               <AddressSearchMap

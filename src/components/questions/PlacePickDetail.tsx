@@ -278,7 +278,7 @@ export function PlacePickDetail({
           <p className="highlight-story-detail">
             {spot.name} sits in {city}
             {country ? `, ${country}` : ''} as a {spot.category.toLowerCase()}{' '}
-            stop. {spot.description} Add it if you want it on your plan — we’ll
+            stop. {spot.description} Add it if you want it on your plan. We’ll
             place your picks into the days you choose.
           </p>
           {wikiChunks[0] && (
@@ -370,7 +370,7 @@ export function PlacePickDetail({
               <h2>On the ground</h2>
               <p className="highlight-story-detail">
                 Give yourself time here. {spot.name} works best when it isn’t
-                rushed — fold it into a half-day walk around {city}.
+                rushed. Include it in a half-day walk around {city}.
               </p>
             </div>
           </section>

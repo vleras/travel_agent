@@ -367,12 +367,12 @@ export const PACE_OPTIONS = [
   {
     id: 'relaxed' as const,
     label: 'Relaxed',
-    description: '3–4 stops per day',
+    description: '3 to 4 stops per day',
   },
   {
     id: 'balanced' as const,
     label: 'Balanced',
-    description: '5–7 stops per day',
+    description: '5 to 7 stops per day',
   },
   {
     id: 'packed' as const,
