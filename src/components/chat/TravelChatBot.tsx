@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { sanitizeAssistantText } from '../../services/sanitizeAssistantText';
 import {
   normalizeChatReply,
   replyToChat,
@@ -57,9 +58,9 @@ export function TravelChatBot({
       id: 'welcome',
       role: 'assistant',
       text: isGroups
-        ? 'Look up a place and I’ll suggest which day it fits — photos load after you confirm.'
+        ? 'Look up a place and I’ll suggest a day for it. Photos load after you confirm.'
         : hasTrip
-          ? `Direct the plan anytime — skip breakfast, plan a day, browse cafés/parks, or move a stop between days.`
+          ? 'You can skip breakfast, browse cafés or parks, or move a stop to another day.'
           : 'Share diet prefs or must-visit places before or during planning.',
     },
   ]);
@@ -169,7 +170,7 @@ export function TravelChatBot({
                 <div
                   className={`chatbot-bubble chatbot-bubble--${m.role}`}
                 >
-                  {m.text}
+                  {m.role === 'assistant' ? sanitizeAssistantText(m.text) : m.text}
                 </div>
                 {m.role === 'assistant' && m.actions && m.actions.length > 0 && (
                   <div className="chatbot-actions">

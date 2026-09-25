@@ -259,7 +259,7 @@ export async function replyToChat(params: {
     case 'help':
       return [
         'Try:',
-        '• “Find Pantheon” — then tap a Day button',
+        '• Say “Find Pantheon”, then tap a Day button',
         '• “What day should I add Trevi Fountain?”',
         '• “Move Colosseum to day 3”',
         '• “Show day 1”',
@@ -268,7 +268,7 @@ export async function replyToChat(params: {
     case 'skip_breakfast': {
       if (!params.hasTrip || !params.onSkipBreakfast) {
         params.onPreference?.('Skip breakfast');
-        return 'Okay — I’ll skip breakfast when we build the itinerary.';
+        return 'I’ll skip breakfast when we build the itinerary.';
       }
       return await params.onSkipBreakfast();
     }
@@ -298,7 +298,7 @@ export async function replyToChat(params: {
     case 'dietary': {
       params.onDietary?.(intent.label, intent.breakfastHint);
       return params.hasTrip
-        ? `Got it — ${intent.label}. Breakfast suggestions will bias toward “${intent.breakfastHint}”.`
+        ? `I’ll look for ${intent.breakfastHint} breakfast options.`
         : `Noted: ${intent.label}. I’ll apply that when we build your itinerary.`;
     }
 

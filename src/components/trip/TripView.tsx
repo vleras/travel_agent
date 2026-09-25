@@ -386,7 +386,7 @@ export function TripView({
             .slice(0, 6);
           return names.length
             ? `Focusing Day ${idx + 1}. Current stops: ${names.join(', ')}. Tap any stop for its page, or tell me to move one.`
-            : `Opened Day ${idx + 1}. It’s light so far — ask to add a place or show cafés/parks.`;
+            : `Opened Day ${idx + 1}. You can add a place or browse cafés and parks.`;
         }}
         onMoveStop={(stopName, toDay) => {
           const targetIdx = toDay - 1;
@@ -466,7 +466,7 @@ export function TripView({
           }
 
           openPlace({ kind: 'stop', stop: matches[0] });
-          return `Here are ${category} options on Day ${activeDay + 1}: ${matches.map((m) => m.name).join(', ')}. Opened “${matches[0].name}” — tap Back for the list.`;
+          return `Here are ${category} options on Day ${activeDay + 1}: ${matches.map((m) => m.name).join(', ')}. Opened “${matches[0].name}”. Tap Back for the list.`;
         }}
       />
     </div>

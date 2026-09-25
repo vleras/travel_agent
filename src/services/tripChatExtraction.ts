@@ -46,18 +46,13 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   data.interests = Array.isArray(data.interests) ? data.interests.filter((item): item is Interest => allowedInterests.has(item)) : [];
   data.extraPreferences = Array.isArray(data.extraPreferences) ? data.extraPreferences.filter((v): v is string => typeof v === 'string').slice(0, 10) : [];
   if (invalidTripLength) {
-    result.assistantMessage = 'Please choose a trip length between 1 and 30 days. If you’re unsure, I recommend a flexible 3–4 day trip.';
+    result.assistantMessage = 'Choose between 1 and 30 days. If you’re unsure, I’d suggest 3 to 4 days.';
     result.missing = Array.from(new Set([...(result.missing ?? []), 'tripLength']));
-  }
-  if (data.hasAccommodation && data.accommodationQuery && !data.accommodation) {
-    result.assistantMessage = 'Got it.';
   }
   result.complete = Boolean(data.destination?.trim() && data.tripLength && data.hasAccommodation !== null && (!data.hasAccommodation || Boolean(data.accommodation)));
   if (result.complete) {
-    const duration = data.tripLength?.range ? `${data.tripLength.range[0]}–${data.tripLength.range[1]} days` : `${data.tripLength?.days} days`;
     result.missing = [];
-    const extras = [data.interests.length ? `interests in ${data.interests.join(', ')}` : '', data.budget ? `${data.budget} budget` : ''].filter(Boolean).join(', ');
-    result.assistantMessage = `Great — I have everything I need: ${duration} in ${data.destination}${extras ? `, ${extras}` : ''}. Your trip is ready for attraction choices.`;
+    result.assistantMessage = 'Your trip is ready. You can choose places now.';
   }
   return result;
 }

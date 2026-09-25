@@ -147,7 +147,7 @@ function buildPreviewReply(
 
   if (!ranked.length) {
     return {
-      text: `Found ${query} (${label}). No places on the board yet — which day should it go on?`,
+      text: `Found ${query} (${label}). Which day should it go on?`,
       actions,
     };
   }
@@ -488,7 +488,7 @@ export function ClusterPlanView({
     loadPhotosAsync(stop.name, targetIdx);
 
     const count = next[targetIdx].stops.filter((s) => !s.is_meal).length;
-    return `Added “${stop.name}” to Day ${targetIdx + 1}. Now on Day ${targetIdx + 1}: ${count} stop${count === 1 ? '' : 's'}. Photos will fill in shortly — tap Commit when you’re done editing.`;
+    return `Added “${stop.name}” to Day ${targetIdx + 1}, which now has ${count} stop${count === 1 ? '' : 's'}. Tap Commit when you’re done editing.`;
   }
 
   function handleChatCommand(message: string): ChatReply | null {
@@ -588,7 +588,7 @@ export function ClusterPlanView({
       .map((s) => s.name);
     return names.length
       ? `Focusing Day ${idx + 1}: ${names.join(', ')}. Look up another place to add here.`
-      : `Day ${idx + 1} is empty — tell me a place to find.`;
+      : `Day ${idx + 1} is empty. Tell me a place to find.`;
   }
 
   const days = useMemo(
@@ -636,7 +636,7 @@ export function ClusterPlanView({
       onPreference={() => undefined}
       onDietary={() => undefined}
       onSkipBreakfast={() =>
-        'Breakfast isn’t part of the day board — look up a place to add instead.'
+        'Look up a breakfast place to add to the day board.'
       }
     />
   );

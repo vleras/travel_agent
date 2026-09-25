@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { extractTripChat, type TripChatData, type TripChatMessage } from '../../services/tripChatExtraction';
-import { findAccommodation, geocode } from '../../services/nominatim';
+import { geocode } from '../../services/nominatim';
+import { geocodeHotel, type HotelMatch } from '../../services/geocodeHotel';
+import { parseDaysInput } from '../../data/scheduleOptions';
+import { sanitizeAssistantText } from '../../services/sanitizeAssistantText';
 
 export interface TripChatState { messages: TripChatMessage[]; data: TripChatData; complete: boolean }
 
@@ -28,8 +31,8 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   const [complete, setComplete] = useState(() => savedState?.complete ?? false);
   const [error, setError] = useState('');
   const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'failed'>('idle');
+  const [hotelMatches, setHotelMatches] = useState<HotelMatch[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
-  const verifiedAddressKey = useRef('');
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
   useEffect(() => { onStateChange({ messages, data, complete }); }, [messages, data, complete, onStateChange]);
@@ -38,50 +41,95 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     const query = data.accommodationQuery?.trim();
     const city = data.destination?.trim();
     if (!data.hasAccommodation || data.accommodation || !query || !city) return;
-    const key = `${query}|${city}`.toLowerCase();
-    if (verifiedAddressKey.current === key) return;
-    verifiedAddressKey.current = key;
     let cancelled = false;
+    setHotelMatches([]);
+    setComplete(false);
     setAddressStatus('checking');
-    void findAccommodation(query, city).then((matches) => {
+    void geocodeHotel(query, city).then((matches) => {
       if (cancelled) return;
       const match = matches[0];
       if (!match) {
         setAddressStatus('failed');
         setMessages((current) => [...current, {
           role: 'assistant',
-          content: `I couldn’t verify “${query}”. Please send the hotel name or full address again with the city.`,
+          content: `I couldn’t locate “${query}” near ${city}. Try another name or address, or continue without a hotel location.`,
         }]);
         return;
       }
-      const accommodation = { address: match.display_name, latitude: match.lat, longitude: match.lon };
-      setData((current) => ({ ...current, accommodation }));
-      setComplete(Boolean(data.destination && data.tripLength));
+      setHotelMatches(matches);
+      setMessages(current => [...current, { role: 'assistant', content: matches.length === 1
+        ? match.approximate ? `I found only an area match: ${match.display_name}. Use this area's center as your hotel location?` : `Found ${match.display_name}. Is that correct?`
+        : 'I found several possible locations. Choose one below; area matches use an approximate center.' }]);
       setAddressStatus('idle');
     }).catch(() => {
-      if (!cancelled) setAddressStatus('failed');
+      if (!cancelled) {
+        setAddressStatus('failed');
+        setMessages(current => [...current, { role: 'assistant', content: 'Location search is unavailable. Try another address or continue without a hotel location.' }]);
+      }
     });
     return () => { cancelled = true; };
-  }, [data]);
+  }, [data.accommodationQuery, data.destination, data.hasAccommodation, data.accommodation]);
+
+  function chooseHotel(match: HotelMatch) {
+    setData(current => ({ ...current, accommodation: { address: match.display_name, latitude: match.lat, longitude: match.lon } }));
+    setHotelMatches([]);
+    setAddressStatus('idle');
+    setComplete(Boolean(data.destination && data.tripLength));
+    setMessages(current => [...current, { role: 'user', content: match.approximate ? `Use the center of ${match.display_name}` : `Yes, ${match.display_name}` }, { role: 'assistant', content: 'Location confirmed. You can continue to choose places.' }]);
+  }
+
+  function rejectHotel() {
+    setHotelMatches([]);
+    setData(current => ({ ...current, accommodationQuery: null, accommodation: null }));
+    setAddressStatus('failed');
+    setMessages(current => [...current, { role: 'user', content: 'No' }, { role: 'assistant', content: 'Send a different hotel name or address, or continue without a hotel location.' }]);
+  }
+
+  function skipHotel() {
+    setHotelMatches([]);
+    setAddressStatus('idle');
+    setData(current => ({ ...current, hasAccommodation: false, accommodationQuery: null, accommodation: null }));
+    setComplete(Boolean(data.destination && data.tripLength));
+    setMessages(current => [...current, { role: 'assistant', content: 'We’ll continue without a hotel location.' }]);
+  }
 
   async function send() {
     const content = input.trim();
-    if (!content || loading) return;
-    if (addressStatus === 'failed') {
-      verifiedAddressKey.current = '';
-      setAddressStatus('idle');
-    }
+    if (!content || loading || addressStatus === 'checking') return;
+    if (hotelMatches.length === 1 && /^(yes|yeah|correct)$/i.test(content)) { setInput(''); chooseHotel(hotelMatches[0]); return; }
+    if (hotelMatches.length && /^(no|nope)$/i.test(content)) { setInput(''); rejectHotel(); return; }
     const nextMessages: TripChatMessage[] = [...messages, { role: 'user', content }];
     setMessages(nextMessages);
     setInput('');
     setError('');
 
     const normalized = content.toLowerCase().replace(/[.!?]+$/g, '').trim();
+    if (!data.tripLength && data.destination) {
+      const durationText = normalized.replace(/\s+days?$/, '');
+      if (/^\d+(?:\s*(?:-|–|to)\s*\d+)?$/.test(durationText)) {
+        const duration = parseDaysInput(durationText);
+        if (!duration) {
+          setMessages([...nextMessages, { role: 'assistant', content: 'Please choose between 1 and 30 days.' }]);
+          return;
+        }
+        const ready = data.hasAccommodation === false || Boolean(data.accommodation);
+        setData(current => ({ ...current, tripLength: { ...duration, flexible: Boolean(duration.range) } }));
+        setComplete(ready);
+        const nextQuestion = ready ? 'You can continue to choose places.' : data.hasAccommodation ? 'What’s the hotel name or address?' : 'Have you already booked a place to stay?';
+        setMessages([...nextMessages, { role: 'assistant', content: nextQuestion }]);
+        return;
+      }
+    }
+    if (data.hasAccommodation && !data.accommodation && data.destination && data.tripLength) {
+      setHotelMatches([]);
+      setData(current => ({ ...current, accommodationQuery: content }));
+      return;
+    }
     const uncertain = /^(?:not sure|unsure|i (?:do not|don't|dont) know|idk|no idea|whatever you recommend|you (?:choose|decide)|any)$/.test(normalized);
     if (!data.tripLength && data.destination && uncertain) {
       const updated = { ...data, tripLength: { days: 4, range: [3, 4] as [number, number], flexible: true } };
       setData(updated);
-      setMessages([...nextMessages, { role: 'assistant', content: `No problem — I’d suggest 3–4 days for ${data.destination}, which gives you enough time for the highlights without rushing. Have you already booked a place to stay?` }]);
+      setMessages([...nextMessages, { role: 'assistant', content: 'I’d suggest 3 to 4 days to see the highlights without rushing. Have you already booked a place to stay?' }]);
       return;
     }
 
@@ -96,8 +144,8 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         setMessages([...nextMessages, {
           role: 'assistant',
           content: positiveBooking
-            ? 'Okay — what’s the hotel name or address? I’ll verify it here in the chat.'
-            : 'Okay — no problem. I have everything I need, so you can continue to the place suggestions.',
+            ? 'What’s the name or address of your hotel?'
+            : 'You can continue to choose places.',
         }]);
         return;
       }
@@ -116,12 +164,14 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       }
       setData(result.data);
       setComplete(result.complete);
-      setMessages((current) => [...current, { role: 'assistant', content: result.assistantMessage }]);
+      if (!(result.data.hasAccommodation && result.data.accommodationQuery && !result.data.accommodation)) {
+        setMessages((current) => [...current, { role: 'assistant', content: result.assistantMessage }]);
+      }
     } catch {
       const clarification = !data.destination
         ? 'I didn’t quite catch the destination. Which city, region, or country would you like to visit?'
         : !data.tripLength
-          ? `No problem — I’d usually suggest 3–4 days for ${data.destination}. Would that work for you?`
+          ? 'I’d suggest 3 to 4 days. Would that work for you?'
           : data.hasAccommodation === null
             ? 'I didn’t quite catch that. Have you already booked a place to stay? You can answer yes or no.'
             : 'I didn’t quite understand that, but we can keep going. Could you rephrase it in a few words?';
@@ -135,12 +185,12 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     <div className="interactive-trip-chat">
       <div className="interactive-chat-head">
         <div><span className="schedule-guide-avatar" aria-hidden>✈</span></div>
-        <div><h1>Plan with your travel agent</h1><p>Answer naturally — short or detailed both work.</p></div>
+        <div><h1>Plan with your travel agent</h1><p>Answer naturally. Short or detailed both work.</p></div>
       </div>
       <div className="interactive-chat-thread" aria-live="polite">
         {messages.map((message, index) => (
           <div key={`${message.role}-${index}`} className={`interactive-chat-message interactive-chat-message--${message.role}`}>
-            {message.content}
+            {message.role === 'assistant' ? sanitizeAssistantText(message.content) : message.content}
           </div>
         ))}
         {loading && <div className="interactive-chat-message interactive-chat-message--assistant chatbot-typing">Thinking…</div>}
@@ -151,6 +201,13 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
           </div>
         )}
         {error && <div className="interactive-chat-error" role="alert">{error}</div>}
+        {hotelMatches.length > 0 && <div className="hotel-match-options">
+          {hotelMatches.map((match, index) => <button type="button" className="btn btn-secondary" key={`${match.lat}-${match.lon}-${index}`} onClick={() => chooseHotel(match)}>
+            {hotelMatches.length === 1 ? match.approximate ? 'Yes, use area center' : 'Yes' : `${match.display_name}${match.approximate ? ' (area center)' : ''}`}
+          </button>)}
+          <button type="button" className="btn btn-ghost" onClick={rejectHotel}>{hotelMatches.length === 1 ? 'No' : 'None of these'}</button>
+        </div>}
+        {(hotelMatches.length > 0 || addressStatus !== 'idle') && <button type="button" className="btn btn-ghost" onClick={skipHotel}>Continue without hotel location</button>}
         <div ref={endRef} />
       </div>
       {!complete ? (
@@ -159,7 +216,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
             <textarea aria-label="Your answer" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); }
             }} placeholder="Tell me about your trip…" rows={1} autoFocus />
-            <button type="submit" className="interactive-chat-send" disabled={loading || !input.trim()} aria-label="Send answer">
+            <button type="submit" className="interactive-chat-send" disabled={loading || addressStatus === 'checking' || !input.trim()} aria-label="Send answer">
               <span>Send</span><span className="interactive-send-arrow" aria-hidden>↑</span>
             </button>
           </div>
