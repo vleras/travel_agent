@@ -14,7 +14,8 @@ export interface TripChatData {
 }
 
 export interface TripChatMessage { role: 'user' | 'assistant'; content: string }
-export interface TripChatResult { assistantMessage: string; data: TripChatData; missing: string[]; complete: boolean }
+export type TripChatIntent = 'hotel_answer' | 'change_destination' | 'change_days' | 'change_hotel' | 'skip_hotel' | 'question' | 'other';
+export interface TripChatResult { assistantMessage: string; data: TripChatData; missing: string[]; complete: boolean; intent: TripChatIntent; hotelName?: string | null; area?: string | null }
 
 const allowedInterests = new Set<Interest>(['museums','food','art','nature','nightlife','shopping','beach','architecture','photography']);
 
@@ -33,10 +34,25 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   }
   if (!response?.ok) throw new Error('Trip chat request failed');
   const result = await response.json() as TripChatResult;
-  const data = result.data;
-  data.accommodation = current.accommodation ?? null;
-  data.accommodationQuery = data.accommodationQuery ?? current.accommodationQuery ?? null;
-  if (!data || typeof result.assistantMessage !== 'string') throw new Error('Invalid trip chat response');
+  if (!result.data || typeof result.assistantMessage !== 'string') throw new Error('Invalid trip chat response');
+  const intents: TripChatIntent[] = ['hotel_answer', 'change_destination', 'change_days', 'change_hotel', 'skip_hotel', 'question', 'other'];
+  if (!intents.includes(result.intent)) throw new Error('Missing trip chat intent');
+  const extracted = result.data;
+  let data = { ...current };
+  if (result.intent === 'change_destination') {
+    data = { ...current, destination: extracted.destination, tripLength: extracted.tripLength ?? current.tripLength, hasAccommodation: null, accommodation: null, accommodationQuery: null, accommodationPreference: null, extraPreferences: [] };
+  } else if (result.intent === 'change_days') {
+    data.tripLength = extracted.tripLength ?? current.tripLength;
+  } else if (result.intent === 'hotel_answer' || result.intent === 'change_hotel') {
+    const name = typeof result.hotelName === 'string' ? result.hotelName.trim() : '';
+    const area = typeof result.area === 'string' ? result.area.trim() : '';
+    data = { ...current, hasAccommodation: true, accommodation: null, accommodationQuery: name ? [name, area].filter(Boolean).join(', ') : null };
+  } else if (result.intent === 'skip_hotel') {
+    data = { ...current, hasAccommodation: false, accommodation: null, accommodationQuery: null, accommodationPreference: null };
+  } else if (!current.destination || !current.tripLength) {
+    data = { ...current, destination: current.destination ?? extracted.destination, tripLength: current.tripLength ?? extracted.tripLength };
+  }
+  result.data = data;
   let invalidTripLength = false;
   if (data.tripLength) {
     const range = data.tripLength.range;
@@ -52,7 +68,6 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   result.complete = Boolean(data.destination?.trim() && data.tripLength && data.hasAccommodation !== null && (!data.hasAccommodation || Boolean(data.accommodation)));
   if (result.complete) {
     result.missing = [];
-    result.assistantMessage = 'Your trip is ready. You can choose places now.';
   }
   return result;
 }

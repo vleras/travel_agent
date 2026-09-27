@@ -121,8 +121,8 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   async function send() {
     const content = input.trim();
     if (!content || loading || addressStatus === 'checking') return;
-    if (hotelMatches.length === 1 && /^(yes|yeah|correct)$/i.test(content)) { setInput(''); chooseHotel(hotelMatches[0]); return; }
-    if (hotelMatches.length && /^(no|nope)$/i.test(content)) { setInput(''); rejectHotel(); return; }
+    if (hotelMatches.length === 1 && /^yes$/i.test(content)) { setInput(''); chooseHotel(hotelMatches[0]); return; }
+    if (hotelMatches.length && /^no$/i.test(content)) { setInput(''); rejectHotel(); return; }
     // Coordinates and Maps links are read before any search or extraction,
     // whenever a hotel location is still open (not declined, not set).
     if (data.destination && data.hasAccommodation !== false && !data.accommodation) {
@@ -136,7 +136,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         }
         setHotelMatches([]);
         setAddressStatus('idle');
-        if (!data.hasAccommodation) setData(current => ({ ...current, hasAccommodation: true }));
+        setData(current => ({ ...current, hasAccommodation: true, accommodationQuery: null }));
         await usePinnedLocation(parsed.lat, parsed.lon, content.includes('http') ? 'google-maps-link' : 'coordinates');
         return;
       }
@@ -146,10 +146,9 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     setInput('');
     setError('');
 
-    const normalized = content.toLowerCase().replace(/[.!?]+$/g, '').trim();
     if (!data.tripLength && data.destination) {
-      const durationText = normalized.replace(/\s+days?$/, '');
-      if (/^\d+(?:\s*(?:-|–|to)\s*\d+)?$/.test(durationText)) {
+      const durationText = content;
+      if (/^\d+$/.test(durationText)) {
         const duration = parseDaysInput(durationText);
         if (!duration) {
           setMessages([...nextMessages, { role: 'assistant', content: 'Please choose between 1 and 30 days.' }]);
@@ -163,24 +162,14 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         return;
       }
     }
-    if (data.hasAccommodation && !data.accommodation && data.destination && data.tripLength) {
-      setHotelMatches([]);
-      setData(current => ({ ...current, accommodationQuery: content }));
-      return;
-    }
-    const uncertain = /^(?:not sure|unsure|i (?:do not|don't|dont) know|idk|no idea|whatever you recommend|you (?:choose|decide)|any)$/.test(normalized);
-    if (!data.tripLength && data.destination && uncertain) {
-      const updated = { ...data, tripLength: { days: 4, range: [3, 4] as [number, number], flexible: true } };
-      setData(updated);
-      setMessages([...nextMessages, { role: 'assistant', content: 'I’d suggest 3 to 4 days to see the highlights without rushing. Have you already booked a place to stay?' }]);
-      return;
-    }
 
-    if (data.hasAccommodation === null) {
-      const negativeBooking = /^(?:no|nope|nah|not yet|i (?:have not|haven't|havent) booked(?: anything| a place)?(?: yet)?|nothing booked(?: yet)?)$/.test(normalized);
-      const positiveBooking = /^(?:yes|yeah|yep|i (?:have|already have)|i(?:'ve|ve) booked(?: a place| somewhere)?)$/.test(normalized);
+    if (data.hasAccommodation === null || awaitingHotel) {
+      const negativeBooking = /^no$/i.test(content);
+      const positiveBooking = /^yes$/i.test(content);
       if (negativeBooking || positiveBooking) {
-        const updated = { ...data, hasAccommodation: positiveBooking };
+        const updated = { ...data, hasAccommodation: positiveBooking, accommodationQuery: null, accommodation: null };
+        setHotelMatches([]);
+        setAddressStatus('idle');
         const readyWithoutAddress = negativeBooking && Boolean(updated.destination && updated.tripLength);
         setData(updated);
         setComplete(readyWithoutAddress);
@@ -197,17 +186,27 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     setLoading(true);
     try {
       const result = await extractTripChat(nextMessages, data);
-      if (result.data.destination && result.data.destination !== data.destination) {
+      if (result.intent === 'change_destination' && result.data.destination) {
         const destination = await geocode(result.data.destination);
         if (!destination.result) {
-          result.complete = false;
-          result.data.destination = null;
-          result.assistantMessage = 'I couldn’t verify that destination. Could you give me a city, region, or country name?';
+          setMessages(current => [...current, { role: 'assistant', content: 'I couldn’t verify that destination. Could you give me a city, region, or country name?' }]);
+          return;
         }
+        setHotelMatches([]);
+        setAddressStatus('idle');
+        setError('');
+        result.complete = false;
+        result.assistantMessage = result.data.tripLength
+          ? `${result.data.destination} it is. Have you booked a place to stay there?`
+          : `${result.data.destination} it is. How many days are you planning?`;
+      }
+      if (['hotel_answer', 'change_hotel', 'skip_hotel'].includes(result.intent)) {
+        setHotelMatches([]);
+        setAddressStatus('idle');
       }
       setData(result.data);
       setComplete(result.complete);
-      if (!(result.data.hasAccommodation && result.data.accommodationQuery && !result.data.accommodation)) {
+      if (!(['hotel_answer', 'change_hotel'].includes(result.intent) && result.data.accommodationQuery)) {
         setMessages((current) => [...current, { role: 'assistant', content: result.assistantMessage }]);
       }
     } catch {
