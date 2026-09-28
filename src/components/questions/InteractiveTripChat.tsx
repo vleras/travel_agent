@@ -209,7 +209,8 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         setAddressStatus('idle');
       }
       setData(result.data);
-      setComplete(result.complete);
+      // After a change is accepted, stay in chat mode to continue conversation naturally
+      setComplete(['change_destination', 'change_days'].includes(result.intent) ? false : result.complete);
       if (!(['hotel_answer', 'change_hotel'].includes(result.intent) && result.data.accommodationQuery)) {
         let msg = result.assistantMessage;
         if (result.complete && !(['change_destination', 'change_days'].includes(result.intent))) {
