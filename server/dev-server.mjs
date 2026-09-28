@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { tripChatHandler } from './tripChat.ts';
+import { tripChatHandler } from './tripChat.mjs';
 
 const PORT = 5174;
 
