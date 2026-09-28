@@ -69,6 +69,13 @@ export async function tripChatHandler(req, res, env) {
     }
 
     if (typeof result.assistantMessage !== 'string' || typeof result.data !== 'object' || !result.data) return send(502, { error: 'Invalid response' });
+
+    // Force dates question if trip is marked complete but travelDates is missing
+    if (result.complete && !result.data.travelDates) {
+      result.complete = false;
+      result.assistantMessage = 'Do you know when you want to go? This helps us show you weather forecasts and seasonal info for ' + (result.data.destination || 'your destination') + '.';
+    }
+
     return send(200, result);
   } catch (err) {
     console.error('Trip chat error:', err);
