@@ -225,7 +225,9 @@ function syncHistory() {
   } else history.pushState(entry, '');
   restoreScroll(0);
 }
+let restoreListener: (() => void) | null = null;
 export function subscribeFlowHistory(onRestore: () => void) {
+  restoreListener = onRestore;
   const pop = (event: PopStateEvent) => {
     if (isEntry(event.state) && restoreEntry(event.state)) onRestore();
   };
@@ -233,9 +235,22 @@ export function subscribeFlowHistory(onRestore: () => void) {
   window.addEventListener('scroll', rememberFlowScroll, { passive: true });
   return () => { window.removeEventListener('popstate', pop); window.removeEventListener('scroll', rememberFlowScroll); };
 }
+/**
+ * Back always works, whatever is still loading: the current screen's state is
+ * already saved, so history.back() restores the previous entry immediately.
+ * With nothing to go back to (first entry, or a tab without flow history), go home.
+ */
 export function backInFlow() {
   rememberFlowScroll();
-  if (isEntry(history.state) && history.state.depth > 0) history.back();
+  if (isEntry(history.state) && history.state.depth > 0) {
+    history.back();
+    return;
+  }
+  const app = loadAppState();
+  if (!app || app.screen === 'entry') return;
+  writeJson(APP_KEY, { ...app, screen: 'entry', path: null, picked: null });
+  if (sessionKey) syncHistory();
+  restoreListener?.();
 }
 /** Starting another trip creates a separate data key; old history remains navigable. */
 export function startNewFlowSession() {

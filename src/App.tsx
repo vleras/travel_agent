@@ -167,6 +167,11 @@ function TripApp() {
 
       {screen === 'processing' && (
         <>
+          <div className="questions-header">
+            <button type="button" className="btn btn-ghost" onClick={backInFlow}>
+              ← Back
+            </button>
+          </div>
           <AgentProcessing progress={progress} />
           {error && (
             <div style={{ textAlign: 'center', marginTop: '-4rem' }}>
