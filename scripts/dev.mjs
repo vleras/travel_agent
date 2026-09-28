@@ -19,11 +19,14 @@ if (process.platform === 'darwin' && !env.NODE_EXTRA_CA_CERTS) {
   }
 }
 
-const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', ...process.argv.slice(2)], {
+// Run the dev server with API support
+const server = spawn(process.execPath, ['scripts/server.mjs', ...process.argv.slice(2)], {
+  cwd: process.cwd(),
   env,
   stdio: 'inherit',
 });
-vite.on('exit', (code, signal) => {
+
+server.on('exit', (code, signal) => {
   if (signal) process.kill(process.pid, signal);
   else process.exit(code ?? 1);
 });
