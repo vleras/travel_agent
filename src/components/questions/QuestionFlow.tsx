@@ -363,7 +363,12 @@ export function QuestionFlow({
   );
   const categoryKey = (category: string) => category.trim().toLowerCase();
   const categories = [...new Map([...availablePlaces.map(place => [categoryKey(place.category), place.category.trim()] as [string, string]), ['cafés', 'Cafés'] as [string, string], ['restaurants', 'Restaurants'] as [string, string]]).entries()]
-    .filter(([key]) => key).sort((a, b) => a[1].localeCompare(b[1]));
+    .filter(([key]) => key).sort((a, b) => {
+      const aIsFood = a[0] === 'cafés' || a[0] === 'restaurants';
+      const bIsFood = b[0] === 'cafés' || b[0] === 'restaurants';
+      if (aIsFood !== bIsFood) return aIsFood ? 1 : -1;
+      return a[1].localeCompare(b[1]);
+    });
   const activeCategory = categories.some(([key]) => key === placeCategory) ? placeCategory : 'all';
   const visiblePlaces = activeCategory === 'all' ? availablePlaces : availablePlaces.filter(place => categoryKey(place.category) === activeCategory);
   const allPlacesSelected =
