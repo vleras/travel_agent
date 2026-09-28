@@ -72,8 +72,9 @@ export async function tripChatHandler(req, res, env) {
 
     // Force dates question if trip is marked complete but travelDates is missing
     if (result.complete && !result.data.travelDates) {
+      console.log('⚠ Forcing dates question - LLM tried to complete without asking');
       result.complete = false;
-      result.assistantMessage = 'Do you know when you want to go? This helps us show you weather forecasts and seasonal info for ' + (result.data.destination || 'your destination') + '.';
+      result.assistantMessage = 'Do you know when you want to go? This helps us show weather and seasonal info for ' + (result.data.destination || 'your destination') + '.';
     }
 
     return send(200, result);
