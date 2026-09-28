@@ -1,29 +1,40 @@
 import { createServer } from 'node:http';
-import { tripChatHandler } from './tripChat.js';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 5174;
 
-const server = createServer((req, res) => {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+async function start() {
+  const { tripChatHandler } = await import('./tripChat.ts');
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
-  }
+  const server = createServer((req, res) => {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.url === '/api/deepseek/trip-chat' && req.method === 'POST') {
-    tripChatHandler(req, res, process.env);
-  } else {
-    res.writeHead(404);
-    res.end('Not found');
-  }
-});
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
 
-server.listen(PORT, () => {
-  console.log(`✓ API server running at http://localhost:${PORT}`);
-  console.log(`✓ Endpoint: POST /api/deepseek/trip-chat`);
+    if (req.url === '/api/deepseek/trip-chat' && req.method === 'POST') {
+      tripChatHandler(req, res, process.env);
+    } else {
+      res.writeHead(404);
+      res.end('Not found');
+    }
+  });
+
+  server.listen(PORT, () => {
+    console.log(`✓ API server running at http://localhost:${PORT}`);
+    console.log(`✓ Endpoint: POST /api/deepseek/trip-chat`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
