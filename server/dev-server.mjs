@@ -1,5 +1,28 @@
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 import { tripChatHandler } from './tripChat.mjs';
+
+// Load .env file
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = resolve(__dirname, '../.env');
+try {
+  const envContent = readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    const [key, ...valueParts] = line.split('=');
+    if (key && valueParts.length > 0) {
+      const value = valueParts.join('=').trim();
+      if (!process.env[key?.trim()]) {
+        process.env[key.trim()] = value;
+      }
+    }
+  });
+  console.log('✓ Loaded .env file');
+} catch {
+  console.warn('⚠ No .env file found or error reading it');
+}
 
 const PORT = 5174;
 
