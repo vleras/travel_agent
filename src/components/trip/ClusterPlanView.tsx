@@ -202,6 +202,7 @@ export function ClusterPlanView({
   const [emailSending, setEmailSending] = useState(false);
   const [emailSentTo, setEmailSentTo] = useState<string | null>(null);
   const [emailSentItinerary, setEmailSentItinerary] = useState<string | null>(null);
+  const [showEmailToast, setShowEmailToast] = useState(false);
   const [dragging, setDragging] = useState<{
     fromDay: number;
     stopName: string;
@@ -299,6 +300,15 @@ export function ClusterPlanView({
     setEmailSentTo(trimmed);
     setEmailSentItinerary(JSON.stringify(itineraryRef.current));
     setCommitNote(`Plan sent to ${trimmed}. Check your inbox.`);
+
+    // Show toast notification and go back home
+    setShowEmailToast(true);
+    setTimeout(() => {
+      setEmailOpen(false);
+    }, 500);
+    setTimeout(() => {
+      onBack();
+    }, 2000);
   }
 
   function removePlaceFromDay(dayIdx: number, stopName: string) {
@@ -1057,6 +1067,21 @@ export function ClusterPlanView({
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {showEmailToast && (
+        <div className="email-toast-notification">
+          <div className="email-toast-content">
+            <svg className="email-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <div className="email-toast-text">
+              <p className="email-toast-title">Plan sent!</p>
+              <p className="email-toast-message">Check your inbox for the trip details.</p>
+            </div>
+          </div>
+          <p className="email-toast-redirect">Redirecting to home...</p>
         </div>
       )}
 
