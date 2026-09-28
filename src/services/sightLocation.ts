@@ -27,6 +27,7 @@ export type MatchPath = 'english-name' | 'name' | 'local-name';
 export type LocateProvider = 'photon' | 'geoapify' | 'nominatim';
 
 export interface LocatedPlace {
+  wikidataId?: string;
   lat: number;
   lon: number;
   name: string;
@@ -40,8 +41,9 @@ export interface LocatedPlace {
   distanceKm: number;
 }
 
-type Point = { lat: number; lon: number };
+type Point = { lat: number; lon: number; wikidataId?: string };
 type Candidate = {
+  wikidataId?: string;
   lat: number;
   lon: number;
   name: string;
@@ -57,14 +59,14 @@ type Candidate = {
 /** Features that are never a sight ("Lana Riverside Residences", "Art Hotel"). */
 const NOT_A_SIGHT = new Set([
   'hotel', 'guest_house', 'apartment', 'apartments', 'hostel', 'motel', 'chalet',
-  'residential', 'house', 'detached', 'company',
+  'residential', 'house', 'detached', 'company', 'board', 'bicycle_rental',
 ]);
 const HOUSING_WORDS = /\b(?:residences?|apartments?|suites|hotel|hostel|rooms|villas?)\b/i;
 
 const LOCAL_NAME_KEYS = new Set(['tourism', 'historic', 'amenity']);
 const LOCAL_NAME_RADIUS_KM = 2;
 
-const STORAGE_KEY = 'travel_planner_sight_coords_v2';
+const STORAGE_KEY = 'travel_planner_sight_coords_v5';
 const MAX_FROM_CITY_KM = 20;
 const USER_AGENT = 'TravelPlannerThesis/1.0 (thesis-project; contact@example.com)';
 
@@ -238,6 +240,7 @@ async function photon(
         display_name: display || name,
         nameEn: typeof nameEn === 'string' ? nameEn : undefined,
         osmKey: p.osm_key,
+        wikidataId: p.wikidata ?? p.extra?.wikidata,
         osmValue: p.osm_value,
       };
     });
@@ -273,12 +276,13 @@ async function geoapify(name: string, city: string, center: Point, kind: PlaceKi
     }
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return [];
-    const data = (await res.json()) as { features?: { properties?: Record<string, string | number> }[] };
+    const data = (await res.json()) as { features?: { properties?: Record<string, unknown> & { datasource?: { raw?: { wikidata?: string } } } }[] };
     return (data.features ?? []).map(({ properties: p = {} }) => ({
       lat: Number(p.lat),
       lon: Number(p.lon),
       name: String(p.name ?? p.address_line1 ?? ''),
       display_name: String(p.formatted ?? p.name ?? name),
+      wikidataId: p.datasource?.raw?.wikidata,
       osmKey: /tourism|heritage|historic/.test(String(p.categories ?? p.result_type ?? ''))
         ? 'tourism'
         : undefined,
@@ -299,7 +303,7 @@ function queuedNominatim(query: string): Promise<Candidate[]> {
     lastNominatimAt = Date.now();
     try {
       const url = new URL('https://nominatim.openstreetmap.org/search');
-      url.search = new URLSearchParams({ q: query, format: 'json', limit: '5' }).toString();
+      url.search = new URLSearchParams({ q: query, format: 'json', limit: '5', extratags: '1' }).toString();
       const res = await fetch(url, {
         headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
         signal: AbortSignal.timeout(15000),
@@ -312,6 +316,7 @@ function queuedNominatim(query: string): Promise<Candidate[]> {
         display_name: string;
         class?: string;
         type?: string;
+        extratags?: { wikidata?: string };
       }[];
       return data.map((d) => ({
         lat: parseFloat(d.lat),
@@ -320,6 +325,7 @@ function queuedNominatim(query: string): Promise<Candidate[]> {
         display_name: d.display_name,
         osmKey: d.class,
         osmValue: d.type,
+        wikidataId: d.extratags?.wikidata,
       }));
     } catch {
       return [];
@@ -366,8 +372,9 @@ export async function locatePlaces(
   name: string,
   city: string,
   kind: PlaceKind = 'sight',
-  options: { biasHint?: string; priority?: () => Priority } = {},
+  options: { biasHint?: string; priority?: () => Priority; localName?: string } = {},
 ): Promise<LocatedPlace[]> {
+  name = name.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
   const center = await cityCenter(city);
   if (!center) return [];
   const bias = options.biasHint ? await hintPoint(options.biasHint, city, center) : center;
@@ -387,15 +394,18 @@ export async function locatePlaces(
       return null;
     }
     if (kind === 'sight') {
+      const label = fold(`${c.nameEn ?? ''} ${c.name}`);
+      if (/\b(?:tower|turm)\b/i.test(name) && !/tower|turm/i.test(label)) return null;
+      if (/\b(?:cathedral|minster|dom|munster)\b/.test(fold(name)) && !/cathedral|minster|dom|munster/.test(label)) return null;
       if (c.osmValue && NOT_A_SIGHT.has(c.osmValue)) return null;
       // Housing named like the sight ("Lana Riverside Residences"), unless asked for.
-      const label = `${c.nameEn ?? ''} ${c.name}`;
       if (HOUSING_WORDS.test(label) && !HOUSING_WORDS.test(name)) return null;
     }
     // English name first, then the local name / full label.
     if (c.nameEn && matchesName(c.nameEn, name, city)) return 'english-name';
     // Match the POI's own name, not its address ("Art Hotel, Rruga e Kavajës").
-    if (matchesName(c.name || c.display_name, name, city)) return 'name';
+    const equivalentTypes = (text: string) => text.replace(/\b(?:cathedral|minster|dom|münster)\b/gi, 'church');
+    if (matchesName(equivalentTypes(c.name || c.display_name), equivalentTypes(name), city)) return 'name';
     // Local-name path: a real POI near the center or another located sight
     // that shares a stem ("Sheshi Skënderbej" for "Skanderbeg Square").
     if (!c.osmKey || !LOCAL_NAME_KEYS.has(c.osmKey)) return null;
@@ -413,10 +423,12 @@ export async function locatePlaces(
       .map((c) => ({ ...c, provider, distanceKm: haversineKm(center.lat, center.lon, c.lat, c.lon) }))
       .filter((c) => c.distanceKm <= MAX_FROM_CITY_KM)
       .map((c) => ({ ...c, matchPath: matchPath(c) }))
-      .filter((c): c is typeof c & { matchPath: MatchPath } => c.matchPath != null);
+      .filter((c): c is typeof c & { matchPath: MatchPath } => c.matchPath != null)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
 
   const providers: [LocateProvider, () => Promise<Candidate[]>][] = [
     ['photon', () => photon(name, bias, kind, options.priority)],
+    ...(/cathedral/i.test(name) ? [['photon', () => photon(name.replace(/cathedral/gi, 'Minster'), bias, kind, options.priority)] as [LocateProvider, () => Promise<Candidate[]>]] : []),
     // Photon often misses "Kokonozi Mosque" but finds "Kokonozi" (Xhamia e Kokonozit).
     ...(kind === 'sight' && core.length && core.join(' ') !== fold(name)
       ? [['photon', () => photon(core.join(' '), bias, kind, options.priority)] as [LocateProvider, () => Promise<Candidate[]>]]
@@ -440,6 +452,10 @@ export async function locatePlaces(
       return hits;
     }
   }
+  const localName = options.localName?.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (localName && fold(localName) !== fold(name)) {
+    return locatePlaces(localName, city, kind, { ...options, localName: undefined });
+  }
   console.info('[locate]', { kind, name, city, provider: null, result: 'no validated match' });
   return [];
 }
@@ -452,8 +468,10 @@ export function locateSight(
   name: string,
   city: string,
   priority: Priority = 'low',
+  localName?: string,
+  wikipediaTitle?: string,
 ): Promise<Point | null> {
-  const key = `${city}|${name}`.trim().toLowerCase();
+  const key = `${city}|${name}|${localName ?? ''}|${wikipediaTitle ?? ''}`.trim().toLowerCase();
   if (priority === 'high') boostedSights.add(key);
   if (memory.has(key)) return Promise.resolve(memory.get(key)!);
   const stored = loadStore()[key];
@@ -464,9 +482,26 @@ export function locateSight(
   const inflight = pending.get(key);
   if (inflight) return inflight;
   const work = locatePlaces(name, city, 'sight', {
+    localName,
     priority: () => (boostedSights.has(key) ? 'high' : 'low'),
   })
-    .then((hits) => (hits[0] ? { lat: hits[0].lat, lon: hits[0].lon } : null))
+    .then(async (hits): Promise<Point | null> => {
+      if (hits[0]) return { lat: hits[0].lat, lon: hits[0].lon, wikidataId: hits[0].wikidataId };
+      if (!wikipediaTitle) return null;
+      const center = await cityCenter(city);
+      if (!center) return null;
+      const url = new URL('https://en.wikipedia.org/w/api.php');
+      url.search = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', origin: '*', redirects: '1', titles: wikipediaTitle, prop: 'coordinates|pageprops', colimit: '1' }).toString();
+      const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!response.ok) return null;
+      const data = await response.json() as { query?: { pages?: { title?: string; coordinates?: Point[]; pageprops?: { wikibase_item?: string; disambiguation?: string } }[] } };
+      const page = data.query?.pages?.[0];
+      const at = page?.coordinates?.[0];
+      const canonical = (value: string) => fold(value).replace(/\b(?:cathedral|minster|dom|munster)\b/g, 'church');
+      if (!at || !valid({ ...at, name: '', display_name: '' }) || page?.pageprops?.disambiguation != null || haversineKm(center.lat, center.lon, at.lat, at.lon) > MAX_FROM_CITY_KM) return null;
+      if (![name, localName].some(n => n && matchesName(canonical(page?.title ?? ''), canonical(n), city))) return null;
+      return { lat: at.lat, lon: at.lon, wikidataId: page?.pageprops?.wikibase_item };
+    })
     .catch(() => null)
     .then((point) => {
       memory.set(key, point);

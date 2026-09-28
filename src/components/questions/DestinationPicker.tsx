@@ -176,7 +176,7 @@ function HighlightStory({
     setWiki(null);
     setLoadingPhotos(true);
 
-    void fetchPlacePhotoUrls(spot.name, destination.city, spot.category).then(
+    void fetchPlacePhotoUrls(spot.name, destination.city, spot.category, spot.lat, spot.lon, { localName: spot.localName, wikipediaTitle: spot.wikipediaTitle, wikidataId: spot.wikidataId, locate: true }).then(
       (urls) => {
         if (!cancelled) {
           setPhotos(urls.slice(0, 10));
@@ -191,7 +191,7 @@ function HighlightStory({
     return () => {
       cancelled = true;
     };
-  }, [spot.name, spot.category, destination.city]);
+  }, [spot.name, spot.category, spot.lat, spot.lon, spot.localName, spot.wikipediaTitle, spot.wikidataId, destination.city]);
 
   useEffect(() => {
     if (lightbox == null) return;
@@ -397,6 +397,12 @@ function HighlightStory({
                     <PlaceImage
                       className="highlight-story-related-photo"
                       name={other.name}
+                      localName={other.localName}
+                      wikipediaTitle={other.wikipediaTitle}
+                      wikidataId={other.wikidataId}
+                      lat={other.lat}
+                      lon={other.lon}
+                      locate
                       city={destination.city}
                       category={other.category}
                     />
@@ -504,6 +510,12 @@ function HighlightCard({
       <PlaceImage
         className="dest-highlight-photo"
         name={spot.name}
+        localName={spot.localName}
+        wikipediaTitle={spot.wikipediaTitle}
+        wikidataId={spot.wikidataId}
+        lat={spot.lat}
+        lon={spot.lon}
+        locate
         city={city}
         category={spot.category}
       />

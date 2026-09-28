@@ -891,6 +891,9 @@ export function ClusterPlanView({
                           <PlaceImage
                             className="cluster-place-photo"
                             name={stop.name}
+                            localName={stop.localName}
+                            wikipediaTitle={stop.wikipediaTitle}
+                            wikidataId={stop.wikidataId}
                             city={input.destination_city}
                             category={stop.category}
                             imageUrl={stop.image_url}

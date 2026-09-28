@@ -13,6 +13,8 @@ interface PlaceImageProps {
   lat?: number;
   lon?: number;
   imageUrl?: string;
+  localName?: string;
+  wikipediaTitle?: string;
   wikidataId?: string;
   wikipediaTag?: string;
   commonsTag?: string;
@@ -48,6 +50,8 @@ export function PlaceImage({
   lat,
   lon,
   imageUrl,
+  localName,
+  wikipediaTitle,
   wikidataId,
   wikipediaTag,
   commonsTag,
@@ -83,7 +87,7 @@ export function PlaceImage({
   const [index, setIndex] = useState(0);
   const [queue, setQueue] = useState<string[]>([]);
   const [failed, setFailed] = useState(false);
-  const [loading, setLoading] = useState(!imageUrl);
+  const [loading, setLoading] = useState(true);
   const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -92,11 +96,13 @@ export function PlaceImage({
     setFailed(false);
     setLoading(true);
     setIndex(0);
-    setQueue(imageUrl ? [imageUrl] : []);
+    setQueue([]);
 
     void (async () => {
       const urls = await fetchPhotos(name, city, category, lat, lon, {
         imageUrl,
+        localName,
+        wikipediaTitle,
         wikidataId,
         wikipediaTag,
         commonsTag,
@@ -105,15 +111,13 @@ export function PlaceImage({
         limit: CARD_PHOTOS,
         // Show the first photo (usually the Wikidata main image) right away.
         onProgress: (partial) => {
-          if (cancelled || imageUrl || !partial.length) return;
+          if (cancelled || !partial.length) return;
           setQueue((current) => (current.length ? current : partial));
           setLoading(false);
         },
       });
       if (cancelled) return;
-      const list = imageUrl
-        ? [imageUrl, ...urls.filter((u) => u !== imageUrl)]
-        : urls;
+      const list = urls;
       setQueue(list);
       setIndex(0);
       setLoading(false);
@@ -130,6 +134,8 @@ export function PlaceImage({
     lat,
     lon,
     imageUrl,
+    localName,
+    wikipediaTitle,
     wikidataId,
     wikipediaTag,
     commonsTag,

@@ -53,6 +53,9 @@ const MIN_PLACE_OPTIONS = 10;
 function attractionToHighlight(a: Attraction): DestinationHighlight {
   return {
     name: a.name,
+    localName: a.localName,
+    wikipediaTitle: a.wikipediaTitle,
+    wikidataId: a.wikidataId,
     category: a.category,
     description: a.description,
     address: a.address,
@@ -251,7 +254,7 @@ export function QuestionFlow({
         sightseeing.map(async (place) =>
           Number.isFinite(place.lat) && Number.isFinite(place.lon)
             ? place
-            : { ...place, ...((await locateSight(place.name, targetCity)) ?? {}) },
+            : { ...place, ...((await locateSight(place.name, targetCity, 'low', place.localName, place.wikipediaTitle)) ?? {}) },
         ),
       ).then((located) => {
         if (request === placesRequest.current) setGeneratedPlaces(located);
@@ -662,6 +665,9 @@ export function QuestionFlow({
                             <PlaceImage
                               className="place-pick-photo"
                               name={spot.name}
+                              localName={spot.localName}
+                              wikipediaTitle={spot.wikipediaTitle}
+                              wikidataId={spot.wikidataId}
                               city={city}
                               category={spot.category}
                               lat={spot.lat}

@@ -65,6 +65,8 @@ function PhotoGallery({
   lat,
   lon,
   imageUrl,
+  localName,
+  wikipediaTitle,
   wikidataId,
   wikipediaTag,
   commonsTag,
@@ -75,6 +77,8 @@ function PhotoGallery({
   lat?: number;
   lon?: number;
   imageUrl?: string;
+  localName?: string;
+  wikipediaTitle?: string;
   wikidataId?: string;
   wikipediaTag?: string;
   commonsTag?: string;
@@ -88,6 +92,8 @@ function PhotoGallery({
     setActive(0);
     void fetchPlacePhotoUrls(name, city, category, lat, lon, {
       imageUrl,
+      localName,
+      wikipediaTitle,
       wikidataId,
       wikipediaTag,
       commonsTag,
@@ -101,7 +107,7 @@ function PhotoGallery({
     return () => {
       cancelled = true;
     };
-  }, [name, city, category, lat, lon, imageUrl, wikidataId, wikipediaTag, commonsTag]);
+  }, [name, city, category, lat, lon, imageUrl, localName, wikipediaTitle, wikidataId, wikipediaTag, commonsTag]);
 
   if (!photos.length) {
     return (
@@ -113,6 +119,8 @@ function PhotoGallery({
         lat={lat}
         lon={lon}
         imageUrl={imageUrl}
+        localName={localName}
+        wikipediaTitle={wikipediaTitle}
         wikidataId={wikidataId}
         wikipediaTag={wikipediaTag}
         commonsTag={commonsTag}
@@ -333,6 +341,9 @@ export function PlaceDetailPage({
 
       <PhotoGallery
         name={stop.name}
+        localName={stop.localName}
+        wikipediaTitle={stop.wikipediaTitle}
+        wikidataId={stop.wikidataId}
         city={city}
         category={stop.category}
         lat={stop.lat}

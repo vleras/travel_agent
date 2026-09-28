@@ -114,6 +114,7 @@ export function PlacePickDetail({
     setLoadingPhotos(true);
 
     void fetchPlacePhotoUrls(spot.name, city, spot.category, spot.lat, spot.lon, {
+      localName: spot.localName, wikipediaTitle: spot.wikipediaTitle, wikidataId: spot.wikidataId,
       locate: true,
       priority: 'high',
       // Show the first photo (usually the Wikidata main image) while the rest load.
@@ -135,7 +136,7 @@ export function PlacePickDetail({
     return () => {
       cancelled = true;
     };
-  }, [spot.name, spot.category, spot.lat, spot.lon, city]);
+  }, [spot.name, spot.category, spot.lat, spot.lon, spot.localName, spot.wikipediaTitle, spot.wikidataId, city]);
 
   useEffect(() => {
     if (lightbox == null) return;
@@ -262,6 +263,9 @@ export function PlacePickDetail({
         <PlaceImage
           className="highlight-story-hero-shot"
           name={spot.name}
+          localName={spot.localName}
+          wikipediaTitle={spot.wikipediaTitle}
+          wikidataId={spot.wikidataId}
           city={city}
           category={spot.category}
           lat={spot.lat}

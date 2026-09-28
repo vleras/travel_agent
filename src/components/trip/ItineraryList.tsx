@@ -155,6 +155,9 @@ export function ItineraryList({
             <PlaceImage
               className="stop-photo"
               name={stop.name}
+              localName={stop.localName}
+              wikipediaTitle={stop.wikipediaTitle}
+              wikidataId={stop.wikidataId}
               city={city}
               category={stop.category}
               imageUrl={stop.image_url}

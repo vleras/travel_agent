@@ -14,6 +14,9 @@ export type Interest =
 export type BreakfastOption = string; // 'skip' or 'HH:MM'
 
 export interface DestinationHighlight {
+  localName?: string;
+  wikipediaTitle?: string;
+  wikidataId?: string;
   name: string;
   category: string;
   description: string;
@@ -84,6 +87,9 @@ export interface TripLocation {
 }
 
 export interface Attraction {
+  localName?: string;
+  wikipediaTitle?: string;
+  wikidataId?: string;
   name: string;
   category: string;
   description: string;
@@ -96,6 +102,9 @@ export interface Attraction {
 }
 
 export interface ItineraryStop {
+  localName?: string;
+  wikipediaTitle?: string;
+  wikidataId?: string;
   name: string;
   category: string;
   description: string;

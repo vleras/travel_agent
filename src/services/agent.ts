@@ -10,6 +10,7 @@ import {
 } from './geo';
 import { generateAttractions } from './gemini';
 import { geocode } from './nominatim';
+import { locateSight } from './sightLocation';
 import { routeDistance } from './osrm';
 import { fetchPlacePhotoUrls } from './placePhotos';
 import type {
@@ -450,6 +451,9 @@ function toItineraryStop(
 ): ItineraryStop {
   return {
     name: stop.name,
+    localName: stop.localName,
+    wikipediaTitle: stop.wikipediaTitle,
+    wikidataId: stop.wikidataId,
     category: stop.category,
     description: stop.description,
     lat: stop.lat,
@@ -743,13 +747,12 @@ async function ensureCoords(
       message: 'Locating places',
       detail: attraction.name,
     });
-    const { result, latencyMs } = await geocode(
-      `${attraction.name}, ${city}`,
-    );
-    nominatimMs += latencyMs;
+    const started = performance.now();
+    const result = await locateSight(attraction.name, city, 'low', attraction.localName, attraction.wikipediaTitle);
+    nominatimMs += performance.now() - started;
     apiCalls += 1;
     if (result) {
-      scored.push({ ...attraction, lat: result.lat, lon: result.lon });
+      scored.push({ ...attraction, ...result });
     }
   }
   return { scored, nominatimMs, apiCalls };
@@ -786,6 +789,7 @@ async function attachPlacePhotos(
           attr.category,
           attr.lat,
           attr.lon,
+          { localName: attr.localName, wikipediaTitle: attr.wikipediaTitle, wikidataId: attr.wikidataId },
         );
         return {
           ...attr,

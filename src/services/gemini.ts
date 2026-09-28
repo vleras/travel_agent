@@ -23,6 +23,8 @@ Return ONLY a valid JSON array with no preamble:
 [
   {
     "name": "Attraction Name",
+    "localName": "Official local-language name",
+    "wikipediaTitle": "Exact English Wikipedia article title, or null if none",
     "category": "Museums|Food|Nature|Shopping|Beach|Architecture|Photography",
     "description": "Brief description (1 sentence)",
     "typical_visit_duration_minutes": 60,
@@ -41,7 +43,10 @@ function parseAttractions(text: string): Attraction[] | null {
       typeof a.category === 'string' && typeof a.description === 'string' &&
       typeof a.why_visit === 'string' && typeof a.typical_visit_duration_minutes === 'number' &&
       Number.isFinite(a.typical_visit_duration_minutes) && a.typical_visit_duration_minutes > 0);
-    return valid.length ? valid : null;
+    return valid.length ? valid.map(a => ({ ...a,
+      localName: typeof a.localName === 'string' ? a.localName.trim() || undefined : undefined,
+      wikipediaTitle: typeof a.wikipediaTitle === 'string' ? a.wikipediaTitle.trim() || undefined : undefined,
+    })) : null;
   } catch {
     return null;
   }
