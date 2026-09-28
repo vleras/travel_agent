@@ -5,7 +5,6 @@ export async function tripChatHandler(req, res, env) {
   };
 
   if (req.method !== 'POST') return send(405, { error: 'Use POST' });
-  if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return send(403, { error: 'Invalid origin' });
 
   const apiKey = env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) {
