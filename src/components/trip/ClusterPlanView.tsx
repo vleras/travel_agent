@@ -38,6 +38,7 @@ interface ClusterPlanViewProps {
   input: TripInput;
   output: AgentOutput;
   onBack: () => void;
+  onHome?: () => void;
   onItineraryChange?: (itinerary: DayItinerary[]) => void;
 }
 
@@ -174,6 +175,7 @@ export function ClusterPlanView({
   input,
   output,
   onBack,
+  onHome,
   onItineraryChange,
 }: ClusterPlanViewProps) {
   const [saved] = useState(loadTripState);
@@ -301,13 +303,13 @@ export function ClusterPlanView({
     setEmailSentItinerary(JSON.stringify(itineraryRef.current));
     setCommitNote(`Plan sent to ${trimmed}. Check your inbox.`);
 
-    // Show toast notification and go back home
+    // Show toast notification and go to home
     setShowEmailToast(true);
     setTimeout(() => {
       setEmailOpen(false);
     }, 500);
     setTimeout(() => {
-      onBack();
+      (onHome || onBack)();
     }, 2000);
   }
 

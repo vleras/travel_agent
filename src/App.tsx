@@ -189,6 +189,7 @@ function TripApp() {
           input={input}
           output={output}
           onBack={backInFlow}
+          onHome={resetToEntry}
           onItineraryChange={(itinerary) => {
             setOutput((prev) => (prev ? { ...prev, itinerary } : prev));
           }}

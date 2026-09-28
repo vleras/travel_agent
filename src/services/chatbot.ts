@@ -37,7 +37,7 @@ export type ChatIntent =
   | { type: 'preference'; note: string }
   | { type: 'help' }
   | { type: 'greeting' }
-  | { type: 'refine_trip'; detail: 'destination' | 'days' | 'preferences' };
+  | { type: 'refine_trip'; detail: 'destination' | 'days' | 'preferences'; value?: string | number };
 
 const DIET_PATTERNS: { re: RegExp; label: string; breakfastHint: string }[] = [
   {
@@ -89,6 +89,9 @@ const PLAN_DAY_RE =
 const SUGGEST_DAY_RE =
   /(?:what|which)\s+day(?:\s+should\s+i)?(?:\s+(?:add|put|visit))?\s+(.+)|(?:suggest|recommend)\s+(?:a\s+)?day\s+for\s+(.+)/i;
 
+/** “Change to 4” or “I want to stay 4 days” or just “4” after Change days button */
+const CHANGE_DAYS_RE = /^(?:change\s+to\s+)?(\d+)(?:\s+days?)?$/i;
+
 function ordinalToDay(raw: string | undefined): number | null {
   if (!raw) return null;
   const key = raw.toLowerCase();
@@ -102,6 +105,24 @@ function ordinalToDay(raw: string | undefined): number | null {
 export function parseChatIntent(message: string): ChatIntent {
   const text = message.trim();
   if (!text) return { type: 'help' };
+
+  // Check for days change ("Change to 4", "4 days", "I want to stay 4 days")
+  const changeDaysMatch = text.match(CHANGE_DAYS_RE);
+  if (changeDaysMatch) {
+    const days = Number(changeDaysMatch[1]);
+    if (days > 0 && days <= 365) {
+      return { type: 'refine_trip', detail: 'days', value: days };
+    }
+  }
+
+  // Also catch "I want to stay X days" or "stay X days"
+  const stayMatch = text.match(/(?:i\s+)?(?:want\s+to\s+)?stay\s+(\d+)\s+days?/i);
+  if (stayMatch) {
+    const days = Number(stayMatch[1]);
+    if (days > 0 && days <= 365) {
+      return { type: 'refine_trip', detail: 'days', value: days };
+    }
+  }
 
   if (/^(hi|hello|hey|yo)\b/i.test(text)) return { type: 'greeting' };
 
@@ -232,6 +253,8 @@ export interface ChatHandlers {
   onShowOptions?: (category: string) => ChatReply | Promise<ChatReply>;
   /** “What day should I add X?” — preview + day chips without forcing a day. */
   onSuggestDay?: (placeQuery: string) => Promise<ChatReply> | ChatReply;
+  /** User wants to change trip details (days, destination, preferences). */
+  onRefineTrip?: (detail: 'destination' | 'days' | 'preferences', value?: string | number) => Promise<ChatReply> | ChatReply;
   /**
    * Intercept pending lookup flow (pick option / confirm day).
    * Return null to fall through to normal intent parsing.
@@ -329,6 +352,13 @@ export async function replyToChat(params: {
     case 'preference': {
       params.onPreference?.(intent.note);
       return `Noted: “${intent.note}”. Say “help” for ways to change days.`;
+    }
+
+    case 'refine_trip': {
+      if (params.onRefineTrip) {
+        return await params.onRefineTrip(intent.detail, intent.value);
+      }
+      return `Got it. I'll update your ${intent.detail}.`;
     }
 
     default:
