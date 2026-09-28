@@ -70,9 +70,17 @@ export async function tripChatHandler(req, res, env) {
 
     if (typeof result.assistantMessage !== 'string' || typeof result.data !== 'object' || !result.data) return send(502, { error: 'Invalid response' });
 
+    console.log('LLM response:', {
+      complete: result.complete,
+      hasDates: !!result.data.travelDates,
+      destination: result.data.destination,
+      hasAccom: result.data.hasAccommodation,
+      tripLength: result.data.tripLength?.days
+    });
+
     // Force dates question if trip is marked complete but travelDates is missing
     if (result.complete && !result.data.travelDates) {
-      console.log('⚠ Forcing dates question - LLM tried to complete without asking');
+      console.log('⚠ FORCING dates question - LLM tried to complete without asking');
       result.complete = false;
       result.assistantMessage = 'Do you know when you want to go? This helps us show weather and seasonal info for ' + (result.data.destination || 'your destination') + '.';
     }
