@@ -197,10 +197,11 @@ export function ClusterPlanView({
   const [dirty, setDirty] = useState(saved?.dirty ?? false);
   const [commitNote, setCommitNote] = useState<string | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => localStorage.getItem('lastEmailAddress') ?? '');
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailSending, setEmailSending] = useState(false);
   const [emailSentTo, setEmailSentTo] = useState<string | null>(null);
+  const [emailSentItinerary, setEmailSentItinerary] = useState<string | null>(null);
   const [dragging, setDragging] = useState<{
     fromDay: number;
     stopName: string;
@@ -249,6 +250,10 @@ export function ClusterPlanView({
     if (options?.markDirty !== false) {
       setDirty(true);
       setCommitNote(null);
+      // Mark that the plan has been edited after sending
+      if (emailSentItinerary && emailSentTo) {
+        setCommitNote('Plan updated.');
+      }
     }
   }
 
@@ -289,8 +294,11 @@ export function ClusterPlanView({
       return;
     }
 
+    // Save email to localStorage and mark as sent
+    localStorage.setItem('lastEmailAddress', trimmed);
     setEmailSentTo(trimmed);
-    setCommitNote(`Plan sent to ${trimmed}.`);
+    setEmailSentItinerary(JSON.stringify(itineraryRef.current));
+    setCommitNote(`Plan sent to ${trimmed}. Check your inbox.`);
   }
 
   function removePlaceFromDay(dayIdx: number, stopName: string) {
@@ -713,7 +721,9 @@ export function ClusterPlanView({
             className="btn btn-primary"
             onClick={openEmailConfirm}
           >
-            Send plan to email
+            {emailSentItinerary && JSON.stringify(itinerary) !== emailSentItinerary
+              ? "Send updated plan"
+              : "Send plan to email"}
           </button>
           <button
             type="button"
@@ -978,7 +988,7 @@ export function ClusterPlanView({
             aria-labelledby="cluster-email-title"
             onClick={(e) => e.stopPropagation()}
           >
-            {emailSentTo ? (
+            {emailSentTo && JSON.stringify(itinerary) === emailSentItinerary ? (
               <>
                 <h2 id="cluster-email-title">Plan sent</h2>
                 <p>
@@ -996,7 +1006,11 @@ export function ClusterPlanView({
               </>
             ) : (
               <>
-                <h2 id="cluster-email-title">Send plan to email</h2>
+                <h2 id="cluster-email-title">
+                  {emailSentItinerary && JSON.stringify(itinerary) !== emailSentItinerary
+                    ? "Send updated plan"
+                    : "Send plan to email"}
+                </h2>
                 <p>
                   We’ll email your {tripDays}-day {input.destination_city} plan.
                 </p>
@@ -1034,7 +1048,9 @@ export function ClusterPlanView({
                       className="btn btn-primary"
                       disabled={emailSending || !email.trim()}
                     >
-                      {emailSending ? 'Sending…' : 'Send plan to email'}
+                      {emailSending ? "Sending…" : (emailSentItinerary && JSON.stringify(itinerary) !== emailSentItinerary
+                        ? "Send updated plan"
+                        : "Send plan to email")}
                     </button>
                   </div>
                 </form>

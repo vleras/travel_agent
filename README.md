@@ -60,3 +60,26 @@ DeepSeek generates attractions through `POST /api/deepseek/attractions`. The Vit
 For production, deploy `server/deepseek.ts` in a Node backend and route `/api/deepseek/attractions` to it, passing server environment variables to `deepseekHandler`. A static `dist` deployment alone cannot run this endpoint. Protect a public deployment with authentication and rate limits to control API spending.
 
 The travel chatbot uses local intent handlers; this integration powers attraction recommendations. Explicit must-visit selections retain the existing behavior and skip AI-generated filler.
+
+## Email sending with EmailJS
+
+The trip plan is sent via EmailJS (https://www.emailjs.com/) with a FormSubmit fallback. The email includes:
+- Trip header with destination, dates, and hotel
+- One card per day with formatted stops
+- Food places shown as meal lines ("Lunch at…", "Dinner at…")
+- Walking times between stops
+- "Open today's route in Google Maps" button per day
+- Inline styles for email-safe HTML (no external CSS)
+- Plain-text fallback
+
+To enable EmailJS, set these in `.env`:
+- `VITE_EMAILJS_SERVICE_ID` — your EmailJS Service ID
+- `VITE_EMAILJS_TEMPLATE_ID` — your EmailJS Template ID
+- `VITE_EMAILJS_PUBLIC_KEY` — your EmailJS Public Key
+
+EmailJS template setup (customize as needed):
+- Template "To email" field → use variable `{{to_email}}`
+- Subject field → use variable `{{trip_subject}}`
+- Email body → use variable `{{{trip_html}}}` for HTML or `{{trip_text}}` for plain text
+
+If any key is missing, the app falls back to FormSubmit, which sends a plain-text email. The entered email is saved locally for the session.
