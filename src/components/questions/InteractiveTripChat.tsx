@@ -213,7 +213,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       if (!(['hotel_answer', 'change_hotel'].includes(result.intent) && result.data.accommodationQuery)) {
         let msg = result.assistantMessage;
         if (result.complete && !(['change_destination', 'change_days'].includes(result.intent))) {
-          msg = result.assistantMessage + '\n\nWant to adjust something before choosing places? You can change the destination, number of days, or add preferences.';
+          msg = result.assistantMessage + '\n\nWant to adjust something before choosing places? You can change the destination or number of days.';
         }
         setMessages((current) => [...current, { role: 'assistant', content: msg }]);
       }
@@ -285,16 +285,6 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
               }}
             >
               Change number of days
-            </button>
-            <button
-              type="button"
-              className="chip"
-              onClick={() => {
-                setInput('Tell me about ');
-                setComplete(false);
-              }}
-            >
-              Add preferences
             </button>
           </div>
           <button type="button" className="btn btn-primary interactive-ready" onClick={() => onReady(data)}>Ready to choose places</button>
