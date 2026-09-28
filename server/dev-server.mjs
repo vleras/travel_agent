@@ -4,6 +4,8 @@ import { tripChatHandler } from './tripChat.mjs';
 const PORT = 5174;
 
 const server = createServer((req, res) => {
+  console.log(`${req.method} ${req.url}`);
+
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -16,7 +18,12 @@ const server = createServer((req, res) => {
   }
 
   if (req.url === '/api/deepseek/trip-chat' && req.method === 'POST') {
-    tripChatHandler(req, res, process.env);
+    console.log('✓ Handling trip chat request...');
+    tripChatHandler(req, res, process.env).catch(err => {
+      console.error('Handler crashed:', err);
+      res.writeHead(502);
+      res.end(JSON.stringify({ error: 'Handler error' }));
+    });
   } else {
     res.writeHead(404);
     res.end('Not found');

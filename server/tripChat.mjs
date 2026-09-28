@@ -6,7 +6,13 @@ export async function tripChatHandler(req, res, env) {
 
   if (req.method !== 'POST') return send(405, { error: 'Use POST' });
   if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return send(403, { error: 'Invalid origin' });
-  if (!env.DEEPSEEK_API_KEY?.trim()) return send(503, { error: 'DeepSeek is not configured' });
+
+  const apiKey = env.DEEPSEEK_API_KEY?.trim();
+  if (!apiKey) {
+    console.error('ERROR: DEEPSEEK_API_KEY not set');
+    return send(503, { error: 'DeepSeek is not configured' });
+  }
+  console.log('✓ API key found');
 
   try {
     let raw = '';
