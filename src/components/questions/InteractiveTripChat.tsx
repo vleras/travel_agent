@@ -8,7 +8,10 @@ import { parseLocationInput } from '../../services/parseLocation';
 import { cityCenter, reverseLabel } from '../../services/sightLocation';
 import { haversineKm } from '../../services/geo';
 
-export interface TripChatState { messages: TripChatMessage[]; data: TripChatData; complete: boolean }
+export interface TripChatState {
+  messages: TripChatMessage[]; data: TripChatData; complete: boolean;
+  draft?: string; hotelMatches?: HotelMatch[]; addressStatus?: 'idle' | 'checking' | 'failed';
+}
 
 interface InteractiveTripChatProps {
   initialDestination?: string;
@@ -29,24 +32,25 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     : "Let's plan your trip! Where are you thinking of traveling?";
   const [messages, setMessages] = useState<TripChatMessage[]>(() => savedState?.messages ?? [{ role: 'assistant', content: opening }]);
   const [data, setData] = useState<TripChatData>(() => savedState?.data ?? emptyData(initialDestination));
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(savedState?.draft ?? '');
   const [loading, setLoading] = useState(false);
   const [complete, setComplete] = useState(() => savedState?.complete ?? false);
   const [error, setError] = useState('');
-  const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'failed'>('idle');
-  const [hotelMatches, setHotelMatches] = useState<HotelMatch[]>([]);
+  const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'failed'>(savedState?.addressStatus === 'failed' ? 'failed' : 'idle');
+  const [hotelMatches, setHotelMatches] = useState<HotelMatch[]>(savedState?.hotelMatches ?? []);
   const endRef = useRef<HTMLDivElement>(null);
   const awaitingHotel = Boolean(data.hasAccommodation && !data.accommodation && data.destination && data.tripLength);
   // Offer exact-location options when we only found an area, or nothing.
   const offerExact = awaitingHotel && (hotelMatches.some((m) => m.approximate) || addressStatus === 'failed');
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
-  useEffect(() => { onStateChange({ messages, data, complete }); }, [messages, data, complete, onStateChange]);
+  useEffect(() => { onStateChange({ messages, data, complete, draft: input, hotelMatches, addressStatus }); }, [messages, data, complete, input, hotelMatches, addressStatus, onStateChange]);
 
   useEffect(() => {
     const query = data.accommodationQuery?.trim();
     const city = data.destination?.trim();
     if (!data.hasAccommodation || data.accommodation || !query || !city) return;
+    if (savedState?.data.accommodationQuery === query && savedState.data.destination === city && savedState.hotelMatches?.length) return;
     let cancelled = false;
     setHotelMatches([]);
     setComplete(false);

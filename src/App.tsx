@@ -7,8 +7,11 @@ import { AgentProcessing } from './components/trip/AgentProcessing';
 import { ClusterPlanView } from './components/trip/ClusterPlanView';
 import { runTravelAgent } from './services/agent';
 import {
-  clearAllSessionState,
-  clearDestState,
+  backInFlow,
+  initializeFlowHistory,
+  subscribeFlowHistory,
+  startNewFlowSession,
+  clearTripState,
   clearQuestionState,
   loadAppState,
   saveAppState,
@@ -37,6 +40,12 @@ function initialApp() {
 }
 
 export default function App() {
+  const [revision, setRevision] = useState(() => { initializeFlowHistory(); return 0; });
+  useEffect(() => subscribeFlowHistory(() => setRevision(value => value + 1)), []);
+  return <TripApp key={revision} />;
+}
+
+function TripApp() {
   const boot = initialApp();
   const [screen, setScreen] = useState<AppScreen>(boot.screen);
   const [path, setPath] = useState<Path>(boot.path);
@@ -63,19 +72,16 @@ export default function App() {
   }, [screen, path, picked, input, output, chatNotes]);
 
   const resetToEntry = useCallback(() => {
-    clearAllSessionState();
     setScreen('entry');
     setPath(null);
     setPicked(null);
-    setInput(null);
-    setOutput(null);
     setError(null);
     setProgress({ step: 'idle', message: '' });
     setChatNotes([]);
     setHideGlobalChat(false);
   }, []);
 
-  async function startAgent(tripInput: TripInput) {
+  function startAgent(tripInput: TripInput) {
     const mergedNotes = chatNotes.length
       ? [tripInput.custom_preferences, ...chatNotes].filter(Boolean).join('; ')
       : tripInput.custom_preferences;
@@ -88,20 +94,37 @@ export default function App() {
         null,
     };
 
+    clearTripState();
     setInput(withChat);
+    setOutput(null);
     setScreen('processing');
+  }
+
+  useEffect(() => {
+    if (screen !== 'processing' || !input) return;
+    let active = true;
     setError(null);
     setProgress({ step: 'act', message: 'Building your days…' });
-    try {
-      const result = await runTravelAgent(withChat, setProgress);
+    void runTravelAgent(input, next => { if (active) setProgress(next); }).then(result => {
+      if (!active) return;
       setOutput(result);
-      clearQuestionState();
-      clearDestState();
       setScreen('trip');
-    } catch (err) {
+    }).catch(err => {
+      if (!active) return;
       setError(err instanceof Error ? err.message : 'Agent failed');
       setProgress({ step: 'error', message: 'Failed', detail: String(err) });
-    }
+    });
+    return () => { active = false; };
+  }, [screen, input]);
+
+  function beginFlow(nextPath: 'A' | 'B') {
+    startNewFlowSession();
+    setInput(null);
+    setOutput(null);
+    setPicked(null);
+    setChatNotes([]);
+    setPath(nextPath);
+    setScreen('questions');
   }
 
   const cityHint = picked?.city ?? input?.destination_city ?? null;
@@ -114,20 +137,14 @@ export default function App() {
     <div className="app-shell">
       {screen === 'entry' && (
         <EntryPoint
-          onKnowDestination={() => {
-            setPath('A');
-            setScreen('questions');
-          }}
-          onWantSuggestions={() => {
-            setPath('B');
-            setScreen('questions');
-          }}
+          onKnowDestination={() => beginFlow('A')}
+          onWantSuggestions={() => beginFlow('B')}
         />
       )}
 
       {screen === 'questions' && path === 'B' && !picked && (
         <DestinationPicker
-          onBack={resetToEntry}
+          onBack={backInFlow}
           onSelect={(dest) => {
             clearQuestionState();
             setChatNotes([]);
@@ -140,15 +157,7 @@ export default function App() {
         <QuestionFlow
           path={path}
           selectedDestination={picked}
-          onBack={() => {
-            if (path === 'B' && picked) {
-              clearQuestionState();
-              setChatNotes([]);
-              setPicked(null);
-              return;
-            }
-            resetToEntry();
-          }}
+          onBack={backInFlow}
           onComplete={(tripInput) => {
             void startAgent(tripInput);
           }}
@@ -174,7 +183,7 @@ export default function App() {
         <ClusterPlanView
           input={input}
           output={output}
-          onBack={resetToEntry}
+          onBack={backInFlow}
           onItineraryChange={(itinerary) => {
             setOutput((prev) => (prev ? { ...prev, itinerary } : prev));
           }}

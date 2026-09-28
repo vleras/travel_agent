@@ -7,6 +7,7 @@ import { generateAttractions } from '../../services/gemini';
 import { autocompletePlaces, geocode, type GeocodeResult } from '../../services/nominatim';
 import { getNearbyFoodPlacesForCity } from '../../services/placesFood';
 import {
+  backInFlow,
   loadQuestionState,
   saveQuestionState,
 } from '../../services/sessionState';
@@ -182,32 +183,31 @@ export function QuestionFlow({
   const weekend = useMemo(() => nextWeekendStart(), []);
 
   const [stepIndex, setStepIndex] = useState(() =>
-    Math.min(saved?.stepIndex ?? 0, steps.indexOf('days')),
+    Math.min(saved?.stepIndex ?? 0, steps.length - 1),
   );
   const step = steps[stepIndex];
 
   const [city, setCity] = useState(
     () => saved?.city ?? selectedDestination?.city ?? '',
   );
-  const [daysText, setDaysText] = useState('');
-  const [chatMode, setChatMode] = useState(true);
-  const [chatData, setChatData] = useState<TripChatData | null>(null);
-  const [chatState, setChatState] = useState<TripChatState | null>(null);
-  const [notBooked, setNotBooked] = useState(false);
-  const [accommodation, setAccommodation] = useState<TripAccommodation | null>(null);
+  const [daysText, setDaysText] = useState(saved?.daysText ?? '');
+  const [chatMode, setChatMode] = useState(saved?.chatMode ?? true);
+  const [chatData, setChatData] = useState<TripChatData | null>(saved?.chatData ?? null);
+  const [chatState, setChatState] = useState<TripChatState | null>(saved?.chatState ?? null);
+  const [notBooked, setNotBooked] = useState(saved?.notBooked ?? false);
+  const [accommodation, setAccommodation] = useState<TripAccommodation | null>(saved?.accommodation ?? null);
 
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>(
     () => saved?.selectedPlaces ?? [],
   );
   const [viewingPlace, setViewingPlace] = useState<DestinationHighlight | null>(
-    null,
+    saved?.viewingPlace ?? null,
   );
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
-  const [generatedPlaces, setGeneratedPlaces] = useState<Attraction[]>([]);
-  const [foodPlaces, setFoodPlaces] = useState<Attraction[]>([]);
+  const [generatedPlaces, setGeneratedPlaces] = useState<Attraction[]>(saved?.generatedPlaces ?? []);
+  const [foodPlaces, setFoodPlaces] = useState<Attraction[]>(saved?.foodPlaces ?? []);
   const [foodLoading, setFoodLoading] = useState(false);
   useEffect(() => {
-    setFoodPlaces([]);
     if (step !== 'places' || !city.trim()) return;
     let cancelled = false;
     setFoodLoading(true);
@@ -215,7 +215,7 @@ export function QuestionFlow({
       const { result } = await geocode(city.trim());
       if (cancelled) return;
       const places = await getNearbyFoodPlacesForCity(city.trim(), result ? { lat: result.lat, lon: result.lon } : undefined);
-      if (!cancelled) setFoodPlaces(places.map(place => ({
+      if (!cancelled && places.length) setFoodPlaces(places.map(place => ({
         name: place.name, category: place.category === 'cafe' ? 'Cafés' : 'Restaurants',
         lat: place.lat, lon: place.lon, address: place.address, typical_visit_duration_minutes: place.category === 'cafe' ? 30 : 60,
         recommended: place.recommended, wikiDescription: place.wikiDescription,
@@ -224,7 +224,7 @@ export function QuestionFlow({
     })().catch(() => { /* Keep sightseeing available when food search fails. */ }).finally(() => { if (!cancelled) setFoodLoading(false); });
     return () => { cancelled = true; };
   }, [city, step]);
-  const [placeCategory, setPlaceCategory] = useState('all');
+  const [placeCategory, setPlaceCategory] = useState(saved?.placeCategory ?? 'all');
   const [generatingCity, setGeneratingCity] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const placesRequest = useRef(0);
@@ -276,13 +276,15 @@ export function QuestionFlow({
       path,
       stepIndex,
       city,
-      selectedPlaces,
+      selectedPlaces, daysText, chatMode, chatData, chatState, notBooked, accommodation,
+      viewingPlace, generatedPlaces, foodPlaces, placeCategory,
     });
   }, [
     path,
     stepIndex,
     city,
-    selectedPlaces,
+    selectedPlaces, daysText, chatMode, chatData, chatState, notBooked, accommodation,
+    viewingPlace, generatedPlaces, foodPlaces, placeCategory,
   ]);
 
   const parsedDays = parseDaysInput(daysText);
@@ -298,14 +300,21 @@ export function QuestionFlow({
     return () => window.clearTimeout(handle);
   }, [city, step]);
 
+  const previousCity = useRef(saved?.city ?? selectedDestination?.city ?? '');
   useEffect(() => {
     const targetCity = city.trim();
+    const changedCity = previousCity.current.trim().toLowerCase() !== targetCity.toLowerCase();
+    previousCity.current = city;
+    if (!changedCity && (generatedPlaces.length || placesForCity(targetCity, selectedDestination).length >= MIN_PLACE_OPTIONS)) return;
     placesRequest.current += 1;
     setGeneratedPlaces([]);
     setPlaceCategory('all');
     setGenerationError(null);
     setGeneratingCity(null);
-    setSelectedPlaces([]);
+    if (changedCity) {
+      setSelectedPlaces([]);
+      setFoodPlaces([]);
+    }
     if (!targetCity || placesForCity(targetCity, selectedDestination).length >= MIN_PLACE_OPTIONS) {
       return;
     }
@@ -431,17 +440,7 @@ export function QuestionFlow({
     return () => document.removeEventListener('keydown', continueOnEnter);
   });
 
-  function prev() {
-    if (viewingPlace) {
-      setViewingPlace(null);
-      return;
-    }
-    if (stepIndex === 0) {
-      onBack();
-      return;
-    }
-    setStepIndex((i) => i - 1);
-  }
+  function prev() { backInFlow(); }
 
   if (chatMode && step !== 'places') {
     return (
@@ -590,10 +589,7 @@ export function QuestionFlow({
             city={city}
             country={selectedDestination?.country}
             selected={selectedPlaces.includes(viewingPlace.name)}
-            onBack={() => {
-              setViewingPlace(null);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            onBack={backInFlow}
             onToggleAdd={() => togglePlace(viewingPlace.name)}
           />
         )}
@@ -659,7 +655,6 @@ export function QuestionFlow({
                             className="place-pick-open"
                             onClick={() => {
                               setViewingPlace(spot);
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
                           >
                             <PlaceImage

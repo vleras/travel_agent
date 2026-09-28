@@ -4,6 +4,7 @@ import { PlaceImage, fetchPlacePhotoUrls } from '../shared/PlaceImage';
 import { planStoryPhotos } from '../../services/storyPhotoPlan';
 import {
   clearDestState,
+  backInFlow,
   loadDestState,
   saveDestState,
 } from '../../services/sessionState';
@@ -392,7 +393,6 @@ function HighlightStory({
                     className="highlight-story-related-card"
                     onClick={() => {
                       onOpenRelated(other);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                   >
                     <PlaceImage
@@ -584,10 +584,7 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
         spot={highlight}
         destination={preview}
         related={related}
-        onBack={() => {
-          setHighlight(null);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
+        onBack={backInFlow}
         onOpenRelated={(spot) => setHighlight(spot)}
         onStartPlanning={() => onSelect(preview)}
       />
@@ -601,7 +598,7 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => setPreview(null)}
+            onClick={backInFlow}
           >
             ← All cities
           </button>
@@ -638,7 +635,6 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
                   city={preview.city}
                   onOpen={() => {
                     setHighlight(spot);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                 />
               ))}
@@ -649,7 +645,7 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setPreview(null)}
+              onClick={backInFlow}
             >
               Back
             </button>
@@ -681,7 +677,6 @@ export function DestinationPicker({ onSelect, onBack }: DestinationPickerProps) 
               onClick={() => {
                 setPreview(dest);
                 setHighlight(null);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             >
               <DestCardImage dest={dest} />

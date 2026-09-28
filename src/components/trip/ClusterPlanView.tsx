@@ -1,3 +1,4 @@
+import { backInFlow, loadTripState, saveTripState } from '../../services/sessionState';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TravelChatBot } from '../chat/TravelChatBot';
 import type { ChatReply } from '../../services/chatbot';
@@ -175,24 +176,25 @@ export function ClusterPlanView({
   onBack,
   onItineraryChange,
 }: ClusterPlanViewProps) {
+  const [saved] = useState(loadTripState);
   const [itinerary, setItinerary] = useState<DayItinerary[]>(() =>
     ensureTripDays(
-      output.itinerary,
+      saved?.itinerary ?? output.itinerary,
       input.trip_length_days,
       input.start_date,
     ),
   );
-  const [mapDayIndex, setMapDayIndex] = useState<number | null>(null);
-  const [showAllMap, setShowAllMap] = useState(false);
-  const [detail, setDetail] = useState<DetailTarget | null>(null);
-  const [focusDay, setFocusDay] = useState(0);
+  const [mapDayIndex, setMapDayIndex] = useState<number | null>(saved?.mapDayIndex ?? null);
+  const [showAllMap, setShowAllMap] = useState(saved?.showAllMap ?? false);
+  const [detail, setDetail] = useState<DetailTarget | null>(saved?.detail ?? null);
+  const [focusDay, setFocusDay] = useState(saved?.focusDay ?? 0);
   const [lookup, setLookup] = useState<LookupSession | null>(null);
   const [previewPin, setPreviewPin] = useState<{
     name: string;
     lat: number;
     lon: number;
   } | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(saved?.dirty ?? false);
   const [commitNote, setCommitNote] = useState<string | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -216,6 +218,13 @@ export function ClusterPlanView({
   const tripDays = Math.max(1, input.trip_length_days);
 
   useEffect(() => {
+    saveTripState({ itinerary, detail, focusDay, mapDayIndex, showAllMap, dirty });
+  }, [itinerary, detail, focusDay, mapDayIndex, showAllMap, dirty]);
+
+  const previousOutput = useRef(output);
+  useEffect(() => {
+    if (previousOutput.current === output) return;
+    previousOutput.current = output;
     setItinerary(
       ensureTripDays(
         output.itinerary,
@@ -661,7 +670,7 @@ export function ClusterPlanView({
               ? `Day ${dayIdx + 1} · ${daySights} stop${daySights === 1 ? '' : 's'}`
               : 'Place details'
           }
-          onBack={() => setDetail(null)}
+          onBack={backInFlow}
         />
         {chat}
       </div>
