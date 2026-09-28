@@ -36,7 +36,8 @@ export type ChatIntent =
   | { type: 'show_options'; category: string }
   | { type: 'preference'; note: string }
   | { type: 'help' }
-  | { type: 'greeting' };
+  | { type: 'greeting' }
+  | { type: 'refine_trip'; detail: 'destination' | 'days' | 'preferences' };
 
 const DIET_PATTERNS: { re: RegExp; label: string; breakfastHint: string }[] = [
   {

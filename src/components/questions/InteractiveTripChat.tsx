@@ -211,7 +211,11 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       setData(result.data);
       setComplete(result.complete);
       if (!(['hotel_answer', 'change_hotel'].includes(result.intent) && result.data.accommodationQuery)) {
-        setMessages((current) => [...current, { role: 'assistant', content: result.assistantMessage }]);
+        let msg = result.assistantMessage;
+        if (result.complete && !(['change_destination', 'change_days'].includes(result.intent))) {
+          msg = result.assistantMessage + '\n\nWant to adjust something before choosing places? You can change the destination, number of days, or add preferences.';
+        }
+        setMessages((current) => [...current, { role: 'assistant', content: msg }]);
       }
     } catch {
       const clarification = !data.destination
@@ -259,20 +263,55 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         {(hotelMatches.length > 0 || addressStatus !== 'idle') && <button type="button" className="btn btn-ghost" onClick={skipHotel}>Continue without hotel location</button>}
         <div ref={endRef} />
       </div>
-      {!complete ? (
+      {complete && (
+        <div className="interactive-completion-actions">
+          <div className="interactive-completion-chips">
+            <button
+              type="button"
+              className="chip"
+              onClick={() => {
+                setInput('Change destination to ');
+                setComplete(false);
+              }}
+            >
+              Change destination
+            </button>
+            <button
+              type="button"
+              className="chip"
+              onClick={() => {
+                setInput('Change to ');
+                setComplete(false);
+              }}
+            >
+              Change number of days
+            </button>
+            <button
+              type="button"
+              className="chip"
+              onClick={() => {
+                setInput('Tell me about ');
+                setComplete(false);
+              }}
+            >
+              Add preferences
+            </button>
+          </div>
+          <button type="button" className="btn btn-primary interactive-ready" onClick={() => onReady(data)}>Ready to choose places</button>
+        </div>
+      )}
+      {!complete && (
         <form className="interactive-chat-compose" onSubmit={(event) => { event.preventDefault(); void send(); }}>
           <div className="interactive-chat-input-shell">
             <textarea aria-label="Your answer" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); }
-            }} placeholder="Tell me about your trip…" rows={1} autoFocus />
+            }} placeholder={complete ? "Want to change anything?" : "Tell me about your trip…"} rows={1} autoFocus />
             <button type="submit" className="interactive-chat-send" disabled={loading || addressStatus === 'checking' || !input.trim()} aria-label="Send answer">
               <span>Send</span><span className="interactive-send-arrow" aria-hidden>↑</span>
             </button>
           </div>
           <span className="interactive-chat-hint">Enter to send · Shift + Enter for a new line</span>
         </form>
-      ) : (
-        <button type="button" className="btn btn-primary interactive-ready" onClick={() => onReady(data)}>Ready to choose places</button>
       )}
       <div className="interactive-chat-footer">
         <button type="button" className="chat-form-link" onClick={onPreferForm}>Prefer to fill out a form?</button>
