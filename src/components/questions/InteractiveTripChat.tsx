@@ -235,7 +235,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     <div className="interactive-trip-chat">
       <div className="interactive-chat-head">
         <div><span className="schedule-guide-avatar" aria-hidden>✈</span></div>
-        <div><h1>Plan with your travel agent</h1><p>Answer naturally. Short or detailed both work.</p></div>
+        <div><h1>Plan with your travel agent</h1></div>
       </div>
       <div className="interactive-chat-thread" aria-live="polite">
         {messages.map((message, index) => (
