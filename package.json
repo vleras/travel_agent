@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "server": "node --loader ts-node/esm server/index.ts",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
