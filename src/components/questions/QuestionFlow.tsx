@@ -339,7 +339,8 @@ export function QuestionFlow({
     if (step === 'hotel') return accommodation != null;
     if (step === 'places') {
       const hasPlaces = placesForCity(city, selectedDestination).length > 0 || generatedPlaces.length > 0 || foodPlaces.length > 0;
-      return generatingCity !== city.trim() && hasPlaces && selectedPlaces.length > 0;
+      // Picked places are enough; more AI suggestions may still be loading in the background.
+      return hasPlaces && selectedPlaces.length > 0;
     }
     return true;
   }
@@ -707,6 +708,9 @@ export function QuestionFlow({
             Back
           </button>
           <div className="question-actions-right">
+            {step === 'places' && !viewingPlace && selectedPlaces.length === 0 && (
+              <span className="hint">Add at least one place to continue.</span>
+            )}
             {step === 'hotel' && (
               <button
                 type="button"
