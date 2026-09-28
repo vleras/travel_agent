@@ -13,6 +13,7 @@ import { geocode } from './nominatim';
 import { locateSight } from './sightLocation';
 import { routeDistance } from './osrm';
 import { fetchPlacePhotoUrls } from './placePhotos';
+import { getWeatherForItinerary } from './weather';
 import type {
   AgentOutput,
   AgentProgress,
@@ -1082,10 +1083,39 @@ export async function runTravelAgent(
     ),
   );
 
-  const compactnessAfter = average(itinerary.map((d) => d.compactness_score));
+  // Fetch weather data if start/end dates are available
+  let itineraryWithWeather = itinerary;
+  try {
+    if (input.start_date && input.end_date) {
+      const weatherData = await getWeatherForItinerary(
+        input.destination_city,
+        input.start_date,
+        input.end_date,
+      );
+      // Attach weather to each day
+      itineraryWithWeather = itinerary.map((day) => {
+        const dayWeather = weatherData.find((w) => w.date === day.date);
+        return {
+          ...day,
+          weather: dayWeather ? {
+            temperature: dayWeather.temperature,
+            condition: dayWeather.condition,
+            icon: dayWeather.icon,
+            maxTemp: dayWeather.maxTemp,
+            minTemp: dayWeather.minTemp,
+            humidity: dayWeather.humidity,
+          } : undefined,
+        };
+      });
+    }
+  } catch (error) {
+    console.error('Failed to fetch weather:', error);
+  }
+
+  const compactnessAfter = average(itineraryWithWeather.map((d) => d.compactness_score));
   const totalTripDistance =
     Math.round(
-      itinerary.reduce((s, d) => s + d.total_distance_km, 0) * 10,
+      itineraryWithWeather.reduce((s, d) => s + d.total_distance_km, 0) * 10,
     ) / 10;
   const processingMs = Math.round(performance.now() - started);
 
@@ -1110,11 +1140,11 @@ export async function runTravelAgent(
   onProgress({
     step: 'done',
     message: 'Days ready',
-    detail: `${itinerary.length}-day plan from your picks`,
+    detail: `${itineraryWithWeather.length}-day plan from your picks`,
   });
 
   return {
-    itinerary,
+    itinerary: itineraryWithWeather,
     revisions,
     metadata: {
       destination: input.destination_city,

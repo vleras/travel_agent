@@ -119,6 +119,15 @@ export interface ItineraryStop {
   wikiDescription?: string;
 }
 
+export interface DayWeather {
+  temperature: number;
+  condition: string;
+  icon: string;
+  maxTemp: number;
+  minTemp: number;
+  humidity: number;
+}
+
 export interface DayItinerary {
   date: string;
   day_number: number;
@@ -126,6 +135,7 @@ export interface DayItinerary {
   total_distance_km: number;
   compactness_score: number;
   hotel_distance_km: number;
+  weather?: DayWeather;
 }
 
 export interface Revision {
