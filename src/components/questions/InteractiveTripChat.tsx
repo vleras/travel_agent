@@ -39,6 +39,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'failed'>(savedState?.addressStatus === 'failed' ? 'failed' : 'idle');
   const [hotelMatches, setHotelMatches] = useState<HotelMatch[]>(savedState?.hotelMatches ?? []);
   const endRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const awaitingHotel = Boolean(data.hasAccommodation && !data.accommodation && data.destination && data.tripLength);
   // Offer exact-location options when we only found an area, or nothing.
   const offerExact = awaitingHotel && (hotelMatches.some((m) => m.approximate) || addressStatus === 'failed');
@@ -112,6 +113,18 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     setData(current => ({ ...current, accommodationQuery: null, accommodation: null }));
     setAddressStatus('failed');
     setMessages(current => [...current, { role: 'user', content: 'No' }, { role: 'assistant', content: 'Send a different hotel name or address, or continue without a hotel location.' }]);
+  }
+
+  function setInputAndFocusEnd(text: string) {
+    setInput(text);
+    setComplete(false);
+    // Focus and move cursor to end after state updates
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = textareaRef.current.selectionEnd = text.length;
+      }
+    }, 0);
   }
 
   function skipHotel() {
@@ -270,20 +283,14 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
             <button
               type="button"
               className="chip"
-              onClick={() => {
-                setInput('Change destination to ');
-                setComplete(false);
-              }}
+              onClick={() => setInputAndFocusEnd('Change destination to ')}
             >
               Change destination
             </button>
             <button
               type="button"
               className="chip"
-              onClick={() => {
-                setInput('Change to ');
-                setComplete(false);
-              }}
+              onClick={() => setInputAndFocusEnd('Change to ')}
             >
               Change number of days
             </button>
@@ -294,7 +301,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       {!complete && (
         <form className="interactive-chat-compose" onSubmit={(event) => { event.preventDefault(); void send(); }}>
           <div className="interactive-chat-input-shell">
-            <textarea aria-label="Your answer" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
+            <textarea ref={textareaRef} aria-label="Your answer" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); }
             }} placeholder={complete ? "Want to change anything?" : "Tell me about your trip…"} rows={1} autoFocus />
             <button type="submit" className="interactive-chat-send" disabled={loading || addressStatus === 'checking' || !input.trim()} aria-label="Send answer">
