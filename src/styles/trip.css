@@ -1184,3 +1184,50 @@
   font-size: 0.82rem;
   white-space: nowrap;
 }
+
+.weather-info {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(42, 157, 143, 0.08) 0%, rgba(196, 92, 74, 0.04) 100%);
+  border: 1px solid rgba(42, 157, 143, 0.2);
+}
+
+.weather-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.weather-icon-section {
+  flex-shrink: 0;
+}
+
+.weather-icon {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.weather-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.weather-condition {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.weather-temps {
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.weather-humidity {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
