@@ -369,6 +369,61 @@ function clusterOneRegion(
   );
 }
 
+function isFoodPlace(attraction: ScoredAttraction): boolean {
+  const cat = attraction.category?.toLowerCase() ?? '';
+  return cat === 'cafés' || cat === 'restaurants' || cat === 'cafe' || cat === 'restaurant';
+}
+
+function distributeFoodPlaces(
+  clusters: ScoredAttraction[][],
+  dayCount: number,
+): ScoredAttraction[][] {
+  if (clusters.length === 0 || dayCount <= 1) return clusters;
+
+  // Extract all food places
+  const foodPlacesByDay = clusters.map((cluster, i) => ({
+    dayIndex: i,
+    places: cluster.filter(isFoodPlace),
+  }));
+
+  // Find days with multiple food places
+  const daysWithExcessFood = foodPlacesByDay.filter((d) => d.places.length > 1);
+  if (daysWithExcessFood.length === 0) return clusters;
+
+  // Move excess food places to days that have fewer or no food places
+  for (const dayData of daysWithExcessFood) {
+    const dayIndex = dayData.dayIndex;
+    const foodPlaces = dayData.places;
+    const excess = foodPlaces.length - 1; // Keep one, redistribute the rest
+
+    for (let i = 0; i < excess; i++) {
+      const placeToMove = foodPlaces[1 + i]; // Skip the first one
+      if (!placeToMove) break;
+
+      // Find the best day to move this food place to (one with least food places)
+      let bestDay = -1;
+      let minFoodCount = Infinity;
+
+      for (let d = 0; d < clusters.length; d++) {
+        if (d === dayIndex) continue; // Don't move back to same day
+        const foodCount = clusters[d].filter(isFoodPlace).length;
+        if (foodCount < minFoodCount) {
+          minFoodCount = foodCount;
+          bestDay = d;
+        }
+      }
+
+      if (bestDay >= 0) {
+        // Remove from current day and add to best day
+        clusters[dayIndex] = clusters[dayIndex].filter((p) => p !== placeToMove);
+        clusters[bestDay] = [...clusters[bestDay], placeToMove];
+      }
+    }
+  }
+
+  return clusters;
+}
+
 function clusterByProximity(
   attractions: ScoredAttraction[],
   days: number,
@@ -972,6 +1027,9 @@ export async function runTravelAgent(
     clusters.push([]);
   }
   clusters = clusters.slice(0, dayCount);
+
+  // Distribute food places across different days to avoid clustering all food in one day
+  clusters = distributeFoodPlaces(clusters, dayCount);
 
   const startDate = new Date(input.start_date + 'T12:00:00');
   const schedule = {
