@@ -958,26 +958,27 @@
   right: 0.65rem;
 }
 
-.highlight-lightbox-dots {
-  position: absolute;
-  bottom: 1.1rem;
-  display: flex;
-  gap: 0.4rem;
+.highlight-lightbox-stage img {
+  touch-action: pan-y;
+  user-select: none;
 }
 
 .highlight-lightbox-dots button {
-  width: 0.5rem;
-  height: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.25rem;
   padding: 0;
   border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: transparent;
   cursor: pointer;
+  pointer-events: auto;
 }
 
-.highlight-lightbox-dots button.active {
-  background: white;
-  transform: scale(1.2);
+.highlight-lightbox-dots button:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
 }
 
 @media (max-width: 560px) {

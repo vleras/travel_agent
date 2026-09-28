@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { destinationRecommendations } from '../../data/destinations';
 import { PlaceImage, fetchPlacePhotoUrls } from '../shared/PlaceImage';
 import { planStoryPhotos } from '../../services/storyPhotoPlan';
@@ -166,6 +166,7 @@ function HighlightStory({
 }) {
   const [photos, setPhotos] = useState<string[]>([]);
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const lightboxTouchX = useRef<number | null>(null);
   const [wiki, setWiki] = useState<WikiBlurb | null>(null);
   const [loadingPhotos, setLoadingPhotos] = useState(true);
 
@@ -465,6 +466,20 @@ function HighlightStory({
               src={photos[lightbox]}
               alt={`${spot.name} photo ${lightbox + 1}`}
               referrerPolicy="no-referrer"
+              draggable={false}
+              onTouchStart={(e) => {
+                lightboxTouchX.current = e.changedTouches[0]?.clientX ?? null;
+              }}
+              onTouchCancel={() => { lightboxTouchX.current = null; }}
+              onTouchEnd={(e) => {
+                const start = lightboxTouchX.current;
+                lightboxTouchX.current = null;
+                if (start == null || photos.length < 2) return;
+                const dx = (e.changedTouches[0]?.clientX ?? start) - start;
+                if (Math.abs(dx) < 40) return;
+                setLightbox((current) => current == null ? null :
+                  (current + (dx < 0 ? 1 : -1) + photos.length) % photos.length);
+              }}
             />
             {photos.length > 1 && (
               <button
@@ -475,21 +490,23 @@ function HighlightStory({
                 ›
               </button>
             )}
+            {photos.length > 1 && (
+              <div className="place-img-dots highlight-lightbox-dots" role="group" aria-label="Choose photo">
+                {photos.map((url, i) => (
+                  <button
+                    key={url}
+                    type="button"
+                    aria-label={`Show photo ${i + 1} of ${photos.length}`}
+                    aria-current={i === lightbox ? 'true' : undefined}
+                    onClick={() => setLightbox(i)}
+                  >
+                    <span className={i === lightbox ? 'active' : ''} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div
-            className="highlight-lightbox-dots"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {photos.map((url, i) => (
-              <button
-                key={url}
-                type="button"
-                className={i === lightbox ? 'active' : ''}
-                aria-label={`Photo ${i + 1}`}
-                onClick={() => setLightbox(i)}
-              />
-            ))}
-          </div>
+
         </div>
       )}
     </div>
