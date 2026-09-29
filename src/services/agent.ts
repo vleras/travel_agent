@@ -819,6 +819,7 @@ async function attachPlacePhotos(
   attractions: ScoredAttraction[],
   city: string,
   onProgress: ProgressCb,
+  mustVisitNames: string[] = [],
 ): Promise<ScoredAttraction[]> {
   onProgress({
     step: 'act',
@@ -828,6 +829,7 @@ async function attachPlacePhotos(
 
   const enriched: ScoredAttraction[] = [];
   const batchSize = 4;
+  const photoStatus = new Map<string, boolean>(); // attraction name -> has real photos
 
   for (let i = 0; i < attractions.length; i += batchSize) {
     const batch = attractions.slice(i, i + batchSize);
@@ -837,7 +839,10 @@ async function attachPlacePhotos(
           attr.image_url &&
           !attr.image_url.includes('loremflickr.com') &&
           !attr.image_url.includes('picsum.photos');
-        if (alreadyReal) return attr;
+        if (alreadyReal) {
+          photoStatus.set(attr.name, true);
+          return attr;
+        }
 
         const photoUrls = await fetchPlacePhotoUrls(
           attr.name,
@@ -847,6 +852,8 @@ async function attachPlacePhotos(
           attr.lon,
           { localName: attr.localName, wikipediaTitle: attr.wikipediaTitle, wikidataId: attr.wikidataId },
         );
+        const hasPhotos = photoUrls.length > 0;
+        photoStatus.set(attr.name, hasPhotos);
         return {
           ...attr,
           image_url: photoUrls[0] ?? placeImageUrl(attr.name, city),
@@ -861,7 +868,36 @@ async function attachPlacePhotos(
     });
   }
 
-  return enriched;
+  // Remove places with zero real photos, but never remove user-added places
+  let cleaned = enriched.filter(
+    (attr) =>
+      photoStatus.get(attr.name) === true ||
+      mustVisitNames.some((name) => namesMatch(attr.name, name)),
+  );
+
+  // If we lost too many places, refetch new suggestions
+  if (cleaned.length < 12 && cleaned.length < attractions.length) {
+    onProgress({
+      step: 'act',
+      message: 'Refetching attractions',
+      detail: `Only ${cleaned.length} places had photos. Fetching more...`,
+    });
+    const interests = attractions
+      .map((a) => a.category)
+      .filter((c, i, arr) => arr.indexOf(c) === i)
+      .slice(0, 3);
+    const { attractions: newAttractions } = await generateAttractions(
+      city,
+      interests,
+    );
+    // Score the new attractions with coordinates
+    const { scored: newScored } = await ensureCoords(newAttractions, city, onProgress);
+    // Attach photos to new ones
+    const newWithPhotos = await attachPlacePhotos(newScored, city, onProgress, mustVisitNames);
+    cleaned.push(...newWithPhotos.slice(0, 12 - cleaned.length));
+  }
+
+  return cleaned;
 }
 
 export async function runTravelAgent(
@@ -991,6 +1027,7 @@ export async function runTravelAgent(
     scored,
     input.destination_city,
     onProgress,
+    mustVisitNames,
   );
 
   const planningPool = scoredWithPhotos;
