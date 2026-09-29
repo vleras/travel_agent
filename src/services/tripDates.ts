@@ -46,7 +46,7 @@ export function enforceDateStep<T extends TravelDateState & Parameters<typeof ha
 
 /** Deterministic answers remain usable even if the language-model request fails. */
 export function parseDateAnswer(text: string, asked: boolean, today = localToday()): Partial<TravelDateState> | null {
-  const normalized = text.trim().toLowerCase().replace(/[.!?]+$/, ‘’).replace(/[‘]/g, "’");
+  const normalized = text.trim().toLowerCase().replace(/[.!?]+$/, "").replace(/[‘]/g, "’");
   if (asked && /^(?:no|not yet|no preference|not sure|unsure|flexible|skip|i (?:don’t|do not) know|don’t know|i’m not sure|i am not sure)$/.test(normalized)) {
     return { datesAsked: true, datesStatus: ‘flexible’, travelDates: null, startDate: null };
   }
