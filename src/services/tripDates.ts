@@ -1,12 +1,12 @@
 export interface TravelDateState {
   travelDates: string | null;
   datesAsked?: boolean;
-  datesStatus?: 'provided' | 'flexible';
+  datesStatus?: "provided" | "flexible";
   startDate?: string | null;
 }
 
-export const DATES_QUESTION = 'What exact date would you like to start your trip?';
-export const READY_MESSAGE = 'You can continue to choose places.';
+export const DATES_QUESTION = "What exact date would you like to start your trip?";
+export const READY_MESSAGE = "You can continue to choose places.";
 
 /** A changed duration needs a fresh date answer, including previously flexible trips. */
 export function resetDatesForChangedDays<T extends TravelDateState & { tripLength?: { days: number } | null }>(previous: T, next: T): T {
@@ -16,7 +16,7 @@ export function resetDatesForChangedDays<T extends TravelDateState & { tripLengt
 }
 
 export function isISODate(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T12:00:00Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
@@ -26,7 +26,7 @@ export function localToday(now = new Date()): string {
 }
 
 export function hasDateAnswer(data: TravelDateState): boolean {
-  return data.datesStatus === 'flexible' || Boolean(data.travelDates?.trim());
+  return data.datesStatus === "flexible" || Boolean(data.travelDates?.trim());
 }
 
 export function hasCoreTripDetails(data: { destination?: string | null; tripLength?: unknown; hasAccommodation?: boolean | null; accommodation?: unknown }): boolean {
@@ -48,18 +48,23 @@ export function enforceDateStep<T extends TravelDateState & Parameters<typeof ha
 export function parseDateAnswer(text: string, asked: boolean, today = localToday()): Partial<TravelDateState> | null {
   const normalized = text.trim().toLowerCase().replace(/[.!?]+$/, "").replace(/[‘]/g, "’");
   if (asked && /^(?:no|not yet|no preference|not sure|unsure|flexible|skip|i (?:don’t|do not) know|don’t know|i’m not sure|i am not sure)$/.test(normalized)) {
-    return { datesAsked: true, datesStatus: ‘flexible’, travelDates: null, startDate: null };
+    return { datesAsked: true, datesStatus: "flexible", travelDates: null, startDate: null };
   }
 
   // Try ISO date format (YYYY-MM-DD)
   const exact = text.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0];
-  if (exact && isISODate(exact)) return { datesStatus: ‘provided’, travelDates: text.trim(), startDate: exact };
+  if (exact && isISODate(exact)) {
+    if (exact < today) return null; // Reject past dates
+    return { datesStatus: "provided", travelDates: text.trim(), startDate: exact };
+  }
 
   // Handle "today" or "tomorrow"
   if (/^(?:today|tomorrow)$/.test(normalized) && isISODate(today)) {
     const date = new Date(`${today}T12:00:00Z`);
-    if (normalized === ‘tomorrow’) date.setUTCDate(date.getUTCDate() + 1);
-    return { datesStatus: ‘provided’, travelDates: text.trim(), startDate: date.toISOString().slice(0, 10) };
+    if (normalized === "tomorrow") date.setUTCDate(date.getUTCDate() + 1);
+    const isoDate = date.toISOString().slice(0, 10);
+    if (isoDate < today && normalized !== "today") return null; // Reject past dates (allow "today")
+    return { datesStatus: "provided", travelDates: text.trim(), startDate: isoDate };
   }
 
   // Try natural date formats: "17 september", "september 17", "17th september", etc.
@@ -100,7 +105,8 @@ export function parseDateAnswer(text: string, asked: boolean, today = localToday
 
       const isoDate = date.toISOString().slice(0, 10);
       if (isISODate(isoDate)) {
-        return { datesStatus: ‘provided’, travelDates: text.trim(), startDate: isoDate };
+        if (isoDate < today) continue; // Skip past dates
+        return { datesStatus: "provided", travelDates: text.trim(), startDate: isoDate };
       }
     }
   }
