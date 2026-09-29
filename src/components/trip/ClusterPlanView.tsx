@@ -754,15 +754,6 @@ export function ClusterPlanView({
           <button type="button" className="btn btn-ghost" onClick={onBack}>
             ← Back
           </button>
-          <div className="trip-logo">
-            <svg viewBox="0 0 32 32" width="28" height="28">
-              <rect fill="none" width="32" height="32" />
-              <path d="M16 3 L28 9 L28 18 C28 26 16 29 16 29 C16 29 4 26 4 18 L4 9 Z" fill="#2a9d8f" opacity="0.1" stroke="#2a9d8f" strokeWidth="1.5" />
-              <path d="M16 8 L20 10 L20 15 C20 20 16 22 16 22 C16 22 12 20 12 15 L12 10 Z" fill="#2a9d8f" stroke="#2a9d8f" strokeWidth="1.5" />
-              <circle cx="16" cy="16" r="2" fill="#2a9d8f" />
-            </svg>
-            <span className="trip-logo-text">Travel Agent</span>
-          </div>
         </div>
         <div className="trip-topbar-center">
           <h1>
