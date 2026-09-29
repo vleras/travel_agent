@@ -1305,20 +1305,23 @@
 .day-weather a { color: var(--teal, #1f6f68); font-size: 0.75rem; }
 
 .day-card-hint-icon {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: white;
-  border: 1.5px solid var(--teal, #2a9d8f);
+  border: 2.5px solid var(--teal, #2a9d8f);
   color: var(--teal, #2a9d8f);
-  font-size: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
   cursor: help;
-  opacity: 0.7;
+  opacity: 0.75;
   transition: opacity 0.2s ease;
   position: relative;
+  flex-shrink: 0;
 }
 
 .day-card-hint-icon:hover {
