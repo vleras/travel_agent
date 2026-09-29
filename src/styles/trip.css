@@ -1322,49 +1322,73 @@
   border-radius: 4px;
 }
 
-.day-card-hint-icon {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: white;
-  border: 2.5px solid var(--teal, #2a9d8f);
-  color: var(--teal, #2a9d8f);
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1;
-  cursor: help;
-  opacity: 0.75;
-  transition: opacity 0.2s ease;
+.day-card-hint {
   position: relative;
+  display: inline-flex;
   flex-shrink: 0;
 }
 
-.day-card-hint-icon::after {
-  content: attr(data-tooltip);
+.day-card-hint-icon {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--teal, #1f6f68);
+  cursor: help;
+}
+
+.day-card-hint-icon svg { width: 22px; height: 22px; }
+.day-card-hint-icon:focus-visible {
+  outline: 2px solid var(--teal, #1f6f68);
+  outline-offset: 3px;
+}
+
+.day-card-hint-tooltip {
   position: absolute;
-  bottom: calc(100% + 0.5rem);
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--ink, #1a1a1a);
-  color: white;
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  font-size: 0.75rem;
+  bottom: calc(100% + 0.6rem);
+  right: -0.5rem;
+  width: min(250px, 65vw);
+  padding: 0.8rem 1rem;
+  border: 1px solid #d5e7e2;
+  border-radius: 14px;
+  background: #f2f8f5;
+  color: var(--ink, #17332f);
+  box-shadow: 0 8px 24px rgb(31 111 104 / 14%);
+  font-size: 0.85rem;
   font-weight: 400;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
   z-index: 100;
 }
 
-.day-card-hint-icon:hover::after {
-  opacity: 1;
-  visibility: visible;
+.trip-dates-tooltip {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.7rem 1rem;
+  border: 1px solid #d5e7e2;
+  border-radius: 12px;
+  background: #f2f8f5;
+  color: var(--ink, #17332f);
+  box-shadow: 0 8px 24px rgb(31 111 104 / 14%);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  z-index: 100;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 .weather-info {

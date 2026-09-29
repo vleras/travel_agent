@@ -1,5 +1,5 @@
 import { backInFlow, loadTripState, saveTripState } from '../../services/sessionState';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { getWeatherForItinerary, weatherUnavailableMessage } from '../../services/weather';
 import { isISODate, localToday } from '../../services/tripDates';
 import { TravelChatBot } from '../chat/TravelChatBot';
@@ -35,6 +35,27 @@ import {
   type DetailTarget,
 } from './PlaceDetailPane';
 import '../../styles/trip.css';
+
+function ItineraryInfo() {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="day-card-hint" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button type="button" className="day-card-hint-icon" aria-label="How to edit your itinerary" aria-describedby={open ? id : undefined}
+        onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onClick={() => setOpen(true)}
+        onKeyDown={event => { if (event.key === 'Escape') setOpen(false); }}>
+        <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+          <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeWidth="2" />
+          <circle cx="16" cy="9.5" r="1.8" fill="currentColor" />
+          <path d="M12.5 14h5v9h2v2h-7v-2h2v-7h-2z" fill="currentColor" />
+        </svg>
+      </button>
+      <span id={id} role="tooltip" className="day-card-hint-tooltip" hidden={!open}>
+        Drag cards between days, tap × to remove, then send the plan to email.
+      </span>
+    </span>
+  );
+}
 
 interface ClusterPlanViewProps {
   input: TripInput;
@@ -183,6 +204,7 @@ export function ClusterPlanView({
   onDatesChange,
 }: ClusterPlanViewProps) {
   const [dateEditorOpen, setDateEditorOpen] = useState(false);
+  const [showDateTooltip, setShowDateTooltip] = useState(false);
   const [startDate, setStartDate] = useState(input.dates_flexible ? '' : input.start_date);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const dateRequest = useRef(0);
@@ -758,26 +780,35 @@ export function ClusterPlanView({
                 <button className="btn btn-ghost" type="button" onClick={() => setDateEditorOpen(false)}>Cancel</button>
               </form>
             ) : (
-              <span
-                className="trip-dates-text"
-                onClick={() => setDateEditorOpen(true)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setDateEditorOpen(true);
-                  }
-                }}
-              >
-                {input.dates_flexible ? 'Add dates' : (() => {
-                  const start = new Date(`${input.start_date}T12:00:00`);
-                  const end = new Date(`${input.end_date}T12:00:00`);
-                  const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                  const endStr = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                  return `${startStr} - ${endStr}`;
-                })()}
-              </span>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <span
+                  className="trip-dates-text"
+                  onClick={() => setDateEditorOpen(true)}
+                  role="button"
+                  tabIndex={0}
+                  onMouseEnter={() => setShowDateTooltip(true)}
+                  onMouseLeave={() => setShowDateTooltip(false)}
+                  onFocus={() => setShowDateTooltip(true)}
+                  onBlur={() => setShowDateTooltip(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setDateEditorOpen(true);
+                    }
+                  }}
+                >
+                  {input.dates_flexible ? 'Add dates' : (() => {
+                    const start = new Date(`${input.start_date}T12:00:00`);
+                    const end = new Date(`${input.end_date}T12:00:00`);
+                    const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                    const endStr = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                    return `${startStr} - ${endStr}`;
+                  })()}
+                </span>
+                {showDateTooltip && (
+                  <span className="trip-dates-tooltip">Click to change dates</span>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -886,7 +917,6 @@ export function ClusterPlanView({
                         <span aria-hidden="true">{day.weather.icon}</span>
                         <span>{day.weather.condition}</span>
                         <strong>{day.weather.minTemp} to {day.weather.maxTemp}°C</strong>
-                        <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>
                       </>
                     ) : <span>{weatherUnavailableMessage(day.date, input.dates_flexible)}</span>}
                   </div>}
@@ -905,9 +935,7 @@ export function ClusterPlanView({
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                  <div className="day-card-hint-icon" data-tooltip="Drag cards between days, tap × to remove, then send the plan to email.">
-                    ℹ️
-                  </div>
+                  <ItineraryInfo />
                   <button
                     type="button"
                     className="btn btn-secondary"

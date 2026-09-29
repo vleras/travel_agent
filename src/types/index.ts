@@ -120,6 +120,7 @@ export interface ItineraryStop {
 }
 
 export interface DayWeather {
+  kind?: 'forecast' | 'estimate' | 'typical';
   temperature: number;
   condition: string;
   icon: string;
