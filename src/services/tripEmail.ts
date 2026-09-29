@@ -1,5 +1,6 @@
 import emailjs from '@emailjs/browser';
 import type { DayItinerary, ItineraryStop, TripInput } from '../types';
+import { clearWeatherCache, getWeatherForItinerary } from './weather';
 
 interface TripBaseLocation {
   lat: number;
@@ -166,9 +167,18 @@ export async function sendTripPlanEmail(
   }
 
   try {
+    // Clear cache and fetch fresh weather data before building email
+    clearWeatherCache();
+    const dates = itinerary.map(day => day.date);
+    const freshWeather = await getWeatherForItinerary(base.lat, base.lon, dates);
+    const freshItinerary = itinerary.map(day => {
+      const weather = freshWeather.find(w => w.date === day.date);
+      return { ...day, weather };
+    });
+
     const subject = `Your ${itinerary.length}-day plan for ${input.destination_city}`;
-    const tripHtml = buildTripEmailHTML(input, itinerary, base);
-    const tripText = buildTripEmailText(input, itinerary, base);
+    const tripHtml = buildTripEmailHTML(input, freshItinerary, base);
+    const tripText = buildTripEmailText(input, freshItinerary, base);
 
     emailjs.init(publicKey);
     await emailjs.send(serviceId, templateId, {

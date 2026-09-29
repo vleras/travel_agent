@@ -199,3 +199,9 @@ export function weatherUnavailableMessage(date: string, flexible = false): strin
   if (daysAway < 0) return 'A forecast is no longer available for this past date.';
   return 'Forecast temporarily unavailable.';
 }
+
+export function clearWeatherCache(): void {
+  forecastCache.clear();
+  estimateCache.clear();
+  typicalCache.clear();
+}
