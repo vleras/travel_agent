@@ -175,7 +175,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         setInput('');
         setMessages(current => [...current, { role: 'user', content }]);
         if (parsed.kind === 'short-link') {
-          setMessages(current => [...current, { role: 'assistant', content: 'I can't open short Google Maps links. Open it, copy the full link from the address bar (or the coordinates), and paste that here.' }]);
+          setMessages(current => [...current, { role: 'assistant', content: "I can't open short Google Maps links. Open it, copy the full link from the address bar (or the coordinates), and paste that here." }]);
           return;
         }
         setHotelMatches([]);
@@ -202,7 +202,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         }
         const ready = data.hasAccommodation === false || Boolean(data.accommodation);
         const next = { ...data, tripLength: { ...duration, flexible: Boolean(duration.range) } };
-        const nextQuestion = ready ? 'You can continue to choose places.' : data.hasAccommodation ? 'What\'s the hotel name or address?' : 'Have you already booked a place to stay?';
+        const nextQuestion = ready ? 'You can continue to choose places.' : data.hasAccommodation ? "What\'s the hotel name or address" : 'Have you already booked a place to stay?';
         updateTrip(next, nextQuestion, nextMessages);
         return;
       }
@@ -215,7 +215,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         const updated = { ...data, hasAccommodation: positiveBooking, accommodationQuery: null, accommodation: null };
         setHotelMatches([]);
         setAddressStatus('idle');
-        updateTrip(updated, positiveBooking ? 'What's the name or address of your hotel?' : READY_MESSAGE, nextMessages);
+        updateTrip(updated, positiveBooking ? "What's the name or address of your hotel?" : READY_MESSAGE, nextMessages);
         return;
       }
     }
@@ -226,7 +226,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       if (result.intent === 'change_destination' && result.data.destination) {
         const destination = await geocode(result.data.destination);
         if (!destination.result) {
-          setMessages(current => [...current, { role: 'assistant', content: 'I couldn't verify that destination. Could you give me a city, region, or country name?' }]);
+          setMessages(current => [...current, { role: 'assistant', content: "I couldn't verify that destination. Could you give me a city, region, or country name?" }]);
           return;
         }
         setHotelMatches([]);
@@ -253,12 +253,12 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       }
     } catch {
       const clarification = !data.destination
-        ? 'I didn't quite catch the destination. Which city, region, or country would you like to visit?'
+        ? "I didn't quite catch the destination. Which city, region, or country would you like to visit?"
         : !data.tripLength
-          ? 'I'd suggest 3 to 4 days. Would that work for you?'
+          ? "I'd suggest 3 to 4 days. Would that work for you?"
           : data.hasAccommodation === null
-            ? 'I didn't quite catch that. Have you already booked a place to stay? You can answer yes or no.'
-            : 'I didn't quite understand that, but we can keep going. Could you rephrase it in a few words?';
+            ? "I didn't quite catch that. Have you already booked a place to stay? You can answer yes or no."
+            : "I didn't quite understand that, but we can keep going. Could you rephrase it in a few words?";
       setMessages((current) => [...current, { role: 'assistant', content: clarification }]);
     } finally {
       setLoading(false);
@@ -313,6 +313,17 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
               onClick={() => setInputAndFocusEnd('Change to ')}
             >
               Change number of days
+            </button>
+            <button
+              type="button"
+              className="chip"
+              onClick={() => {
+                setComplete(false);
+                setMessages(current => [...current, { role: 'assistant', content: 'What else would you like to adjust or tell me about your trip?' }]);
+                setTimeout(() => textareaRef.current?.focus(), 0);
+              }}
+            >
+              Continue chat
             </button>
           </div>
           <button type="button" className="btn btn-primary interactive-ready" onClick={() => onReady(data)}>Ready to choose places</button>
