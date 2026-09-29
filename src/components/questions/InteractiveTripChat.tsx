@@ -192,15 +192,17 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
 
     if (!data.tripLength && data.destination) {
       const durationText = content;
-      if (/^\d+$/.test(durationText)) {
-        const duration = parseDaysInput(durationText);
+      // Match "4" or "Change to 4" format
+      const daysMatch = durationText.match(/^(?:change\s+to\s+)?(\d+)(?:\s+days?)?$/i);
+      if (daysMatch) {
+        const duration = parseDaysInput(daysMatch[1]);
         if (!duration) {
-          setMessages([...nextMessages, { role: 'assistant', content: 'Please choose between 1 and 30 days.' }]);
+          setMessages([...nextMessages, { role: ‘assistant’, content: ‘Please choose between 1 and 30 days.’ }]);
           return;
         }
         const ready = data.hasAccommodation === false || Boolean(data.accommodation);
         const next = { ...data, tripLength: { ...duration, flexible: Boolean(duration.range) } };
-        const nextQuestion = ready ? 'You can continue to choose places.' : data.hasAccommodation ? 'What’s the hotel name or address?' : 'Have you already booked a place to stay?';
+        const nextQuestion = ready ? ‘You can continue to choose places.’ : data.hasAccommodation ? ‘What\’s the hotel name or address?’ : ‘Have you already booked a place to stay?’;
         updateTrip(next, nextQuestion, nextMessages);
         return;
       }

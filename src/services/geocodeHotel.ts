@@ -4,6 +4,36 @@ import { cityCenter, isBigPlaceType, isRegionLevel, locateArea, locatePlaces, re
 import { parseLocationInput } from './parseLocation';
 import { matchesName } from './nameMatch';
 
+async function tomtomSearch(hotelName: string, destination: string, center?: GeocodeResult): Promise<HotelMatch[]> {
+  const key = import.meta.env.VITE_TOMTOM_KEY?.trim();
+  if (!key || !center) return [];
+  try {
+    const query = `${hotelName}, ${destination}`;
+    const url = new URL('https://api.tomtom.com/search/2/poiSearch/' + encodeURIComponent(query) + '.json');
+    url.search = new URLSearchParams({
+      lat: String(center.lat),
+      lon: String(center.lon),
+      radius: '20000',
+      limit: '5',
+      categorySet: '7314',
+      key,
+    }).toString();
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data.results ?? [])
+      .filter((r: Record<string, any>) => r.position && typeof r.position.lat === 'number' && typeof r.position.lon === 'number')
+      .map((r: Record<string, any>) => ({
+        lat: r.position.lat,
+        lon: r.position.lon,
+        name: String(r.poi?.name ?? r.address?.freeformAddress ?? hotelName),
+        display_name: String(r.address?.freeformAddress ?? r.poi?.name ?? hotelName),
+        type: 'hotel',
+        approximate: false,
+      }));
+  } catch { return []; }
+}
+
 export interface HotelMatch extends GeocodeResult { approximate: boolean }
 const cache = new Map<string, HotelMatch[]>();
 const pending = new Map<string, Promise<HotelMatch[]>>();
@@ -75,6 +105,20 @@ export function geocodeHotel(input: string, destination = ''): Promise<HotelMatc
     const comma = text.indexOf(',');
     const hotelName = comma > 0 ? text.slice(0, comma).trim() : text;
     const hint = comma > 0 ? text.slice(comma + 1).trim() : undefined;
+    // Try TomTom first if we have coordinates
+    if (city && center) {
+      const tomtomResults = await tomtomSearch(hotelName, city, center);
+      const exact = tomtomResults.filter(m => matchesName(m.name ?? m.display_name, hotelName));
+      if (exact.length) {
+        console.info('[locate]', { kind: 'accommodation', name: text, city, provider: 'tomtom', match: exact[0].display_name });
+        return exact.slice(0, 3);
+      }
+      if (tomtomResults.length) {
+        console.info('[locate]', { kind: 'accommodation', name: text, city, provider: 'tomtom', match: tomtomResults[0].display_name });
+        return tomtomResults.slice(0, 3);
+      }
+    }
+    // Fall back to existing methods
     if (city) {
       const named = await locatePlaces(hotelName, city, 'accommodation', { biasHint: hint || undefined });
       if (named.length) {
