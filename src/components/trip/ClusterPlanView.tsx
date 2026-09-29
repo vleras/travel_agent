@@ -765,6 +765,9 @@ export function ClusterPlanView({
           </div>
         </div>
         <div className="trip-topbar-center">
+          <h1>
+            {tripDays}-day plan in {input.destination_city}
+          </h1>
           <div className="trip-date-controls">
             {input.dates_flexible && <p>Add exact travel dates to see a forecast.</p>}
             {weatherLoading && <p role="status">Loading forecast...</p>}
