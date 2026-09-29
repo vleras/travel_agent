@@ -628,48 +628,46 @@
 }
 
 .trip-topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.9rem 1.25rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1.5rem;
+  padding: 1.25rem 2rem;
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   position: sticky;
   top: 0;
   z-index: 20;
+  width: 100%;
+  align-items: start;
 }
 
 .trip-topbar-left {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.5rem;
   min-width: 0;
 }
 
 .trip-topbar h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.15rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 1.4rem;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
 .trip-topbar-right {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-end;
 }
 
 .cluster-plan > .trip-topbar {
-  width: 100%;
-  max-width: 1100px;
-  margin-inline: auto;
-  padding-inline: calc(1.25rem + 1.2rem + 1px);
-  flex-wrap: wrap;
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  padding: 1.25rem 2rem;
 }
 
 .cluster-plan .trip-topbar-left {
@@ -678,7 +676,7 @@
 }
 
 .cluster-plan .trip-topbar h1 {
-  white-space: normal;
+  word-break: break-word;
 }
 
 .day-tabs {
@@ -1331,9 +1329,51 @@
   color: var(--muted);
 }
 
-.trip-date-controls { margin-top: 0.8rem; }
-.trip-date-controls p { margin: 0 0 0.5rem; color: var(--muted); }
-.trip-date-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
-.trip-date-form label { font-weight: 600; }
-.trip-date-form input { padding: 0.65rem; border: 1px solid var(--border, #d5dfdc); border-radius: 12px; font: inherit; background: white; color: var(--ink); }
-.trip-date-form span { color: var(--muted); font-size: 0.85rem; }
+.cluster-chat-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.trip-date-controls {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.trip-date-controls p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.trip-date-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.trip-date-form label {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.trip-date-form input {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border, #d5dfdc);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.85rem;
+  background: white;
+  color: var(--ink);
+}
+
+.trip-date-form span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
