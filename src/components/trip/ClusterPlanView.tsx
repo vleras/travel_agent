@@ -725,8 +725,6 @@ export function ClusterPlanView({
     );
   }
 
-  const [showDragHint, setShowDragHint] = useState(false);
-
   return (
     <div className="trip-view cluster-plan">
       <header className="trip-topbar">
@@ -745,24 +743,9 @@ export function ClusterPlanView({
           </div>
         </div>
         <div className="trip-topbar-center">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-            <h1>
-              {tripDays}-day plan in {input.destination_city}
-            </h1>
-            <button
-              type="button"
-              className="btn btn-ghost trip-hint-toggle"
-              onClick={() => setShowDragHint(!showDragHint)}
-              title="Show drag and drop instructions"
-            >
-              ℹ️
-            </button>
-          </div>
-          {showDragHint && (
-            <p className="cluster-chat-hint cluster-chat-hint--visible">
-              Drag cards between days, tap × to remove, then send the plan to email.
-            </p>
-          )}
+          <h1>
+            {tripDays}-day plan in {input.destination_city}
+          </h1>
           <div className="trip-date-controls">
             {input.dates_flexible && <p>Add exact travel dates to see a forecast.</p>}
             {weatherLoading && <p role="status">Loading forecast...</p>}
@@ -902,17 +885,22 @@ export function ClusterPlanView({
                     )}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setMapDayIndex(mapOpen ? null : index);
-                    if (!mapOpen) setShowAllMap(false);
-                    setFocusDay(index);
-                  }}
-                >
-                  {mapOpen ? 'Hide map' : 'See on map'}
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <div className="day-card-hint-icon" title="Drag cards between days, tap × to remove, then send the plan to email.">
+                    ℹ️
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setMapDayIndex(mapOpen ? null : index);
+                      if (!mapOpen) setShowAllMap(false);
+                      setFocusDay(index);
+                    }}
+                  >
+                    {mapOpen ? 'Hide map' : 'See on map'}
+                  </button>
+                </div>
               </div>
 
               {mapOpen && sights.length > 0 && (

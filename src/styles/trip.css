@@ -1304,6 +1304,44 @@
 
 .day-weather a { color: var(--teal, #1f6f68); font-size: 0.75rem; }
 
+.day-card-hint-icon {
+  font-size: 1rem;
+  cursor: help;
+  color: var(--teal, #2a9d8f);
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.day-card-hint-icon:hover {
+  opacity: 1;
+}
+
+.day-card-hint-icon::before {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--ink, #1a1a1a);
+  color: white;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 100;
+}
+
+.day-card-hint-icon:hover::before {
+  opacity: 1;
+}
+
 .weather-info {
   margin-bottom: 1.25rem;
   padding: 1rem;
