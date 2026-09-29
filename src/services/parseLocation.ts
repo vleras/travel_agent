@@ -4,15 +4,13 @@
  * Accepts decimal pairs ("35.8974, 14.5147" or "35.8974 14.5147"), labelled
  * values ("Latitude: 35.8974° N, Longitude: 14.5147° E", also across bulleted
  * lines, or "lat 35.8974 lng 14.5147"), hemisphere letters ("35.8974°N
- * 14.5147°E"; S and W are negative), DMS ("35°53'50.6"N 14°30'52.9"E") and
- * full Google Maps links (…/@lat,lon, ?q=lat,lon, !3dlat!4dlon, ll=…).
- * Short links (maps.app.goo.gl) can't be expanded in the browser, so they are
- * reported separately.
+ * 14.5147°E"; S and W are negative), DMS ("35°53'50.6"N 14°30'52.9"E"),
+ * full Google Maps links (…/@lat,lon, ?q=lat,lon, !3dlat!4dlon, ll=…) and
+ * short Google Maps share links (maps.app.goo.gl/...).
  */
 
 export type ParsedLocation =
   | { kind: 'coords'; lat: number; lon: number }
-  | { kind: 'short-link' }
   | null;
 
 const NUM = '(-?\\d{1,3}(?:\\.\\d+)?)';
@@ -94,10 +92,32 @@ function applyHemisphere({ value, hemi }: Part): number {
   return hemi === 'S' || hemi === 'W' ? -Math.abs(value) : value;
 }
 
-export function parseLocationInput(text: string): ParsedLocation {
+async function expandShortMapLink(url: string): Promise<ParsedLocation> {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(10000),
+      redirect: 'follow'
+    });
+    if (!response.ok) return null;
+    const html = await response.text();
+    // Try to extract coordinates from the expanded URL or HTML
+    const result = fromMapsLink(response.url);
+    if (result) return result;
+    // Also try to parse from HTML meta tags or script data
+    const coordMatch = html.match(/["']center["']\s*:\s*\{[^}]*["']lat["']\s*:\s*([-\d.]+)[^}]*["']lng["']\s*:\s*([-\d.]+)/);
+    if (coordMatch) return coords(parseFloat(coordMatch[1]), parseFloat(coordMatch[2]));
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function parseLocationInput(text: string): Promise<ParsedLocation> {
   const t = text.trim();
   if (!t) return null;
-  if (/(?:maps\.app\.goo\.gl|goo\.gl\/maps)\//i.test(t)) return { kind: 'short-link' };
+  if (/(?:maps\.app\.goo\.gl|goo\.gl\/maps)\//i.test(t)) {
+    return await expandShortMapLink(t);
+  }
   if (/https?:\/\//i.test(t)) return fromMapsLink(t);
 
   const clean = normalise(t);

@@ -170,14 +170,10 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     // Coordinates and Maps links are read before any search or extraction,
     // whenever a hotel location is still open (not declined, not set).
     if (data.destination && data.hasAccommodation !== false && !data.accommodation) {
-      const parsed = parseLocationInput(content);
+      const parsed = await parseLocationInput(content);
       if (parsed) {
         setInput('');
         setMessages(current => [...current, { role: 'user', content }]);
-        if (parsed.kind === 'short-link') {
-          setMessages(current => [...current, { role: 'assistant', content: "I can't open short Google Maps links. Open it, copy the full link from the address bar (or the coordinates), and paste that here." }]);
-          return;
-        }
         setHotelMatches([]);
         setAddressStatus('idle');
         setData(current => ({ ...current, hasAccommodation: true, accommodationQuery: null }));
