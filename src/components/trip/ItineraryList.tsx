@@ -130,14 +130,14 @@ export function ItineraryList({
         <div className="weather-info">
           <div className="weather-content">
             <div className="weather-icon-section">
-              <img src={day.weather.icon} alt={day.weather.condition} className="weather-icon" />
+              <span aria-hidden="true" className="weather-icon">{day.weather.icon}</span>
             </div>
             <div className="weather-details">
               <div className="weather-condition">{day.weather.condition}</div>
               <div className="weather-temps">
                 {day.weather.temperature}°C · High {day.weather.maxTemp}° · Low {day.weather.minTemp}°
               </div>
-              <div className="weather-humidity">Humidity: {day.weather.humidity}%</div>
+              {day.weather.humidity != null && <div className="weather-humidity">Humidity: {day.weather.humidity}%</div>}
             </div>
           </div>
         </div>

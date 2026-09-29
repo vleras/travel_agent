@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { tripChatHandler } from './tripChat.mjs';
+import { deepseekHandler } from './deepseek.ts';
+import { foodHandler } from './food.ts';
 
 // Load .env file
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,9 +42,13 @@ const server = createServer((req, res) => {
     return;
   }
 
-  if (req.url === '/api/deepseek/trip-chat' && req.method === 'POST') {
-    console.log('✓ Handling trip chat request...');
-    tripChatHandler(req, res, process.env).catch(err => {
+  const handler = {
+    '/api/deepseek/trip-chat': tripChatHandler,
+    '/api/deepseek/attractions': deepseekHandler,
+    '/api/deepseek/food': foodHandler,
+  }[req.url];
+  if (handler && req.method === 'POST') {
+    handler(req, res, process.env).catch(err => {
       console.error('Handler crashed:', err);
       res.writeHead(502);
       res.end(JSON.stringify({ error: 'Handler error' }));
@@ -53,7 +59,7 @@ const server = createServer((req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`✓ API server running at http://localhost:${PORT}`);
   console.log(`✓ Endpoint: POST /api/deepseek/trip-chat`);
 });

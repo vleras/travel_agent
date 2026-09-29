@@ -98,7 +98,7 @@ function buildTripEmailHTML(
 function buildTripEmailText(
   input: TripInput,
   itinerary: DayItinerary[],
-  base: TripBaseLocation,
+  _base: TripBaseLocation,
 ): string {
   const lines: string[] = [
     `Your ${itinerary.length}-day trip to ${input.destination_city}`,

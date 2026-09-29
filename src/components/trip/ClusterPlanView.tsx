@@ -1,5 +1,7 @@
 import { backInFlow, loadTripState, saveTripState } from '../../services/sessionState';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getWeatherForItinerary, weatherUnavailableMessage } from '../../services/weather';
+import { isISODate, localToday } from '../../services/tripDates';
 import { TravelChatBot } from '../chat/TravelChatBot';
 import type { ChatReply } from '../../services/chatbot';
 import { geocodeMany, type GeocodeResult } from '../../services/nominatim';
@@ -40,6 +42,7 @@ interface ClusterPlanViewProps {
   onBack: () => void;
   onHome?: () => void;
   onItineraryChange?: (itinerary: DayItinerary[]) => void;
+  onDatesChange: (input: TripInput, itinerary: DayItinerary[]) => void;
 }
 
 type LookupSession =
@@ -177,7 +180,13 @@ export function ClusterPlanView({
   onBack,
   onHome,
   onItineraryChange,
+  onDatesChange,
 }: ClusterPlanViewProps) {
+  const [dateEditorOpen, setDateEditorOpen] = useState(false);
+  const [startDate, setStartDate] = useState(input.dates_flexible ? '' : input.start_date);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const dateRequest = useRef(0);
+  useEffect(() => () => { dateRequest.current += 1; }, []);
   const [saved] = useState(loadTripState);
   const [itinerary, setItinerary] = useState<DayItinerary[]>(() =>
     ensureTripDays(
@@ -272,6 +281,25 @@ export function ClusterPlanView({
     setEmailError(null);
     setEmailSentTo(null);
     setEmailOpen(true);
+  }
+
+  async function saveDates(event: React.FormEvent) {
+    event.preventDefault();
+    if (!isISODate(startDate) || startDate < localToday()) return;
+    const request = ++dateRequest.current;
+    const dated = itineraryRef.current.map((day, index) => ({ ...day, date: toISODate(addDays(new Date(`${startDate}T12:00:00`), index)), weather: undefined }));
+    const nextInput = { ...input, start_date: startDate, end_date: dated.at(-1)!.date, dates_flexible: false };
+    setItinerary(dated);
+    itineraryRef.current = dated;
+    onDatesChange(nextInput, dated);
+    setDateEditorOpen(false);
+    setWeatherLoading(true);
+    const forecasts = await getWeatherForItinerary(baseLat, baseLon, dated.map(day => day.date));
+    if (request !== dateRequest.current) return;
+    const updated = itineraryRef.current.map(day => ({ ...day, weather: forecasts.find(forecast => forecast.date === day.date) }));
+    setItinerary(updated);
+    onDatesChange(nextInput, updated);
+    setWeatherLoading(false);
   }
 
   async function sendPlanToEmail(e: React.FormEvent) {
@@ -517,7 +545,7 @@ export function ClusterPlanView({
     loadPhotosAsync(stop.name, targetIdx);
 
     const count = next[targetIdx].stops.filter((s) => !s.is_meal).length;
-    return `Added “${stop.name}” to Day ${targetIdx + 1}, which now has ${count} stop${count === 1 ? '' : 's'}. Tap Commit when you’re done editing.`;
+    return `Added “${stop.name}” to Day ${targetIdx + 1}, which now has ${count} stop${count === 1 ? '' : 's'}.`;
   }
 
   function handleChatCommand(message: string): ChatReply | null {
@@ -714,20 +742,27 @@ export function ClusterPlanView({
             <p className="cluster-chat-hint">
               Drag cards between days, tap × to remove, then send the plan to email.
             </p>
+            <div className="trip-date-controls">
+              {input.dates_flexible && <p>Add exact travel dates to see a forecast.</p>}
+              {weatherLoading && <p role="status">Loading forecast...</p>}
+              {dateEditorOpen ? (
+                <form onSubmit={saveDates} className="trip-date-form">
+                  <label htmlFor="trip-start-date">Trip start date</label>
+                  <input id="trip-start-date" type="date" min={localToday()} required value={startDate} onChange={event => setStartDate(event.target.value)} />
+                  <span>{tripDays} days, starting on this date</span>
+                  <button className="btn btn-primary" type="submit">Save dates</button>
+                  <button className="btn btn-ghost" type="button" onClick={() => setDateEditorOpen(false)}>Cancel</button>
+                </form>
+              ) : (
+                <button className="btn btn-secondary" type="button" onClick={() => setDateEditorOpen(true)}>{input.dates_flexible ? 'Add dates' : 'Change dates'}</button>
+              )}
+            </div>
           </div>
         </div>
         <div className="trip-topbar-right">
           {commitNote && !dirty && !emailOpen && (
             <span className="cluster-commit-note">{commitNote}</span>
           )}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={!dirty}
-            onClick={commitChanges}
-          >
-            Commit
-          </button>
           <button
             type="button"
             className="btn btn-primary"
@@ -822,6 +857,17 @@ export function ClusterPlanView({
                       {sights.length} place{sights.length === 1 ? '' : 's'}
                     </span>
                   </h2>
+                  {!input.dates_flexible && <div className="day-weather" aria-label={`Weather for day ${index + 1}`}>
+                    {!input.dates_flexible && <time dateTime={day.date}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</time>}
+                    {day.weather && !input.dates_flexible ? (
+                      <>
+                        <span aria-hidden="true">{day.weather.icon}</span>
+                        <span>{day.weather.condition}</span>
+                        <strong>{day.weather.minTemp} to {day.weather.maxTemp}°C</strong>
+                        <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>
+                      </>
+                    ) : <span>{weatherUnavailableMessage(day.date, input.dates_flexible)}</span>}
+                  </div>}
                   <p>
                     {sights.length === 0
                       ? 'Empty day. Drag a place here or add one from chat'

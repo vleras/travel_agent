@@ -1,82 +1,69 @@
-interface WeatherForecast {
-  date: string;
-  temp_c: number;
-  temp_f: number;
-  condition: string;
-  icon: string;
-  maxTemp_c: number;
-  minTemp_c: number;
-  avgHumidity: number;
+import type { DayWeather } from '../types';
+import { isISODate, localToday } from './tripDates';
+
+type Forecast = DayWeather & { date: string };
+const cache = new Map<string, { expires: number; days: Forecast[] }>();
+const pending = new Map<string, Promise<Forecast[]>>();
+
+export function weatherCondition(code: number): [string, string] {
+  if (code === 0) return ['Clear sky', '☀️'];
+  if (code <= 3) return ['Partly cloudy', '⛅'];
+  if (code === 45 || code === 48) return ['Fog', '🌫️'];
+  if (code >= 51 && code <= 57) return ['Drizzle', '🌦️'];
+  if (code >= 61 && code <= 67) return ['Rain', '🌧️'];
+  if (code >= 71 && code <= 77) return ['Snow', '🌨️'];
+  if (code >= 80 && code <= 82) return ['Rain showers', '🌦️'];
+  if (code === 85 || code === 86) return ['Snow showers', '🌨️'];
+  if (code >= 95 && code <= 99) return ['Thunderstorms', '⛈️'];
+  return ['Weather conditions', '🌡️'];
 }
 
-export interface DayWeather {
-  date: string;
-  temperature: number;
-  condition: string;
-  icon: string;
-  maxTemp: number;
-  minTemp: number;
-  humidity: number;
-}
-
-async function fetchWeatherData(destination: string, startDate: string, endDate: string): Promise<WeatherForecast[]> {
-  const apiKey = 'ca3e5db0e6d84ffaa8a182254252809'; // WeatherAPI.com free tier key
-
-  try {
-    // Calculate days needed
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const daysNeeded = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-    // WeatherAPI.com free tier supports up to 10 days forecast
-    const days = Math.min(daysNeeded, 10);
-
-    const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${encodeURIComponent(destination)}&days=${days}&aqi=no`;
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error('Weather API error:', response.status);
-      return [];
+/** Open-Meteo returns destination-local calendar dates; never match forecasts by array position. */
+export async function getWeatherForItinerary(lat: number, lon: number, dates: string[]): Promise<Forecast[]> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return [];
+  const today = localToday();
+  const horizon = new Date(`${today}T12:00:00Z`);
+  horizon.setUTCDate(horizon.getUTCDate() + 16);
+  // Do not query distant trips. Leave one day of timezone tolerance and filter against provider dates below.
+  if (!dates.some(date => isISODate(date) && date >= today && date <= horizon.toISOString().slice(0, 10))) return [];
+  const key = `weather-v2|${lat.toFixed(3)}|${lon.toFixed(3)}|${today}`;
+  const saved = cache.get(key);
+  let days = saved && saved.expires > Date.now() ? saved.days : null;
+  if (!days) {
+    let work = pending.get(key);
+    if (!work) {
+      work = (async () => {
+        try {
+          const url = new URL('https://api.open-meteo.com/v1/forecast');
+          url.search = new URLSearchParams({ latitude: String(lat), longitude: String(lon), daily: 'weather_code,temperature_2m_max,temperature_2m_min', timezone: 'auto', forecast_days: '16' }).toString();
+          const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!response.ok) return [];
+          const data = await response.json() as { daily?: { time?: string[]; weather_code?: (number | null)[]; temperature_2m_max?: (number | null)[]; temperature_2m_min?: (number | null)[] } };
+          const daily = data.daily;
+          const forecasts = (daily?.time ?? []).flatMap((date, i): Forecast[] => {
+            const max = daily?.temperature_2m_max?.[i];
+            const min = daily?.temperature_2m_min?.[i];
+            const code = daily?.weather_code?.[i];
+            if (!isISODate(date) || typeof max !== 'number' || !Number.isFinite(max) || typeof min !== 'number' || !Number.isFinite(min) || typeof code !== 'number') return [];
+            const [condition, icon] = weatherCondition(code);
+            return [{ date, temperature: Math.round((max + min) / 2), minTemp: Math.round(min), maxTemp: Math.round(max), condition, icon }];
+          });
+          if (forecasts.length) cache.set(key, { days: forecasts, expires: Date.now() + 30 * 60 * 1000 });
+          return forecasts;
+        } catch { return []; }
+        finally { pending.delete(key); }
+      })();
+      pending.set(key, work);
     }
-
-    const data = await response.json() as {
-      forecast?: { forecastday?: Array<{ date: string; day: { avgtemp_c: number; condition: { text: string; icon: string }; maxtemp_c: number; mintemp_c: number; avghumidity: number } }> };
-    };
-
-    if (!data.forecast?.forecastday) {
-      return [];
-    }
-
-    return data.forecast.forecastday.map((day) => ({
-      date: day.date,
-      temp_c: Math.round(day.day.avgtemp_c),
-      temp_f: Math.round((day.day.avgtemp_c * 9 / 5) + 32),
-      condition: day.day.condition.text,
-      icon: day.day.condition.icon,
-      maxTemp_c: Math.round(day.day.maxtemp_c),
-      minTemp_c: Math.round(day.day.mintemp_c),
-      avgHumidity: Math.round(day.day.avghumidity),
-    }));
-  } catch (error) {
-    console.error('Failed to fetch weather:', error);
-    return [];
+    days = await work;
   }
+  return days.filter(day => dates.includes(day.date));
 }
 
-export async function getWeatherForItinerary(
-  destination: string,
-  startDate: string,
-  endDate: string
-): Promise<DayWeather[]> {
-  const forecasts = await fetchWeatherData(destination, startDate, endDate);
-
-  return forecasts.map((f) => ({
-    date: f.date,
-    temperature: f.temp_c,
-    condition: f.condition,
-    icon: f.icon,
-    maxTemp: f.maxTemp_c,
-    minTemp: f.minTemp_c,
-    humidity: f.avgHumidity,
-  }));
+export function weatherUnavailableMessage(date: string, flexible = false): string {
+  if (flexible) return 'Add exact travel dates to see a forecast.';
+  const daysAway = Math.round((Date.parse(`${date}T12:00:00Z`) - Date.parse(`${localToday()}T12:00:00Z`)) / 86400000);
+  if (daysAway >= 16) return 'Forecast available closer to your trip, up to 16 days ahead.';
+  if (daysAway < 0) return 'A forecast is no longer available for this past date.';
+  return 'Forecast temporarily unavailable.';
 }

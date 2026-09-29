@@ -125,7 +125,7 @@ export interface DayWeather {
   icon: string;
   maxTemp: number;
   minTemp: number;
-  humidity: number;
+  humidity?: number;
 }
 
 export interface DayItinerary {

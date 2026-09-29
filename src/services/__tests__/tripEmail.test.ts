@@ -13,6 +13,7 @@ describe('tripEmail', () => {
     end_date: '2024-12-17',
     hotel_address: 'Hotel Le Marais',
     accommodation: null,
+    suggested_area: null,
     interests: ['museums', 'art'],
     custom_preferences: null,
     must_visit_places: undefined,

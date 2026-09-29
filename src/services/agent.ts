@@ -1086,11 +1086,11 @@ export async function runTravelAgent(
   // Fetch weather data if start/end dates are available
   let itineraryWithWeather = itinerary;
   try {
-    if (input.start_date && input.end_date) {
+    if (input.start_date && input.end_date && !input.dates_flexible) {
       const weatherData = await getWeatherForItinerary(
-        input.destination_city,
-        input.start_date,
-        input.end_date,
+        location.destination_lat,
+        location.destination_lon,
+        itinerary.map(day => day.date),
       );
       // Attach weather to each day
       itineraryWithWeather = itinerary.map((day) => {

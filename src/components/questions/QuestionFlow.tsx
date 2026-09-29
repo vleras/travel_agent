@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { destinationRecommendations, withoutFoodPlaces } from '../../data/destinations';
 import { fallbackAttractions } from '../../data/fallbackAttractions';
 import { parseDaysInput } from '../../data/scheduleOptions';
+import { isISODate } from '../../services/tripDates';
 import { addDays, nextWeekendStart, toISODate } from '../../services/geo';
 import { generateAttractions } from '../../services/gemini';
 import { autocompletePlaces, geocode, type GeocodeResult } from '../../services/nominatim';
@@ -385,8 +386,9 @@ export function QuestionFlow({
 
   function finish() {
     if (!parsedDays || (!chatData && !notBooked && !accommodation)) return;
-    const planningStart = toISODate(weekend);
-    const planningEnd = toISODate(addDays(weekend, parsedDays.days - 1));
+    const exactStart = isISODate(chatData?.startDate) ? chatData.startDate : null;
+    const planningStart = exactStart ?? toISODate(weekend);
+    const planningEnd = toISODate(addDays(new Date(`${planningStart}T12:00:00`), parsedDays.days - 1));
 
     const placeNote =
       selectedPlaces.length > 0
@@ -406,7 +408,7 @@ export function QuestionFlow({
       days_range: parsedDays.range,
       start_date: planningStart,
       end_date: planningEnd,
-      dates_flexible: true,
+      dates_flexible: !exactStart,
       hotel_address: notBooked ? null : accommodation?.address ?? null,
       hotel_location: notBooked || !accommodation ? null : { lat: accommodation.latitude, lon: accommodation.longitude, display_name: accommodation.address },
       accommodation: notBooked ? null : accommodation,

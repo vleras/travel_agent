@@ -1,6 +1,7 @@
 import type { Interest, TripAccommodation } from '../types';
+import { enforceDateStep, hasCoreTripDetails, hasDateAnswer, isISODate, localToday, parseDateAnswer, resetDatesForChangedDays, type TravelDateState } from './tripDates';
 
-export interface TripChatData {
+export interface TripChatData extends TravelDateState {
   destination: string | null;
   tripLength: { days: number; range: [number, number] | null; flexible: boolean } | null;
   hasAccommodation: boolean | null;
@@ -14,7 +15,7 @@ export interface TripChatData {
 }
 
 export interface TripChatMessage { role: 'user' | 'assistant'; content: string }
-export type TripChatIntent = 'hotel_answer' | 'change_destination' | 'change_days' | 'change_hotel' | 'skip_hotel' | 'question' | 'other';
+export type TripChatIntent = 'hotel_answer' | 'change_destination' | 'change_days' | 'change_hotel' | 'skip_hotel' | 'dates_answer' | 'question' | 'other';
 export interface TripChatResult { assistantMessage: string; data: TripChatData; missing: string[]; complete: boolean; intent: TripChatIntent; hotelName?: string | null; area?: string | null }
 
 const allowedInterests = new Set<Interest>(['museums','food','art','nature','nightlife','shopping','beach','architecture','photography']);
@@ -25,7 +26,7 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
     try {
       response = await fetch('/api/deepseek/trip-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, current }), signal: AbortSignal.timeout(65000),
+        body: JSON.stringify({ messages, current, today: localToday() }), signal: AbortSignal.timeout(65000),
       });
       if (response.ok || response.status < 500) break;
     } catch {
@@ -35,7 +36,7 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   if (!response?.ok) throw new Error('Trip chat request failed');
   const result = await response.json() as TripChatResult;
   if (!result.data || typeof result.assistantMessage !== 'string') throw new Error('Invalid trip chat response');
-  const intents: TripChatIntent[] = ['hotel_answer', 'change_destination', 'change_days', 'change_hotel', 'skip_hotel', 'question', 'other'];
+  const intents: TripChatIntent[] = ['hotel_answer', 'change_destination', 'change_days', 'change_hotel', 'skip_hotel', 'dates_answer', 'question', 'other'];
   if (!intents.includes(result.intent)) throw new Error('Missing trip chat intent');
   const extracted = result.data;
   let data = { ...current };
@@ -52,6 +53,16 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   } else if (!current.destination || !current.tripLength) {
     data = { ...current, destination: current.destination ?? extracted.destination, tripLength: current.tripLength ?? extracted.tripLength };
   }
+  const lastMessage = messages.filter(message => message.role === 'user').at(-1)?.content ?? '';
+  const deterministicDates = parseDateAnswer(lastMessage, Boolean(current.datesAsked && !hasDateAnswer(current)));
+  if (deterministicDates) data = { ...data, ...deterministicDates };
+  else if (result.intent === 'dates_answer' && current.datesAsked && extracted.datesStatus === 'flexible') {
+    data = { ...data, datesStatus: 'flexible', travelDates: null, startDate: null };
+  }
+  else if (typeof extracted.travelDates === 'string' && extracted.travelDates.trim() && (result.intent === 'dates_answer' || lastMessage.toLowerCase().includes(extracted.travelDates.toLowerCase()))) {
+    data = { ...data, travelDates: extracted.travelDates.trim(), datesStatus: 'provided', startDate: isISODate(extracted.startDate) ? extracted.startDate : null };
+  }
+  data = resetDatesForChangedDays(current, data);
   result.data = data;
   let invalidTripLength = false;
   if (data.tripLength) {
@@ -65,7 +76,11 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
     result.assistantMessage = 'Choose between 1 and 30 days. If you’re unsure, I’d suggest 3 to 4 days.';
     result.missing = Array.from(new Set([...(result.missing ?? []), 'tripLength']));
   }
-  result.complete = Boolean(data.destination?.trim() && data.tripLength && data.hasAccommodation !== null && (!data.hasAccommodation || Boolean(data.accommodation)));
+  const gated = enforceDateStep(data, result.assistantMessage);
+  result.data = gated.data;
+  result.assistantMessage = gated.assistantMessage;
+  result.complete = gated.complete;
+  if (hasCoreTripDetails(data) && !hasDateAnswer(data)) result.missing = ['travelDates'];
   if (result.complete) {
     result.missing = [];
   }

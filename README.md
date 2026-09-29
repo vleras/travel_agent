@@ -11,6 +11,8 @@ cp .env.example .env
 npm run dev
 ```
 
+In a second terminal, run `npm run server` for the API on port 5174. Use Node.js 22.18 or newer, which supports the backend's TypeScript imports. Restart the API server after changing backend code or `.env`.
+
 Without an AI key, the agent uses curated attractions for Rome, Tokyo, Barcelona, Bangkok, and Paris — the full clustering / scoring / revision loop still runs.
 
 ## Stack (zero-cost APIs)
@@ -55,11 +57,15 @@ src/
 
 ## DeepSeek integration
 
-DeepSeek generates attractions through `POST /api/deepseek/attractions`. The Vite development and preview servers run this endpoint; the API key stays on the server. Set `DEEPSEEK_MODEL` to override the default model. Restart Vite after changing `.env`.
+The standalone API server handles `/api/deepseek/trip-chat`, `/api/deepseek/attractions`, and `/api/deepseek/food`. Vite proxies `/api` to port 5174 during development; the API key stays on the backend. Set `DEEPSEEK_MODEL` to override the default model. Static previews need a separately configured API route.
 
 For production, deploy `server/deepseek.ts` in a Node backend and route `/api/deepseek/attractions` to it, passing server environment variables to `deepseekHandler`. A static `dist` deployment alone cannot run this endpoint. Protect a public deployment with authentication and rate limits to control API spending.
 
-The travel chatbot uses local intent handlers; this integration powers attraction recommendations. Explicit must-visit selections retain the existing behavior and skip AI-generated filler.
+The chatbot combines local short-answer handlers with DeepSeek extraction. Both paths require dates to be addressed after accommodation, but declining dates is allowed. API logs show parsed intent and completion state; local shortcuts do not make an API request. Explicit must-visit selections retain the existing behavior and skip AI-generated filler.
+
+## Daily weather
+
+Open-Meteo provides daily conditions and minimum/maximum temperatures without an API key. Forecasts use the destination coordinates and match each itinerary's exact calendar date. Dates supplied in chat carry through to planning and email. Flexible dates, past dates, trips beyond the 16-day forecast window, and network failures show an explanatory message in each day header instead of unrelated weather. Forecast failures never block planning.
 
 ## Email sending with EmailJS
 

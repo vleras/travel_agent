@@ -7,6 +7,7 @@ import { sanitizeAssistantText } from '../../services/sanitizeAssistantText';
 import { parseLocationInput } from '../../services/parseLocation';
 import { cityCenter, reverseLabel } from '../../services/sightLocation';
 import { haversineKm } from '../../services/geo';
+import { DATES_QUESTION, READY_MESSAGE, enforceDateStep, hasCoreTripDetails, hasDateAnswer, parseDateAnswer, resetDatesForChangedDays } from '../../services/tripDates';
 
 export interface TripChatState {
   messages: TripChatMessage[]; data: TripChatData; complete: boolean;
@@ -34,7 +35,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   const [data, setData] = useState<TripChatData>(() => savedState?.data ?? emptyData(initialDestination));
   const [input, setInput] = useState(savedState?.draft ?? '');
   const [loading, setLoading] = useState(false);
-  const [complete, setComplete] = useState(() => savedState?.complete ?? false);
+  const [complete, setComplete] = useState(() => Boolean(savedState?.complete && hasDateAnswer(savedState.data)));
   const [error, setError] = useState('');
   const [addressStatus, setAddressStatus] = useState<'idle' | 'checking' | 'failed'>(savedState?.addressStatus === 'failed' ? 'failed' : 'idle');
   const [hotelMatches, setHotelMatches] = useState<HotelMatch[]>(savedState?.hotelMatches ?? []);
@@ -43,6 +44,22 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   const awaitingHotel = Boolean(data.hasAccommodation && !data.accommodation && data.destination && data.tripLength);
   // Offer exact-location options when we only found an area, or nothing.
   const offerExact = awaitingHotel && (hotelMatches.some((m) => m.approximate) || addressStatus === 'failed');
+
+  function updateTrip(next: TripChatData, message: string, history = messages) {
+    const result = enforceDateStep(resetDatesForChangedDays(data, next), message);
+    setData(result.data);
+    setComplete(result.complete);
+    setMessages([...history, { role: 'assistant', content: result.assistantMessage }]);
+  }
+
+  // Upgrade previously saved conversations that were completed before dates were asked.
+  useEffect(() => {
+    if (hasCoreTripDetails(data) && !hasDateAnswer(data) && !data.datesAsked) {
+      setData(current => ({ ...current, datesAsked: true }));
+      setComplete(false);
+      setMessages(current => [...current, { role: 'assistant', content: DATES_QUESTION }]);
+    }
+  }, [data]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
   useEffect(() => { onStateChange({ messages, data, complete, draft: input, hotelMatches, addressStatus }); }, [messages, data, complete, input, hotelMatches, addressStatus, onStateChange]);
@@ -82,11 +99,10 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   }, [data.accommodationQuery, data.destination, data.hasAccommodation, data.accommodation]);
 
   function chooseHotel(match: HotelMatch) {
-    setData(current => ({ ...current, accommodation: { address: match.display_name, latitude: match.lat, longitude: match.lon } }));
+    const next = { ...data, accommodation: { address: match.display_name, latitude: match.lat, longitude: match.lon } };
     setHotelMatches([]);
     setAddressStatus('idle');
-    setComplete(Boolean(data.destination && data.tripLength));
-    setMessages(current => [...current, { role: 'user', content: match.approximate ? `Use the center of ${match.display_name}` : `Yes, ${match.display_name}` }, { role: 'assistant', content: 'Location confirmed. You can continue to choose places.' }]);
+    updateTrip(next, READY_MESSAGE, [...messages, { role: 'user', content: match.approximate ? `Use the center of ${match.display_name}` : `Yes, ${match.display_name}` }]);
   }
 
   /** Pasted coordinates or a Google Maps link. Must lie near the destination. */
@@ -130,14 +146,25 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   function skipHotel() {
     setHotelMatches([]);
     setAddressStatus('idle');
-    setData(current => ({ ...current, hasAccommodation: false, accommodationQuery: null, accommodation: null }));
-    setComplete(Boolean(data.destination && data.tripLength));
-    setMessages(current => [...current, { role: 'assistant', content: 'We’ll continue without a hotel location.' }]);
+    updateTrip({ ...data, hasAccommodation: false, accommodationQuery: null, accommodation: null }, READY_MESSAGE);
   }
 
   async function send() {
     const content = input.trim();
     if (!content || loading || addressStatus === 'checking') return;
+    if (hasCoreTripDetails(data) && data.datesAsked && !hasDateAnswer(data)) {
+      const dateAnswer = parseDateAnswer(content, true);
+      if (dateAnswer) {
+        setInput('');
+        updateTrip({ ...data, ...dateAnswer }, READY_MESSAGE, [...messages, { role: 'user', content }]);
+        return;
+      }
+      if (/^yes[.!]?$/i.test(content)) {
+        setInput('');
+        setMessages([...messages, { role: 'user', content }, { role: 'assistant', content: 'What date would you like to start your trip?' }]);
+        return;
+      }
+    }
     if (hotelMatches.length === 1 && /^yes$/i.test(content)) { setInput(''); chooseHotel(hotelMatches[0]); return; }
     if (hotelMatches.length && /^no$/i.test(content)) { setInput(''); rejectHotel(); return; }
     // Coordinates and Maps links are read before any search or extraction,
@@ -172,10 +199,9 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
           return;
         }
         const ready = data.hasAccommodation === false || Boolean(data.accommodation);
-        setData(current => ({ ...current, tripLength: { ...duration, flexible: Boolean(duration.range) } }));
-        setComplete(ready);
+        const next = { ...data, tripLength: { ...duration, flexible: Boolean(duration.range) } };
         const nextQuestion = ready ? 'You can continue to choose places.' : data.hasAccommodation ? 'What’s the hotel name or address?' : 'Have you already booked a place to stay?';
-        setMessages([...nextMessages, { role: 'assistant', content: nextQuestion }]);
+        updateTrip(next, nextQuestion, nextMessages);
         return;
       }
     }
@@ -187,15 +213,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         const updated = { ...data, hasAccommodation: positiveBooking, accommodationQuery: null, accommodation: null };
         setHotelMatches([]);
         setAddressStatus('idle');
-        const readyWithoutAddress = negativeBooking && Boolean(updated.destination && updated.tripLength);
-        setData(updated);
-        setComplete(readyWithoutAddress);
-        setMessages([...nextMessages, {
-          role: 'assistant',
-          content: positiveBooking
-            ? 'What’s the name or address of your hotel?'
-            : 'You can continue to choose places.',
-        }]);
+        updateTrip(updated, positiveBooking ? 'What’s the name or address of your hotel?' : READY_MESSAGE, nextMessages);
         return;
       }
     }
@@ -223,7 +241,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
       }
       setData(result.data);
       // After a change is accepted, stay in chat mode to continue conversation naturally
-      setComplete(['change_destination', 'change_days'].includes(result.intent) ? false : result.complete);
+      setComplete(result.complete);
       if (!(['hotel_answer', 'change_hotel'].includes(result.intent) && result.data.accommodationQuery)) {
         let msg = result.assistantMessage;
         if (result.complete && !(['change_destination', 'change_days'].includes(result.intent))) {

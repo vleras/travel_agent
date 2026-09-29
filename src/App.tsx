@@ -188,6 +188,10 @@ function TripApp() {
         <ClusterPlanView
           input={input}
           output={output}
+          onDatesChange={(nextInput, itinerary) => {
+            setInput(nextInput);
+            setOutput(prev => prev ? { ...prev, itinerary } : prev);
+          }}
           onBack={backInFlow}
           onHome={resetToEntry}
           onItineraryChange={(itinerary) => {
