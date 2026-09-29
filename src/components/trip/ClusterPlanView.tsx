@@ -758,7 +758,18 @@ export function ClusterPlanView({
                 <button className="btn btn-ghost" type="button" onClick={() => setDateEditorOpen(false)}>Cancel</button>
               </form>
             ) : (
-              <button className="btn btn-secondary" type="button" onClick={() => setDateEditorOpen(true)}>
+              <span
+                className="trip-dates-text"
+                onClick={() => setDateEditorOpen(true)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setDateEditorOpen(true);
+                  }
+                }}
+              >
                 {input.dates_flexible ? 'Add dates' : (() => {
                   const start = new Date(`${input.start_date}T12:00:00`);
                   const end = new Date(`${input.end_date}T12:00:00`);
@@ -766,7 +777,7 @@ export function ClusterPlanView({
                   const endStr = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
                   return `${startStr} - ${endStr}`;
                 })()}
-              </button>
+              </span>
             )}
           </div>
         </div>

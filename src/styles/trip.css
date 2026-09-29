@@ -1304,6 +1304,23 @@
 
 .day-weather a { color: var(--teal, #1f6f68); font-size: 0.75rem; }
 
+.trip-dates-text {
+  color: var(--teal, #2a9d8f);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.trip-dates-text:hover {
+  opacity: 0.8;
+}
+
+.trip-dates-text:focus {
+  outline: 2px solid var(--teal, #2a9d8f);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .day-card-hint-icon {
   width: 24px;
   height: 24px;
