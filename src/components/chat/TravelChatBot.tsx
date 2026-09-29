@@ -244,24 +244,6 @@ export function TravelChatBot({
         </div>
       )}
 
-      <button
-        type="button"
-        className="chat-fab"
-        aria-label={open ? 'Close chat' : 'Open chat'}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {open ? (
-          <span aria-hidden>×</span>
-        ) : (
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H10l-4.2 3.2a.8.8 0 0 1-1.3-.6V16h-.5A2.5 2.5 0 0 1 4 13.5v-7Z"
-              fill="currentColor"
-            />
-          </svg>
-        )}
-      </button>
     </div>
   );
 }
