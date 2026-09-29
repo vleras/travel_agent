@@ -180,6 +180,15 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         await usePinnedLocation(parsed.lat, parsed.lon, content.includes('http') ? 'google-maps-link' : 'coordinates');
         return;
       }
+      // If URL was provided but couldn't be parsed, give feedback
+      if (/^https?:\/\/|maps\.app\.goo\.gl/i.test(content)) {
+        setInput('');
+        setMessages(current => [...current,
+          { role: 'user', content },
+          { role: 'assistant', content: 'I couldn\'t parse that Google Maps link. Try pasting coordinates instead (e.g., 48.8566, 2.3522) or the full URL from your address bar.' }
+        ]);
+        return;
+      }
     }
     const nextMessages: TripChatMessage[] = [...messages, { role: 'user', content }];
     setMessages(nextMessages);
