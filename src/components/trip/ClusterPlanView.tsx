@@ -758,7 +758,15 @@ export function ClusterPlanView({
                 <button className="btn btn-ghost" type="button" onClick={() => setDateEditorOpen(false)}>Cancel</button>
               </form>
             ) : (
-              <button className="btn btn-secondary" type="button" onClick={() => setDateEditorOpen(true)}>{input.dates_flexible ? 'Add dates' : 'Change dates'}</button>
+              <button className="btn btn-secondary" type="button" onClick={() => setDateEditorOpen(true)}>
+                {input.dates_flexible ? 'Add dates' : (() => {
+                  const start = new Date(`${input.start_date}T12:00:00`);
+                  const end = new Date(`${input.end_date}T12:00:00`);
+                  const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                  const endStr = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                  return `${startStr} - ${endStr}`;
+                })()}
+              </button>
             )}
           </div>
         </div>
