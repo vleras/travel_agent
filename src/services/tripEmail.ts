@@ -155,41 +155,60 @@ export async function sendTripPlanEmail(
     return { ok: false, error: 'Enter a valid email address.' };
   }
 
+  // Clear cache and fetch fresh weather data before building email
+  clearWeatherCache();
+  const dates = itinerary.map(day => day.date);
+  const freshWeather = await getWeatherForItinerary(base.lat, base.lon, dates);
+  const freshItinerary = itinerary.map(day => {
+    const weather = freshWeather.find(w => w.date === day.date);
+    return { ...day, weather };
+  });
+
+  const subject = `Your ${itinerary.length}-day plan for ${input.destination_city}`;
+  const tripHtml = buildTripEmailHTML(input, freshItinerary, base);
+  const tripText = buildTripEmailText(input, freshItinerary, base);
+
   const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID;
   const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
   const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
 
-  if (!serviceId || !templateId || !publicKey) {
-    return {
-      ok: false,
-      error: 'Email service is not configured. Contact support.',
-    };
+  // Try EmailJS first if configured
+  if (serviceId && templateId && publicKey) {
+    try {
+      emailjs.init(publicKey);
+      await emailjs.send(serviceId, templateId, {
+        to_email: trimmed,
+        trip_subject: subject,
+        trip_html: tripHtml,
+        trip_text: tripText,
+      });
+      return { ok: true };
+    } catch (error) {
+      console.error('EmailJS send failed:', error);
+      // Fall through to FormSubmit if EmailJS fails
+    }
   }
 
+  // Fallback to FormSubmit (free, no configuration needed)
   try {
-    // Clear cache and fetch fresh weather data before building email
-    clearWeatherCache();
-    const dates = itinerary.map(day => day.date);
-    const freshWeather = await getWeatherForItinerary(base.lat, base.lon, dates);
-    const freshItinerary = itinerary.map(day => {
-      const weather = freshWeather.find(w => w.date === day.date);
-      return { ...day, weather };
+    const formData = new FormData();
+    formData.append('email', trimmed);
+    formData.append('subject', subject);
+    formData.append('message', tripText);
+    formData.append('_subject', subject);
+
+    const response = await fetch('https://formsubmit.co/ajax/travel-itinerary@noreply.local', {
+      method: 'POST',
+      body: formData,
     });
 
-    const subject = `Your ${itinerary.length}-day plan for ${input.destination_city}`;
-    const tripHtml = buildTripEmailHTML(input, freshItinerary, base);
-    const tripText = buildTripEmailText(input, freshItinerary, base);
+    if (!response.ok) {
+      throw new Error(`FormSubmit returned ${response.status}`);
+    }
 
-    emailjs.init(publicKey);
-    await emailjs.send(serviceId, templateId, {
-      to_email: trimmed,
-      trip_subject: subject,
-      trip_html: tripHtml,
-      trip_text: tripText,
-    });
     return { ok: true };
   } catch (error) {
-    console.error('EmailJS send failed:', error);
+    console.error('Email send failed:', error);
     return {
       ok: false,
       error:
