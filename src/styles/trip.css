@@ -1342,6 +1342,31 @@
   flex-shrink: 0;
 }
 
+.day-card-hint-icon::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink, #1a1a1a);
+  color: white;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 100;
+}
+
+.day-card-hint-icon:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
 .weather-info {
   margin-bottom: 1.25rem;
   padding: 1rem;

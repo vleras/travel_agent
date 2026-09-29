@@ -905,7 +905,7 @@ export function ClusterPlanView({
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                  <div className="day-card-hint-icon" title="Drag cards between days, tap × to remove, then send the plan to email.">
+                  <div className="day-card-hint-icon" data-tooltip="Drag cards between days, tap × to remove, then send the plan to email.">
                     ℹ️
                   </div>
                   <button
