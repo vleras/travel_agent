@@ -18,3 +18,14 @@ it('forces the date question even when DeepSeek prematurely completes with inven
   expect(JSON.parse(end.mock.calls[0][0])).toMatchObject({ complete: false, assistantMessage: 'What exact date would you like to start your trip?', data: { datesAsked: true, travelDates: null, startDate: null } });
   expect(log).toHaveBeenCalledWith('[trip-chat]', expect.objectContaining({ stage: 'parsed', modelComplete: true, complete: false }));
 });
+
+it('rejects a past model date and keeps the accommodation and duration for the next answer', async () => {
+  const current = { destination: 'Prague', tripLength: { days: 4 }, hasAccommodation: false, accommodation: null, datesAsked: true, travelDates: null };
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ intent: 'dates_answer', assistantMessage: 'Ready', data: { ...current, travelDates: 'last Monday', startDate: '2026-09-28' }, complete: true }) } }] })));
+  vi.spyOn(console, 'info').mockImplementation(() => {});
+  const req = Readable.from([JSON.stringify({ today: '2026-09-29', current, messages: [{ role: 'user', content: 'last Monday' }] })]) as IncomingMessage;
+  req.method = 'POST';
+  const end = vi.fn();
+  await tripChatHandler(req, { writeHead: vi.fn(), end } as unknown as ServerResponse, { DEEPSEEK_API_KEY: 'test-only' });
+  expect(JSON.parse(end.mock.calls[0][0])).toMatchObject({ complete: false, assistantMessage: expect.stringContaining('already passed'), data: { destination: 'Prague', tripLength: { days: 4 }, hasAccommodation: false, startDate: null, travelDates: null, dateError: 'past' } });
+});

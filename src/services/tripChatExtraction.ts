@@ -56,11 +56,14 @@ export async function extractTripChat(messages: TripChatMessage[], current: Trip
   const lastMessage = messages.filter(message => message.role === 'user').at(-1)?.content ?? '';
   const deterministicDates = parseDateAnswer(lastMessage, Boolean(current.datesAsked && !hasDateAnswer(current)));
   if (deterministicDates) data = { ...data, ...deterministicDates };
+  else if (result.intent === 'dates_answer' && extracted.dateError) {
+    data = { ...data, travelDates: null, startDate: null, datesStatus: undefined, dateError: extracted.dateError };
+  }
   else if (result.intent === 'dates_answer' && current.datesAsked && extracted.datesStatus === 'flexible') {
     data = { ...data, datesStatus: 'flexible', travelDates: null, startDate: null };
   }
   else if (typeof extracted.travelDates === 'string' && extracted.travelDates.trim() && (result.intent === 'dates_answer' || lastMessage.toLowerCase().includes(extracted.travelDates.toLowerCase()))) {
-    data = { ...data, travelDates: extracted.travelDates.trim(), datesStatus: 'provided', startDate: isISODate(extracted.startDate) ? extracted.startDate : null };
+    data = { ...data, travelDates: extracted.travelDates.trim(), datesStatus: 'provided', startDate: isISODate(extracted.startDate) ? extracted.startDate : null, dateError: extracted.startDate && !isISODate(extracted.startDate) ? 'invalid' : undefined };
   }
   data = resetDatesForChangedDays(current, data);
   result.data = data;

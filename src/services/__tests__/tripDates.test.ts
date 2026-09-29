@@ -1,10 +1,28 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DATES_QUESTION, enforceDateStep, isISODate, parseDateAnswer } from '../tripDates';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DATES_QUESTION, PAST_DATE_MESSAGE, enforceDateStep, isISODate, parseDateAnswer } from '../tripDates';
 import { extractTripChat, type TripChatData } from '../tripChatExtraction';
 
 const ready: TripChatData = { destination: 'Prague', tripLength: { days: 4, range: null, flexible: false }, hasAccommodation: false, accommodation: null, accommodationQuery: null, accommodationPreference: null, interests: [], budget: null, travelDates: null, extraPreferences: [] };
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-29T12:00:00Z')); });
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 describe('required date question with optional dates', () => {
+  it.each(['7 september', 'September 7', '2026-09-07'])('keeps the chat open for %s and accepts a corrected date', answer => {
+    const rejected = enforceDateStep({ ...ready, ...parseDateAnswer(answer, true) }, 'Ready');
+    expect(rejected).toMatchObject({ complete: false, assistantMessage: PAST_DATE_MESSAGE, data: { startDate: null, travelDates: null, datesAsked: true, dateError: 'past' } });
+    const corrected = enforceDateStep({ ...rejected.data, ...parseDateAnswer('today', true) }, 'Ready');
+    expect(corrected).toMatchObject({ complete: true, data: { startDate: '2026-09-29', dateError: undefined } });
+  });
+  it('does not let the model roll a past date into next year', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ intent: 'dates_answer', data: { ...ready, travelDates: '7 september', startDate: '2027-09-07' }, assistantMessage: 'Ready', complete: true }))));
+    expect(await extractTripChat([{ role: 'user', content: '7 september' }], { ...ready, datesAsked: true })).toMatchObject({ complete: false, assistantMessage: PAST_DATE_MESSAGE, data: { startDate: null } });
+  });
+  it('validates model dates even for wording the local parser does not recognize', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ intent: 'dates_answer', data: { ...ready, travelDates: 'last Monday', startDate: '2026-09-28' }, assistantMessage: 'Ready', complete: true }))));
+    expect(await extractTripChat([{ role: 'user', content: 'last Monday' }], { ...ready, datesAsked: true })).toMatchObject({ complete: false, assistantMessage: PAST_DATE_MESSAGE });
+  });
+  it.each(['31 February', '2026-02-30'])('asks for a valid date after %s', answer => {
+    expect(enforceDateStep({ ...ready, ...parseDateAnswer(answer, true) }, 'Ready')).toMatchObject({ complete: false, data: { dateError: 'invalid', startDate: null } });
+  });
   it.each(['provided', 'flexible'] as const)('asks dates again after changing days with %s dates', async status => {
     const current: TripChatData = { ...ready, datesAsked: true, datesStatus: status, travelDates: status === 'provided' ? 'October 5' : null, startDate: status === 'provided' ? '2026-10-05' : null };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ intent: 'change_days', data: { ...current, tripLength: { days: 5, range: null, flexible: false } }, assistantMessage: 'Ready', complete: true }))));
