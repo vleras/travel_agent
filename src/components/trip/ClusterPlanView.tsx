@@ -725,6 +725,8 @@ export function ClusterPlanView({
     );
   }
 
+  const [showDragHint, setShowDragHint] = useState(false);
+
   return (
     <div className="trip-view cluster-plan">
       <header className="trip-topbar">
@@ -733,15 +735,33 @@ export function ClusterPlanView({
             ← Back
           </button>
           <div>
-            <div className="brand-mark" style={{ fontSize: '0.95rem' }}>
-              Travel Agent
+            <div className="trip-logo">
+              <svg viewBox="0 0 32 32" width="28" height="28">
+                <rect fill="none" width="32" height="32" />
+                <path d="M16 3 L28 9 L28 18 C28 26 16 29 16 29 C16 29 4 26 4 18 L4 9 Z" fill="#2a9d8f" opacity="0.1" stroke="#2a9d8f" strokeWidth="1.5" />
+                <path d="M16 8 L20 10 L20 15 C20 20 16 22 16 22 C16 22 12 20 12 15 L12 10 Z" fill="#2a9d8f" stroke="#2a9d8f" strokeWidth="1.5" />
+                <circle cx="16" cy="16" r="2" fill="#2a9d8f" />
+              </svg>
+              <span className="trip-logo-text">Travel Agent</span>
             </div>
-            <h1>
-              {tripDays}-day plan in {input.destination_city}
-            </h1>
-            <p className="cluster-chat-hint">
-              Drag cards between days, tap × to remove, then send the plan to email.
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h1>
+                {tripDays}-day plan in {input.destination_city}
+              </h1>
+              <button
+                type="button"
+                className="btn btn-ghost trip-hint-toggle"
+                onClick={() => setShowDragHint(!showDragHint)}
+                title="Show drag and drop instructions"
+              >
+                ℹ️
+              </button>
+            </div>
+            {showDragHint && (
+              <p className="cluster-chat-hint cluster-chat-hint--visible">
+                Drag cards between days, tap × to remove, then send the plan to email.
+              </p>
+            )}
             <div className="trip-date-controls">
               {input.dates_flexible && <p>Add exact travel dates to see a forecast.</p>}
               {weatherLoading && <p role="status">Loading forecast...</p>}
