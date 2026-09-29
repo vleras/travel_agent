@@ -91,16 +91,16 @@ export async function sendTripPlanEmail(
 
   try {
     const formData = new FormData();
-    formData.append(‘name’, ‘Travel Agent’);
-    formData.append(‘_subject’, subject);
-    formData.append(‘message’, body);
-    formData.append(‘_template’, ‘box’);
-    formData.append(‘_captcha’, ‘false’);
+    formData.append("name", "Travel Agent");
+    formData.append("_subject", subject);
+    formData.append("message", body);
+    formData.append("_template", "box");
+    formData.append("_captcha", "false");
 
     const res = await fetch(
       `https://formsubmit.co/ajax/${encodeURIComponent(trimmed)}`,
       {
-        method: ‘POST’,
+        method: 'POST',
         body: formData,
       },
     );
@@ -115,7 +115,7 @@ export async function sendTripPlanEmail(
         ok: false,
         error:
           data?.message ||
-          ‘Couldn’t send the email right now. Try again in a moment.’,
+          "Couldn't send the email right now. Try again in a moment.",
       };
     }
 
@@ -123,7 +123,7 @@ export async function sendTripPlanEmail(
   } catch {
     return {
       ok: false,
-      error: ‘Network error. Check your connection and try again.’,
+      error: "Network error. Check your connection and try again.",
     };
   }
 }
