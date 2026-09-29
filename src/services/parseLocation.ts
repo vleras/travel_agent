@@ -94,10 +94,20 @@ function applyHemisphere({ value, hemi }: Part): number {
 
 async function expandShortMapLink(url: string): Promise<ParsedLocation> {
   try {
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(10000),
-      redirect: 'follow'
-    });
+    let response: Response;
+    try {
+      // Try direct fetch first
+      response = await fetch(url, {
+        signal: AbortSignal.timeout(10000),
+        redirect: 'follow'
+      });
+    } catch {
+      // If direct fetch fails (CORS), try with cors-anywhere proxy
+      response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`, {
+        signal: AbortSignal.timeout(10000)
+      });
+    }
+
     if (!response.ok) return null;
     const html = await response.text();
     // Try to extract coordinates from the expanded URL or HTML
