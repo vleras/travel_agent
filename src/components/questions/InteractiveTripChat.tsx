@@ -169,7 +169,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
     if (hotelMatches.length && /^no$/i.test(content)) { setInput(''); rejectHotel(); return; }
     // Coordinates and Maps links are read before any search or extraction,
     // whenever a hotel location is still open (not declined, not set).
-    if (data.destination && data.hasAccommodation !== false && !data.accommodation) {
+    if (data.destination && data.hasAccommodation !== false) {
       const parsed = await parseLocationInput(content);
       if (parsed) {
         setInput('');
