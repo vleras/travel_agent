@@ -689,14 +689,6 @@
   align-items: center;
 }
 
-.cluster-plan > .trip-topbar .trip-topbar-left {
-  visibility: hidden;
-}
-
-.cluster-plan > .trip-topbar .trip-topbar-right {
-  visibility: hidden;
-}
-
 .cluster-plan .trip-topbar-left {
   flex-direction: row;
   align-items: center;
