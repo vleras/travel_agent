@@ -106,7 +106,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
   }
 
   /** Pasted coordinates or a Google Maps link. Must lie near the destination. */
-  async function usePinnedLocation(lat: number, lon: number, source: string) {
+  async function pinLocation(lat: number, lon: number, source: string) {
     const city = data.destination ?? '';
     const center = city ? await cityCenter(city) : null;
     if (center && haversineKm(center.lat, center.lon, lat, lon) > 50) {
@@ -177,7 +177,7 @@ export function InteractiveTripChat({ initialDestination, onPreferForm, onReady,
         setHotelMatches([]);
         setAddressStatus('idle');
         setData(current => ({ ...current, hasAccommodation: true, accommodationQuery: null }));
-        await usePinnedLocation(parsed.lat, parsed.lon, content.includes('http') ? 'google-maps-link' : 'coordinates');
+        await pinLocation(parsed.lat, parsed.lon, content.includes('http') ? 'google-maps-link' : 'coordinates');
         return;
       }
       // If URL was provided but couldn't be parsed, give feedback
