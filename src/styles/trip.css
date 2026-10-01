@@ -684,6 +684,17 @@
   width: 100vw;
   margin-left: calc(-50vw + 50%);
   padding: 1.25rem 2rem;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.cluster-plan > .trip-topbar .trip-topbar-left {
+  visibility: hidden;
+}
+
+.cluster-plan > .trip-topbar .trip-topbar-right {
+  visibility: hidden;
 }
 
 .cluster-plan .trip-topbar-left {
