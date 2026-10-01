@@ -25,6 +25,9 @@ interface PlaceImageProps {
   priority?: 'high' | 'low';
   /** When true (default), allow swiping / arrows across multiple photos. */
   swipeable?: boolean;
+  /** Used by the place picker to load one responsive grid row at a time. */
+  loadEnabled?: boolean;
+  onSettled?: () => void;
 }
 
 /** Re-export gallery helper with lat/lon support. */
@@ -59,13 +62,19 @@ export function PlaceImage({
   locate,
   priority = 'low',
   swipeable = true,
+  loadEnabled = true,
+  onSettled,
 }: PlaceImageProps) {
+  const settledCallback = useRef(onSettled);
+  settledCallback.current = onSettled;
+  const coverLoaded = useRef(false);
+  const ordered = Boolean(onSettled);
   const rootRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(priority === 'high');
 
   // Cards only start their photo lookup once they're near the viewport.
   useEffect(() => {
-    if (visible) return;
+    if (visible || ordered) return;
     const el = rootRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') {
       setVisible(true);
@@ -82,7 +91,7 @@ export function PlaceImage({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [visible]);
+  }, [visible, ordered]);
 
   const [index, setIndex] = useState(0);
   const [queue, setQueue] = useState<string[]>([]);
@@ -91,12 +100,19 @@ export function PlaceImage({
   const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!loadEnabled || (!visible && !ordered)) return;
     let cancelled = false;
+    coverLoaded.current = false;
     setFailed(false);
     setLoading(true);
     setIndex(0);
     setQueue([]);
+    // Let the next row start after a long wait, but keep accepting this cover.
+    // Photo providers can take longer than 30 seconds under their rate limits.
+    const timeout = ordered ? setTimeout(() => {
+      if (coverLoaded.current) return;
+      settledCallback.current?.();
+    }, 30000) : undefined;
 
     void (async () => {
       const urls = await fetchPhotos(name, city, category, lat, lon, {
@@ -113,6 +129,7 @@ export function PlaceImage({
         onProgress: (partial) => {
           if (cancelled || !partial.length) return;
           setQueue((current) => (current.length ? current : partial));
+          setFailed(false);
           setLoading(false);
         },
       });
@@ -121,11 +138,14 @@ export function PlaceImage({
       setQueue(list);
       setIndex(0);
       setLoading(false);
-      if (!list.length) setFailed(true);
-    })();
+      setFailed(!list.length);
+    })().catch(() => {
+      if (!cancelled) { setFailed(true); setLoading(false); }
+    });
 
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
     };
   }, [
     name,
@@ -142,7 +162,13 @@ export function PlaceImage({
     locate,
     priority,
     visible,
+    loadEnabled,
+    ordered,
   ]);
+
+  useEffect(() => {
+    if (loadEnabled && failed) settledCallback.current?.();
+  }, [loadEnabled, failed]);
 
   const src = queue[index] ?? '';
   const canSwipe = swipeable && queue.length > 1;
@@ -208,7 +234,11 @@ export function PlaceImage({
       <img
         src={src}
         alt={`${name}${canSwipe ? ` photo ${index + 1}` : ''}`}
-        loading="lazy"
+        loading={ordered ? 'eager' : 'lazy'}
+        onLoad={() => {
+          coverLoaded.current = true;
+          settledCallback.current?.();
+        }}
         referrerPolicy="no-referrer"
         draggable={false}
         onError={() => {

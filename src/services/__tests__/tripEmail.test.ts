@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { sendTripPlanEmail, googleMapsUrl } from '../tripEmail';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { buildTripEmailBody, sendTripPlanEmail, googleMapsUrl } from '../tripEmail';
 import type { DayItinerary, TripInput } from '../../types';
 
 describe('tripEmail', () => {
@@ -77,7 +77,9 @@ describe('tripEmail', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true }))));
   });
+  afterEach(() => vi.unstubAllGlobals());
 
   describe('googleMapsUrl', () => {
     it('generates correct Google Maps URL', () => {
@@ -115,30 +117,46 @@ describe('tripEmail', () => {
       expect(result.ok === false && result.error).toContain('valid email');
     });
 
-    it('falls back to FormSubmit when EmailJS keys are missing', async () => {
-      // EmailJS keys are not set in test env, so it should fall back to FormSubmit
+    it('sends the itinerary as FormData when the provider confirms success', async () => {
       const result = await sendTripPlanEmail(
         'test@example.com',
         mockInput,
         mockItinerary,
         mockBase,
       );
-      // This will fail in test env without FormSubmit service, but should attempt FormSubmit
-      expect(result.ok === false || result.ok === true).toBe(true);
+      expect(result.ok).toBe(true);
+      const [url, options] = vi.mocked(fetch).mock.calls[0];
+      expect(url).toBe('https://formsubmit.co/ajax/test%40example.com');
+      const body = options?.body as FormData;
+      expect(body.get('_subject')).toBe('Your 2-day plan for Paris');
+      expect(body.has('name')).toBe(false);
+      expect(body.has('message')).toBe(false);
+      expect(body.get('Trip details')).toContain('Louvre');
+    });
+    it.each([false, 'false', undefined])('does not show success when HTTP 200 has success=%s', async success => {
+      vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ success, message: 'Confirm your email address first.' })));
+      expect(await sendTripPlanEmail('test@example.com', mockInput, mockItinerary, mockBase)).toEqual({ ok: false, error: 'Confirm your email address first.' });
+    });
+    it('accepts the provider string success value', async () => {
+      vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ success: 'true' })));
+      expect((await sendTripPlanEmail('test@example.com', mockInput, mockItinerary, mockBase)).ok).toBe(true);
+    });
+    it('handles a non-JSON provider response', async () => {
+      vi.mocked(fetch).mockResolvedValue(new Response('<html>Service unavailable</html>'));
+      expect((await sendTripPlanEmail('test@example.com', mockInput, mockItinerary, mockBase)).ok).toBe(false);
     });
   });
 
   describe('Email content', () => {
-    it('includes trip header in email', async () => {
-      // This is a basic validation that the email service functions exist
-      expect(sendTripPlanEmail).toBeDefined();
+    it('includes trip header in email', () => {
+      expect(buildTripEmailBody(mockInput, mockItinerary, mockBase)).toContain('Your trip to Paris');
     });
 
     it('includes daily itineraries', () => {
-      // Validate that mock itinerary has expected structure
-      expect(mockItinerary).toHaveLength(2);
-      expect(mockItinerary[0].stops.some((s) => s.is_meal)).toBe(true);
-      expect(mockItinerary[1].stops[0].name).toBe('Notre-Dame');
+      const body = buildTripEmailBody(mockInput, mockItinerary, mockBase);
+      expect(body).toContain('Day 1 (2024-12-15)');
+      expect(body).toContain('Day 2 (2024-12-16)');
+      expect(body).toContain('Notre-Dame');
     });
   });
 });

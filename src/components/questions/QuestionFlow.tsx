@@ -21,6 +21,7 @@ import type {
   TripAccommodation,
 } from '../../types';
 import { PlaceImage } from '../shared/PlaceImage';
+import { OrderedPhotoGrid } from '../shared/OrderedPhotoGrid';
 import { AddressSearchMap } from '../shared/AddressSearchMap';
 import { PlacePickDetail } from './PlacePickDetail';
 import { locateSight } from '../../services/sightLocation';
@@ -649,9 +650,10 @@ export function QuestionFlow({
                       </span>
                     )}
                   </div>
-                  <div className="place-pick-grid">
+                  <OrderedPhotoGrid key={JSON.stringify([city, activeCategory, visiblePlaces.map(spot => spot.name)])} count={visiblePlaces.length}>
+                    {photoProps => <>
                     {visiblePlaces.length === 0 && <p className="hint" role="status">{foodLoading ? 'Loading places for this category…' : 'No places found in this category. Try another filter or retry the food search.'}</p>}
-                    {visiblePlaces.map((spot) => {
+                    {visiblePlaces.map((spot, index) => {
                       const active = selectedPlaces.includes(spot.name);
                       return (
                         <div
@@ -666,6 +668,7 @@ export function QuestionFlow({
                             }}
                           >
                             <PlaceImage
+                              {...photoProps(index)}
                               className="place-pick-photo"
                               name={spot.name}
                               localName={spot.localName}
@@ -702,7 +705,8 @@ export function QuestionFlow({
                         </div>
                       );
                     })}
-                  </div>
+                    </>}
+                  </OrderedPhotoGrid>
                 </>
               )}
             </div>

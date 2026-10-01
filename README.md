@@ -109,8 +109,7 @@ Keep provider attribution visible. Public endpoints can be rate-limited or tempo
 Open-Meteo data is matched to itinerary dates:
 
 - The first 16 calendar days, including today, use the forecast endpoint.
-- The current code attempts estimates for days 17–46, falling back to historical averages. This request currently uses the standard forecast endpoint with a 46-day request; it is not a working Seasonal API integration or a guaranteed long-range forecast.
-- Later dates use monthly averages labelled **“Typical (based on past years)”**.
+- All later dates use monthly averages labelled **“Typical (based on past years)”**. These describe historical temperatures, not a prediction of daily sunshine or rain.
 
 Historical averages use the same month from the previous ten complete years. They are cached by location, month, and baseline year for 30 days in memory/localStorage. Forecasts are cached in memory for 30 minutes. Flexible trips show an Add dates prompt.
 
@@ -132,14 +131,15 @@ Run the commands above before submitting changes. Focused date-validation checks
 npx vitest run src/services/__tests__/tripDates.test.ts server/__tests__/tripChat.test.ts
 ```
 
-At this documentation update, full checks have existing failures: some location tests and hotel code still treat the now-asynchronous `parseLocationInput` as synchronous, and weather tests contain expectations from the earlier two-tier implementation. A successful build does not imply these checks pass.
+Run the full unit suite and the separate type check as well as the build. Email tests mock provider responses and never send real email.
 
 Additional scripts:
 
 - `node scripts/test-photo-metadata.mjs`: mocked photo/locator checks.
+- `node scripts/test-photo-rows.mjs`: browser checks for row-by-row photo loading, responsive columns, failures, and photos arriving after a long wait. Requires the browser-test dependencies below and a running Vite server; photo requests are mocked.
 - `node scripts/test-sight-photos.mjs`: live photo-provider diagnostics using optional browser-facing keys.
 - `scripts/test-chat-live.mjs`: live chat diagnostic requiring local servers and DeepSeek access. Its standalone TypeScript loader predates shared imports and may need updating. Live calls can consume API credit.
-- `scripts/test-flow-history.mjs`: browser flow checks requiring Playwright and Chromium, neither installed by `npm ci`. Its email fixture still targets EmailJS and needs updating for FormSubmit before the full email scenario can pass.
+- `scripts/test-flow-history.mjs`: browser flow checks for chat, dates, weather, navigation, and mocked FormSubmit email sending. Requires Playwright and Chromium, neither installed by `npm ci`.
 
 Optional browser-test dependencies:
 
@@ -148,7 +148,7 @@ npm install --no-save --package-lock=false playwright
 npx playwright install chromium
 ```
 
-After updating its fixtures, run `node scripts/test-flow-history.mjs`. It accepts `PLAYWRIGHT_MODULE`, `CHROMIUM_EXECUTABLE`, and `TEST_BASE_URL`. The default URL is `http://127.0.0.1:5173`; use `TEST_BASE_URL=http://localhost:5173` if Vite only listens on localhost.
+Run `node scripts/test-flow-history.mjs`. It accepts `PLAYWRIGHT_MODULE`, `CHROMIUM_EXECUTABLE`, and `TEST_BASE_URL`. The default URL is `http://127.0.0.1:5173`; use `TEST_BASE_URL=http://localhost:5173` if Vite only listens on localhost.
 
 ## Troubleshooting
 

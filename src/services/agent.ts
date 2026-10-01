@@ -1023,6 +1023,14 @@ export async function runTravelAgent(
   nominatimMs += geoMs;
   apiCalls += geoCalls;
 
+  const missingPicks = mustVisitNames.filter(name => !scored.some(place => namesMatch(place.name, name)));
+  if (missingPicks.length) {
+    throw new Error(`Could not locate these selected places: ${missingPicks.join(', ')}. Go back to your places and try again or remove them. Your selections are saved.`);
+  }
+  if (!scored.length) {
+    throw new Error('Could not locate any places for this trip. Go back and try again.');
+  }
+
   const scoredWithPhotos = await attachPlacePhotos(
     scored,
     input.destination_city,

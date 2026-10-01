@@ -166,22 +166,24 @@ function TripApp() {
       )}
 
       {screen === 'processing' && (
-        <>
-          <div className="questions-header">
+        <main className="processing-page">
+          <div className="processing-header">
             <button type="button" className="btn btn-ghost" onClick={backInFlow}>
               ← Back
             </button>
           </div>
+          <div className="processing-content">
           <AgentProcessing progress={progress} />
           {error && (
-            <div style={{ textAlign: 'center', marginTop: '-4rem' }}>
+            <div className="processing-error" role="alert">
               <p style={{ color: 'var(--coral)' }}>{error}</p>
-              <button type="button" className="btn btn-primary" onClick={resetToEntry}>
-                Start over
+              <button type="button" className="btn btn-primary" onClick={backInFlow}>
+                Back to places
               </button>
             </div>
           )}
-        </>
+          </div>
+        </main>
       )}
 
       {screen === 'trip' && input && output && (

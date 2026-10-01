@@ -114,6 +114,26 @@ function saveStore(key: string, value: Point) {
 const centers = new Map<string, Promise<Point | null>>();
 /** OSM place type of each resolved destination (city, town, country, island…). */
 const centerTypes = new Map<string, string>();
+type Bounds = [number, number, number, number]; // west, south, east, north
+const regionBounds = new Map<string, Promise<Bounds | null>>();
+
+async function sightBounds(city: string): Promise<Bounds | null> {
+  if (!await isRegionLevel(city)) return null;
+  const key = cityKey(city);
+  if (!regionBounds.has(key)) {
+    regionBounds.set(key, geocode(city).then(({ result }) => {
+      const values = result?.boundingbox?.map(Number);
+      if (!values || values.length !== 4 || !values.every(Number.isFinite)) return null;
+      const [south, north, west, east] = values;
+      return south < north && west < east ? [west, south, east, north] as Bounds : null;
+    }));
+  }
+  return regionBounds.get(key)!;
+}
+
+function insideBounds(point: Point, bounds: Bounds): boolean {
+  return point.lon >= bounds[0] && point.lat >= bounds[1] && point.lon <= bounds[2] && point.lat <= bounds[3];
+}
 
 /** Place types too big to stand in for a hotel's location. */
 const BIG_PLACE_TYPES = new Set([
@@ -201,6 +221,7 @@ async function photon(
   center: Point,
   kind: PlaceKind,
   prio?: () => Priority,
+  bounds?: Bounds | null,
 ): Promise<Candidate[]> {
   try {
     const url = new URL('https://photon.komoot.io/api/');
@@ -215,7 +236,7 @@ async function photon(
     const dLon = MAX_FROM_CITY_KM / (111 * Math.max(Math.cos((center.lat * Math.PI) / 180), 0.2));
     url.searchParams.set(
       'bbox',
-      [center.lon - dLon, center.lat - dLat, center.lon + dLon, center.lat + dLat].map((n) => n.toFixed(4)).join(','),
+      (bounds ?? [center.lon - dLon, center.lat - dLat, center.lon + dLon, center.lat + dLat]).map((n) => n.toFixed(4)).join(','),
     );
     if (kind === 'accommodation') url.searchParams.set('osm_tag', 'tourism');
     const res = await photonFetch(url.toString(), prio);
@@ -379,6 +400,7 @@ export async function locatePlaces(
   if (!center) return [];
   const bias = options.biasHint ? await hintPoint(options.biasHint, city, center) : center;
   const anchors = [center, ...anchorsFor(city)];
+  const bounds = kind === 'sight' ? await sightBounds(city) : null;
 
   // "Artificial Lake of Tirana" must be *in* Tirana, not "Fjolla artificial lake, Pezë".
   const cityTokens = distinctiveTokens(city);
@@ -421,17 +443,17 @@ export async function locatePlaces(
     list
       .filter(valid)
       .map((c) => ({ ...c, provider, distanceKm: haversineKm(center.lat, center.lon, c.lat, c.lon) }))
-      .filter((c) => c.distanceKm <= MAX_FROM_CITY_KM)
+      .filter((c) => bounds ? insideBounds(c, bounds) : c.distanceKm <= MAX_FROM_CITY_KM)
       .map((c) => ({ ...c, matchPath: matchPath(c) }))
       .filter((c): c is typeof c & { matchPath: MatchPath } => c.matchPath != null)
       .sort((a, b) => a.distanceKm - b.distanceKm);
 
   const providers: [LocateProvider, () => Promise<Candidate[]>][] = [
-    ['photon', () => photon(name, bias, kind, options.priority)],
-    ...(/cathedral/i.test(name) ? [['photon', () => photon(name.replace(/cathedral/gi, 'Minster'), bias, kind, options.priority)] as [LocateProvider, () => Promise<Candidate[]>]] : []),
+    ['photon', () => photon(name, bias, kind, options.priority, bounds)],
+    ...(/cathedral/i.test(name) ? [['photon', () => photon(name.replace(/cathedral/gi, 'Minster'), bias, kind, options.priority, bounds)] as [LocateProvider, () => Promise<Candidate[]>]] : []),
     // Photon often misses "Kokonozi Mosque" but finds "Kokonozi" (Xhamia e Kokonozit).
     ...(kind === 'sight' && core.length && core.join(' ') !== fold(name)
-      ? [['photon', () => photon(core.join(' '), bias, kind, options.priority)] as [LocateProvider, () => Promise<Candidate[]>]]
+      ? [['photon', () => photon(core.join(' '), bias, kind, options.priority, bounds)] as [LocateProvider, () => Promise<Candidate[]>]]
       : []),
     ['geoapify', () => geoapify(name, city, bias, kind)],
     ['nominatim', () => queuedNominatim(`${name}, ${city}`)],
@@ -498,14 +520,15 @@ export function locateSight(
       const page = data.query?.pages?.[0];
       const at = page?.coordinates?.[0];
       const canonical = (value: string) => fold(value).replace(/\b(?:cathedral|minster|dom|munster)\b/g, 'church');
-      if (!at || !valid({ ...at, name: '', display_name: '' }) || page?.pageprops?.disambiguation != null || haversineKm(center.lat, center.lon, at.lat, at.lon) > MAX_FROM_CITY_KM) return null;
+      const bounds = await sightBounds(city);
+      if (!at || !valid({ ...at, name: '', display_name: '' }) || page?.pageprops?.disambiguation != null || (bounds ? !insideBounds(at, bounds) : haversineKm(center.lat, center.lon, at.lat, at.lon) > MAX_FROM_CITY_KM)) return null;
       if (![name, localName].some(n => n && matchesName(canonical(page?.title ?? ''), canonical(n), city))) return null;
       return { lat: at.lat, lon: at.lon, wikidataId: page?.pageprops?.wikibase_item };
     })
     .catch(() => null)
     .then((point) => {
-      memory.set(key, point);
       if (point) {
+        memory.set(key, point);
         saveStore(key, point);
         rememberLocated(city, point);
       }

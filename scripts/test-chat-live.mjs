@@ -57,7 +57,7 @@ for (const [message, expected] of cases) {
       assert.equal(result.complete, true);
       action = 'Cleared hotel and marked trip ready without accommodation.';
     } else if (message.startsWith('51.')) {
-      assert.deepEqual(parseLocationInput(message), { kind: 'coords', lat: 51.4556, lon: 7.0116 });
+      assert.deepEqual(await parseLocationInput(message), { kind: 'coords', lat: 51.4556, lon: 7.0116 });
       action = 'Coordinate parser returned exact pin; UI bypasses DeepSeek, checks distance from Essen, then requests confirmation.';
     } else {
       assert.match(result.data.accommodationQuery, /Essener Hof/i);

@@ -91,9 +91,8 @@ export async function sendTripPlanEmail(
 
   try {
     const formData = new FormData();
-    formData.append("name", "Travel Agent");
     formData.append("_subject", subject);
-    formData.append("message", body);
+    formData.append("Trip details", body);
     formData.append("_template", "box");
     formData.append("_captcha", "false");
 
@@ -110,7 +109,7 @@ export async function sendTripPlanEmail(
       message?: string;
     } | null;
 
-    if (!res.ok) {
+    if (!res.ok || (data?.success !== true && data?.success !== 'true')) {
       return {
         ok: false,
         error:

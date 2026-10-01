@@ -16,9 +16,10 @@ async function setup() {
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
     const json = data => route.fulfill({ json: data });
-    if (url.hostname === 'api.emailjs.com') {
-      emails.push(route.request().postDataJSON());
-      return route.fulfill({ status: 200, body: 'OK' });
+    if (url.hostname === 'formsubmit.co') {
+      const body = new Response(route.request().postDataBuffer(), { headers: { 'Content-Type': route.request().headers()['content-type'] } });
+      emails.push({ recipient: decodeURIComponent(url.pathname.slice('/ajax/'.length)), fields: Object.fromEntries(await body.formData()) });
+      return json({ success: true });
     }
     if (url.hostname === 'api.open-meteo.com') {
       const time = Array.from({ length: 16 }, (_, i) => {
@@ -163,8 +164,8 @@ try {
   await page.getByText('Plan sent!', { exact: true }).waitFor();
   await step(page, 'home');
   assert.equal(emails.length, 1);
-  assert.equal(emails[0].template_params.to_email, 'history-test@example.test');
-  assert(emails[0].template_params.trip_html.includes(generated.itinerary[0].date));
+  assert.equal(emails[0].recipient, 'history-test@example.test');
+  assert(emails[0].fields['Trip details'].includes(generated.itinerary[0].date));
   assert.deepEqual(errors, []);
   console.log('PASS dates/weather/email: dates asked after hotel confirmation, exact dates preserved, each forecast matches its day, mocked email succeeds and returns home.');
   console.log('PASS chat flow: home/chat/places/details/itinerary, Back, Forward, refresh, list scroll, destination/days/hotel/picks/itinerary preserved.');

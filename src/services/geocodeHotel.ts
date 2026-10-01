@@ -85,7 +85,7 @@ export function geocodeHotel(input: string, destination = ''): Promise<HotelMatc
       if (!center) return [];
     }
     // Pasted coordinates never go through the name search.
-    const parsed = parseLocationInput(input);
+    const parsed = await parseLocationInput(input);
     if (parsed?.kind === 'coords') {
       if (center && haversineKm(center.lat, center.lon, parsed.lat, parsed.lon) > 50) return [];
       fromLocator = true;
