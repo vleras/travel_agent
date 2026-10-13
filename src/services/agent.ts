@@ -30,7 +30,7 @@ import type { BreakfastPlace } from '../types/breakfast';
 
 type ProgressCb = (progress: AgentProgress) => void;
 
-interface ScoredAttraction extends Attraction {
+export interface ScoredAttraction extends Attraction {
   lat: number;
   lon: number;
 }
@@ -133,7 +133,7 @@ function refineClustersBySwap(
 }
 
 /** Stable closest-to-farthest ordering from the accommodation/base. */
-function orderByDistanceFromBase(
+export function orderByDistanceFromBase(
   stops: ScoredAttraction[],
   baseLat: number,
   baseLon: number,
@@ -375,7 +375,7 @@ function isFoodPlace(attraction: ScoredAttraction): boolean {
   return cat === 'cafés' || cat === 'restaurants' || cat === 'cafe' || cat === 'restaurant';
 }
 
-function distributeFoodPlaces(
+export function distributeFoodPlaces(
   clusters: ScoredAttraction[][],
   dayCount: number,
 ): ScoredAttraction[][] {
@@ -425,7 +425,7 @@ function distributeFoodPlaces(
   return clusters;
 }
 
-function clusterByProximity(
+export function clusterByProximity(
   attractions: ScoredAttraction[],
   days: number,
   pace: Pace,
@@ -464,7 +464,7 @@ function clusterByProximity(
   });
 }
 
-function dayTotalDistance(
+export function dayTotalDistance(
   stops: { lat: number; lon: number }[],
   baseLat: number,
   baseLon: number,
@@ -488,7 +488,7 @@ function dayTotalDistance(
   return total;
 }
 
-function compactnessScore(
+export function compactnessScore(
   stops: { lat: number; lon: number }[],
   baseLat: number,
   baseLon: number,
@@ -699,7 +699,7 @@ function buildDay(
   };
 }
 
-function reviseClusters(
+export function reviseClusters(
   clusters: ScoredAttraction[][],
   baseLat: number,
   baseLon: number,
