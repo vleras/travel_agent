@@ -1,0 +1,127 @@
+{
+  "started_at": "2026-10-13T22:45:55.856Z",
+  "finished_at": "2026-10-13T22:46:01.048Z",
+  "git_commit": "21c003bc46259fe5ef32e9a640a36ead9cb3ac07",
+  "node": "v26.0.0",
+  "os": {
+    "platform": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64"
+  },
+  "cpu": "Apple M5",
+  "logical_cpus": 10,
+  "bases": {
+    "rome": {
+      "lat": 41.8933203,
+      "lon": 12.4829321,
+      "display_name": "Roma, Roma Capitale, Lazio, Italia",
+      "fetched_at": "2026-10-13T22:45:55.980Z"
+    },
+    "paris": {
+      "lat": 48.8534951,
+      "lon": 2.3483915,
+      "display_name": "Paris, Île-de-France, France métropolitaine, France",
+      "fetched_at": "2026-10-13T22:45:57.008Z"
+    },
+    "barcelona": {
+      "lat": 41.3825802,
+      "lon": 2.177073,
+      "display_name": "Barcelona, Barcelonès, Barcelona, Catalunya, España",
+      "fetched_at": "2026-10-13T22:45:58.119Z"
+    },
+    "tokyo": {
+      "lat": 35.6768601,
+      "lon": 139.7638947,
+      "display_name": "東京都, 日本",
+      "fetched_at": "2026-10-13T22:45:59.201Z"
+    },
+    "bangkok": {
+      "lat": 13.7524938,
+      "lon": 100.4935089,
+      "display_name": "กรุงเทพมหานคร, ประเทศไทย",
+      "fetched_at": "2026-10-13T22:46:00.309Z"
+    }
+  },
+  "determinism": {
+    "passed": true,
+    "scenarios_checked": 660
+  },
+  "counts": {
+    "E1": {
+      "scenarios": 600,
+      "duplicates": 84
+    },
+    "E2": {
+      "scenarios": 60,
+      "duplicates": 9
+    }
+  },
+  "summary": [
+    {
+      "experiment": "E1",
+      "method": "P",
+      "median_mean_K": 62.5
+    },
+    {
+      "experiment": "E1",
+      "method": "B4",
+      "median_mean_K": 60.75
+    },
+    {
+      "experiment": "E1",
+      "method": "B1",
+      "median_mean_K": 45.120000000000005
+    },
+    {
+      "experiment": "E1",
+      "method": "B2",
+      "median_mean_K": 46.25
+    },
+    {
+      "experiment": "E1",
+      "method": "B3",
+      "median_mean_K": 57.82666666666666
+    },
+    {
+      "experiment": "E2",
+      "method": "P",
+      "median_mean_K": 55
+    },
+    {
+      "experiment": "E2",
+      "method": "B4",
+      "median_mean_K": 51.25
+    },
+    {
+      "experiment": "E2",
+      "method": "B1",
+      "median_mean_K": 27.012500000000003
+    },
+    {
+      "experiment": "E2",
+      "method": "B2",
+      "median_mean_K": 23.625
+    },
+    {
+      "experiment": "E2",
+      "method": "B3",
+      "median_mean_K": 44.340833333333336
+    }
+  ],
+  "protocol": {
+    "rng": "mulberry32; Fisher-Yates shuffle",
+    "sampling_seeds": [
+      1,
+      10
+    ],
+    "baseline_seeds": [
+      1,
+      30
+    ],
+    "kmeans_max_iterations": 50,
+    "pct_compact_units": "fraction 0..1",
+    "duplicate_scope": "global, E1 before E2",
+    "timing": "clusterByProximity + day padding + distributeFoodPlaces + reviseClusters (P only); excludes common final ordering, metrics, assertions, geocoding and file output",
+    "git_note": "git_commit identifies the runner source commit; generated outputs are committed separately"
+  }
+}

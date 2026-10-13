@@ -1,0 +1,32 @@
+{
+  "rome": {
+    "lat": 41.8933203,
+    "lon": 12.4829321,
+    "display_name": "Roma, Roma Capitale, Lazio, Italia",
+    "fetched_at": "2026-10-13T22:45:55.980Z"
+  },
+  "paris": {
+    "lat": 48.8534951,
+    "lon": 2.3483915,
+    "display_name": "Paris, Île-de-France, France métropolitaine, France",
+    "fetched_at": "2026-10-13T22:45:57.008Z"
+  },
+  "barcelona": {
+    "lat": 41.3825802,
+    "lon": 2.177073,
+    "display_name": "Barcelona, Barcelonès, Barcelona, Catalunya, España",
+    "fetched_at": "2026-10-13T22:45:58.119Z"
+  },
+  "tokyo": {
+    "lat": 35.6768601,
+    "lon": 139.7638947,
+    "display_name": "東京都, 日本",
+    "fetched_at": "2026-10-13T22:45:59.201Z"
+  },
+  "bangkok": {
+    "lat": 13.7524938,
+    "lon": 100.4935089,
+    "display_name": "กรุงเทพมหานคร, ประเทศไทย",
+    "fetched_at": "2026-10-13T22:46:00.309Z"
+  }
+}
