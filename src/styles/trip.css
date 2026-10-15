@@ -725,6 +725,28 @@
   margin: 0;
 }
 
+@media (max-width: 480px) {
+  .cluster-plan > .trip-topbar {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .cluster-plan .trip-topbar-center {
+    min-width: 0;
+  }
+
+  .cluster-plan .trip-topbar-right {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+
+  .cluster-plan .trip-topbar-right > .btn {
+    flex: 1 0 auto;
+    white-space: nowrap;
+  }
+}
+
 .day-tabs {
   display: flex;
   gap: 0.5rem;
