@@ -20,6 +20,7 @@ export interface PersistedAppState {
 export interface PersistedDestState { previewId: string | null; highlightName: string | null }
 export interface PersistedQuestionState {
   path: 'A' | 'B'; stepIndex: number; city: string; selectedPlaces: string[];
+  pace?: TripInput['pace'];
   daysText?: string; chatMode?: boolean; chatData?: TripChatData | null;
   chatState?: TripChatState | null; notBooked?: boolean; accommodation?: TripAccommodation | null;
   viewingPlace?: DestinationHighlight | null; generatedPlaces?: Attraction[];
@@ -168,6 +169,7 @@ function initialTrail(route: FlowRoute): FlowRoute[] {
   if (!saved && input) {
     saved = {
       path, stepIndex: placesIndex, chatMode: false, city: input.destination_city,
+      pace: input.pace,
       daysText: String(input.trip_length_days), accommodation: input.accommodation ?? (input.hotel_location ? {
         address: input.hotel_address ?? input.hotel_location.display_name,
         latitude: input.hotel_location.lat, longitude: input.hotel_location.lon,

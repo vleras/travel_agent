@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { destinationRecommendations, withoutFoodPlaces } from '../../data/destinations';
+import { destinationRecommendations, PACE_OPTIONS, withoutFoodPlaces } from '../../data/destinations';
 import { fallbackAttractions } from '../../data/fallbackAttractions';
 import { parseDaysInput } from '../../data/scheduleOptions';
 import { isISODate } from '../../services/tripDates';
@@ -17,6 +17,7 @@ import type {
   DestinationCard,
   DestinationHighlight,
   QuestionStep,
+  Pace,
   TripInput,
   TripAccommodation,
 } from '../../types';
@@ -192,6 +193,7 @@ export function QuestionFlow({
   const [city, setCity] = useState(
     () => saved?.city ?? selectedDestination?.city ?? '',
   );
+  const [pace, setPace] = useState<Pace>(saved?.pace ?? DEFAULT_PACE);
   const [daysText, setDaysText] = useState(saved?.daysText ?? '');
   const [chatMode, setChatMode] = useState(saved?.chatMode ?? true);
   const [chatData, setChatData] = useState<TripChatData | null>(saved?.chatData ?? null);
@@ -278,14 +280,14 @@ export function QuestionFlow({
       path,
       stepIndex,
       city,
-      selectedPlaces, daysText, chatMode, chatData, chatState, notBooked, accommodation,
+      selectedPlaces, daysText, pace, chatMode, chatData, chatState, notBooked, accommodation,
       viewingPlace, generatedPlaces, foodPlaces, placeCategory,
     });
   }, [
     path,
     stepIndex,
     city,
-    selectedPlaces, daysText, chatMode, chatData, chatState, notBooked, accommodation,
+    selectedPlaces, daysText, pace, chatMode, chatData, chatState, notBooked, accommodation,
     viewingPlace, generatedPlaces, foodPlaces, placeCategory,
   ]);
 
@@ -419,7 +421,7 @@ export function QuestionFlow({
       custom_preferences: [placeNote, chatData?.travelDates ? `Travel dates: ${chatData.travelDates}` : null, ...(chatData?.extraPreferences ?? [])].filter(Boolean).join('; ') || null,
       must_visit_places: selectedPlaces,
       must_visit_attractions: selectedAttractions,
-      pace: DEFAULT_PACE,
+      pace,
       day_start_time: '09:00',
       breakfast_time: 'skip',
       breakfast_food: null,
@@ -711,6 +713,26 @@ export function QuestionFlow({
               )}
             </div>
           </>
+        )}
+
+        {step === 'places' && !viewingPlace && (
+          <fieldset className="place-pace-picker">
+            <legend>Your travel pace</legend>
+            <div className="chip-row">
+              {PACE_OPTIONS.map(option => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`chip${pace === option.id ? ' active' : ''}`}
+                  aria-pressed={pace === option.id}
+                  onClick={() => setPace(option.id)}
+                >
+                  <strong>{option.label}</strong>
+                  <span>{option.description}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
         )}
 
         {!(step === 'places' && viewingPlace) && (
