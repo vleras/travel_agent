@@ -732,6 +732,7 @@ export function QuestionFlow({
                 </button>
               ))}
             </div>
+            <p className="hint">Stops per day depend on how many places you pick.</p>
           </fieldset>
         )}
 

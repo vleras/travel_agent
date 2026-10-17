@@ -367,16 +367,16 @@ export const PACE_OPTIONS = [
   {
     id: 'relaxed' as const,
     label: 'Relaxed',
-    description: '3 to 4 stops per day',
+    description: 'Shorter walks each day',
   },
   {
     id: 'balanced' as const,
     label: 'Balanced',
-    description: '5 to 7 stops per day',
+    description: 'Moderate walking each day',
   },
   {
     id: 'packed' as const,
     label: 'Packed',
-    description: '8+ stops per day',
+    description: 'Longer walks are fine',
   },
 ];
