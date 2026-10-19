@@ -10,12 +10,12 @@ Ndarja pa rishikim       57.30      63.54        66.92              44.89       
 
 ## H1 and H2 (sigma rows: "better" = P has lower sigma)
    hypothesis           baseline metric  better  equal  worse  median_diff  median_diff_nonzero            p       p_holm
-           H1   Ndarja rastësore      K     516      0      0    13.245000            13.245000 3.086142e-86 9.258425e-86
-           H1  Renditja në listë      K     506      4      6    13.000000            13.333333 2.655861e-85 5.311722e-85
+           H1   Ndarja rastësore      K     516      0      0    13.245000            13.245000 3.086142e-86 1.234457e-85
+           H1  Renditja në listë      K     506      4      6    13.000000            13.333333 2.655861e-85 7.967583e-85
            H1          k-means++      K     447      3     66     3.289167             3.300000 1.639208e-64 1.639208e-64
+H1 plotësuese          k-means++  sigma     499      4     13     1.903826             1.907652 4.504377e-84 9.008755e-84
            H2 Ndarja pa rishikim      K     223    262     31     0.000000             4.500000 3.094471e-31 3.094471e-31
-H1 plotësuese          k-means++  sigma     499      4     13     1.903826             1.907652 4.504377e-84          NaN
-H2 plotësuese Ndarja pa rishikim  sigma       3    265    248     0.000000            -0.816497 1.691391e-43          NaN
+H2 plotësuese Ndarja pa rishikim  sigma       3    265    248     0.000000            -0.816497 1.691391e-43 3.382782e-43
 revision changed the split in 258 of 516 scenarios; K changed in 254; K lower with revision in 31
 
 ## H3: 12 of 12 subgroups meet the criterion (Holm over 36 tests)

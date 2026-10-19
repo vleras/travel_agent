@@ -10,7 +10,7 @@ evaluation/output/. Run from the repository root:
 Outputs go to evaluation/output/analysis/.
 Method (Ch4 4.10): 516 distinct E1 scenarios (identical scenarios counted once), paired two-sided
 Wilcoxon signed-rank tests on mean compactness per scenario, alpha = 0.05, pairs with zero difference
-dropped, Holm correction within each hypothesis.
+dropped, Holm correction within each hypothesis over all its tests (H1: 4, H2: 2, H3: 36).
 """
 from __future__ import annotations
 
@@ -122,14 +122,18 @@ def hypotheses(dist: pd.DataFrame) -> None:
     K = dist.pivot(index='scenario_id', columns='method', values='mean_K')
     S = dist.pivot(index='scenario_id', columns='method', values='sigma')
     rows = []
+    # Holm within each hypothesis over ALL its tests (Ch4 4.10): H1 = 3 tests on K + sigma vs k-means++,
+    # H2 = K + sigma vs no revision. For sigma, "better" means P has the lower sigma.
     h1 = [dict(hypothesis='H1', baseline=NAMES[b], metric='K', **paired(K.P, K[b])) for b in ['B1', 'B2', 'B3']]
+    h1.append(dict(hypothesis='H1 plotësuese', baseline=NAMES['B3'], metric='sigma', **paired(S.B3, S.P)))
     for row, p in zip(h1, holm([r['p'] for r in h1])):
         row['p_holm'] = p
-    h2 = dict(hypothesis='H2', baseline=NAMES['B4'], metric='K', **paired(K.P, K.B4))
-    h2['p_holm'] = h2['p']
-    sup = [dict(hypothesis='H1 plotësuese', baseline=NAMES['B3'], metric='sigma', **paired(S.B3, S.P), p_holm=np.nan),
-           dict(hypothesis='H2 plotësuese', baseline=NAMES['B4'], metric='sigma', **paired(S.B4, S.P), p_holm=np.nan)]
-    rows = h1 + [h2] + sup
+    h2 = [dict(hypothesis='H2', baseline=NAMES['B4'], metric='K', **paired(K.P, K.B4)),
+          dict(hypothesis='H2 plotësuese', baseline=NAMES['B4'], metric='sigma', **paired(S.B4, S.P))]
+    for row, p in zip(h2, holm([r['p'] for r in h2])):
+        row['p_holm'] = p
+    rows = h1 + h2
+    h2 = h2[0]
     table = pd.DataFrame(rows)
     table.to_csv(AN / 'h1_h2.csv', index=False)
     P = dist[dist.method == 'P'].set_index('scenario_id')
