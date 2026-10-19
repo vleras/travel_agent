@@ -1,0 +1,6 @@
+metoda,K_mesatare,K_mediana,L_totale_km,L_max_mesatare_km,L_max_mediana_km,sigma,dite_kompakte_pct,koha_mediana_ms,koha_max_ms
+Metoda e propozuar,59.9,64.29,67.63,49.23,14.36,0.44,50.05,0.07,1.75
+Ndarja pa rishikim,57.3,63.54,66.92,44.89,13.91,0.01,43.73,0.07,0.51
+k-means++,52.75,59.49,69.11,35.59,12.8,2.26,37.69,0.01,0.03
+Renditja në listë,44.83,50.0,80.5,43.85,19.2,0.01,25.22,0.0,0.05
+Ndarja rastësore,45.05,49.07,80.3,42.99,16.2,0.01,23.47,0.0,0.01

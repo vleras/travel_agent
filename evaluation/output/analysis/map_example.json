@@ -1,0 +1,171 @@
+{
+  "scenario_id": "E1-rome-D3-balanced-r5",
+  "base": {
+    "lat": 41.8933203,
+    "lon": 12.4829321,
+    "display_name": "Roma, Roma Capitale, Lazio, Italia",
+    "fetched_at": "2026-10-13T22:45:55.980Z"
+  },
+  "methods": {
+    "B2": [
+      {
+        "stops": [
+          {
+            "name": "Colosseum",
+            "lat": 41.8902,
+            "lon": 12.4922
+          },
+          {
+            "name": "Trevi Fountain",
+            "lat": 41.9009,
+            "lon": 12.4833
+          },
+          {
+            "name": "Trastevere Food Walk",
+            "lat": 41.8897,
+            "lon": 12.4695
+          },
+          {
+            "name": "St. Peter's Basilica",
+            "lat": 41.9022,
+            "lon": 12.4539
+          }
+        ],
+        "K": 72,
+        "L": 8.42616995884805
+      },
+      {
+        "stops": [
+          {
+            "name": "Castel Sant'Angelo",
+            "lat": 41.9031,
+            "lon": 12.4663
+          },
+          {
+            "name": "Testaccio Market",
+            "lat": 41.8765,
+            "lon": 12.4753
+          },
+          {
+            "name": "Villa Borghese Gardens",
+            "lat": 41.9142,
+            "lon": 12.4922
+          },
+          {
+            "name": "Appian Way Park",
+            "lat": 41.8585,
+            "lon": 12.5215
+          }
+        ],
+        "K": 30,
+        "L": 20.89401770343426
+      },
+      {
+        "stops": [
+          {
+            "name": "Monti Neighborhood",
+            "lat": 41.895,
+            "lon": 12.4915
+          },
+          {
+            "name": "Caffè Sant'Eustachio",
+            "lat": 41.8989,
+            "lon": 12.4753
+          },
+          {
+            "name": "San Giovanni in Laterano",
+            "lat": 41.886,
+            "lon": 12.5057
+          },
+          {
+            "name": "Ostiense Street Art",
+            "lat": 41.8728,
+            "lon": 12.4789
+          }
+        ],
+        "K": 67,
+        "L": 10.005389232966905
+      }
+    ],
+    "P": [
+      {
+        "stops": [
+          {
+            "name": "Trevi Fountain",
+            "lat": 41.9009,
+            "lon": 12.4833
+          },
+          {
+            "name": "Caffè Sant'Eustachio",
+            "lat": 41.8989,
+            "lon": 12.4753
+          },
+          {
+            "name": "Castel Sant'Angelo",
+            "lat": 41.9031,
+            "lon": 12.4663
+          },
+          {
+            "name": "Villa Borghese Gardens",
+            "lat": 41.9142,
+            "lon": 12.4922
+          },
+          {
+            "name": "St. Peter's Basilica",
+            "lat": 41.9022,
+            "lon": 12.4539
+          }
+        ],
+        "K": 64,
+        "L": 10.930982711361558
+      },
+      {
+        "stops": [
+          {
+            "name": "Trastevere Food Walk",
+            "lat": 41.8897,
+            "lon": 12.4695
+          },
+          {
+            "name": "Testaccio Market",
+            "lat": 41.8765,
+            "lon": 12.4753
+          },
+          {
+            "name": "Ostiense Street Art",
+            "lat": 41.8728,
+            "lon": 12.4789
+          }
+        ],
+        "K": 82,
+        "L": 5.540872077443332
+      },
+      {
+        "stops": [
+          {
+            "name": "Monti Neighborhood",
+            "lat": 41.895,
+            "lon": 12.4915
+          },
+          {
+            "name": "Colosseum",
+            "lat": 41.8902,
+            "lon": 12.4922
+          },
+          {
+            "name": "San Giovanni in Laterano",
+            "lat": 41.886,
+            "lon": 12.5057
+          },
+          {
+            "name": "Appian Way Park",
+            "lat": 41.8585,
+            "lon": 12.5215
+          }
+        ],
+        "K": 64,
+        "L": 10.826112752432635
+      }
+    ]
+  }
+}

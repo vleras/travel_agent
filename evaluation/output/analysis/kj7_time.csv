@@ -1,0 +1,5 @@
+experiment,step,median_ms,p95_ms,max_ms
+E1,ndarja,0.071,0.346,0.507
+E1,ndarja + rishikimi,0.075,0.354,1.749
+E2,ndarja,0.473,1.014,1.069
+E2,ndarja + rishikimi,0.477,1.014,1.117
