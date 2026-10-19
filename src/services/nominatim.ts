@@ -10,7 +10,7 @@ export interface GeocodeResult {
 
 const CACHE_KEY = 'travel_planner_geocode_v1';
 const LIST_CACHE_KEY = 'travel_planner_geocode_list_v1';
-const USER_AGENT = 'travel_agent-thesis/1.0 (+https://github.com/vleras/travel_agent)';
+export const USER_AGENT = 'travel_agent-thesis/1.0 (+https://github.com/vleras/travel_agent)';
 
 let lastRequestAt = 0;
 

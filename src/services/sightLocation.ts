@@ -1,4 +1,4 @@
-import { geocode } from './nominatim';
+import { geocode, USER_AGENT } from './nominatim';
 import { haversineKm } from './geo';
 import { TYPE_WORDS, distinctiveTokens, fold, matchesName, sharesStem, sharesStrongStem } from './nameMatch';
 import { lookupCityCenter } from '../data/cityCenters';
@@ -68,7 +68,6 @@ const LOCAL_NAME_RADIUS_KM = 2;
 
 const STORAGE_KEY = 'travel_planner_sight_coords_v5';
 const MAX_FROM_CITY_KM = 20;
-const USER_AGENT = 'TravelPlannerThesis/1.0 (thesis-project; contact@example.com)';
 
 const memory = new Map<string, Point | null>();
 /** Sights already located per city, anchors for the local-name path. */
