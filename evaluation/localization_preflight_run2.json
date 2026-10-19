@@ -1,0 +1,11 @@
+{
+  "started_at": "2026-10-19T18:16:00.599Z",
+  "network_used": null,
+  "requests_per_provider": 1,
+  "user_agent": "travel_agent-thesis/1.0 (+https://github.com/vleras/travel_agent)",
+  "results": [
+    {"service":"Nominatim","status":200,"first100":"[{\"place_id\":81103336,\"licence\":\"Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyrig"},
+    {"service":"Photon","status":200,"first100":"{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"osm_type\":\"R\",\"osm_id\":1167"},
+    {"service":"Geoapify","status":200,"first100":"{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"datasource\":{\"sourcename\":\""}
+  ]
+}

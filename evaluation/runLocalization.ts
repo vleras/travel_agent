@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { platform, release, arch } from 'node:os';
@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const output = fileURLToPath(new URL('./output/', import.meta.url));
 const files = ['localization_results.csv', 'localization_responses.json', 'localization_meta.json'];
 // Do not accidentally overwrite the evidence with a second run.
-assert(files.every(name => !existsSync(output + name)), 'Localization output already exists; refusing to rerun.');
+if (!process.env.LOCALIZATION_WORKER) assert(files.every(name => !existsSync(output + name)), 'Localization output already exists; refusing to rerun.');
 const mode = import.meta.env.MODE || 'development';
 // Vite's loader preserves its .env/.env.local/mode files and process-env precedence.
 const env = loadEnv(mode, root, '');
@@ -66,16 +66,16 @@ for (const list of Object.values(fallbackAttractions)) for (const place of list)
   assert(Number.isFinite(place.lat) && Number.isFinite(place.lon), `Missing reference: ${place.name}`);
 }
 
-type RequestRecord = { url: string; started_at: string; status: number | null; body: string | null; error?: string; body_error?: string };
-type PlaceRecord = { city: string; nr: number; name: string; requests: RequestRecord[]; lookup_error?: string };
-const responses: PlaceRecord[] = [];
+type RequestRecord = { attempt: number; url: string; started_at: string; status: number | null; body: string | null; error?: string; body_error?: string };
+type PlaceRecord = { city: string; nr: number; name: string; requests: RequestRecord[]; attempt: number; lookup_error?: string };
+const responses: { city: string; nr: number; name: string; attempts: AttemptResult[] }[] = [];
 const rows: Record<string, string | number | boolean>[] = [];
 let active: PlaceRecord | undefined;
 let bodyReads: Promise<void>[] = [];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
   assert(active, 'Request outside a place lookup');
-  const record: RequestRecord = { url: redact(input instanceof Request ? input.url : String(input)),
+  const record: RequestRecord = { attempt: active.attempt, url: redact(input instanceof Request ? input.url : String(input)),
     started_at: new Date().toISOString(), status: null, body: null };
   active.requests.push(record);
   try {
@@ -108,34 +108,85 @@ function matchedService(point: { lat: number; lon: number } | null, requests: Re
     return host === 'photon.komoot.io' ? 'photon' : host === 'api.geoapify.com' ? 'geoapify' : 'nominatim';
   } catch { return ''; }
 }
+type AttemptResult = PlaceRecord & { point: Awaited<ReturnType<typeof locateSight>>; duration_ms: number; final_status: 'found' | 'not_found' | 'service_error'; ended_at: string };
+const serviceError = (r: RequestRecord) => Boolean(r.error || r.body_error || (r.status !== null && r.status >= 400));
+if (process.env.LOCALIZATION_WORKER) {
+  const job = JSON.parse(process.env.LOCALIZATION_WORKER) as { city: string; name: string; nr: number; attempt: number };
+  active = { ...job, requests: [] };
+  const start = performance.now();
+  let point: Awaited<ReturnType<typeof locateSight>> = null;
+  try { point = await locateSight(job.name, job.city); }
+  catch (error) { active.lookup_error = redact(String(error)); }
+  const duration_ms = performance.now() - start;
+  await Promise.all(bodyReads);
+  globalThis.fetch = originalFetch;
+  const final_status = active.lookup_error || active.requests.some(serviceError)
+    ? 'service_error' : point ? 'found' : 'not_found';
+  const result: AttemptResult = { ...active, point, duration_ms, final_status, ended_at: new Date().toISOString() };
+  assert(process.send, 'Worker requires IPC');
+  process.send(result, () => process.exit(0));
+  await new Promise(() => {});
+}
+// The parent never performs lookups; isolated workers cannot reuse private app caches.
+globalThis.fetch = originalFetch;
+const pauseMs = 3000, cooldownMs = 60000, maxAttempts = 3;
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const preflight = JSON.parse(readFileSync(new URL('./localization_preflight_run2.json', import.meta.url), 'utf8'));
+assert(preflight.results.length === 3 && preflight.results.every((r: { status: number }) => r.status === 200), 'Pre-flight must pass');
 const startedAt = new Date().toISOString();
 const gitCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-try {
-  for (const [cityKey, city] of Object.entries(cities)) {
-    for (const [index, place] of fallbackAttractions[cityKey].entries()) {
-      active = { city, nr: index + 1, name: place.name, requests: [] };
-      responses.push(active);
-      bodyReads = [];
-      const started = performance.now();
-      let point: Awaited<ReturnType<typeof locateSight>> = null;
-      try { point = await locateSight(place.name, city); }
-      catch (error) { active.lookup_error = redact(String(error)); }
-      const duration = performance.now() - started;
-      await Promise.all(bodyReads);
-      const type = noArticle.has(place.name) ? 'Pa artikull' : areas.has(place.name) ? 'Zonë' : 'Atraksion';
-      const threshold = type === 'Pa artikull' ? '' : type === 'Zonë' ? 1000 : 300;
-      const distance = point ? haversineKm(place.lat!, place.lon!, point.lat, point.lon) * 1000 : null;
-      rows.push({ city, nr: index + 1, name: place.name, type, excursion: excursions.has(place.name),
-        ref_lat: place.lat!, ref_lon: place.lon!, found: point !== null, found_lat: point?.lat ?? '', found_lon: point?.lon ?? '',
-        distance_m: distance ?? '', threshold_m: threshold,
-        within_threshold: distance !== null && threshold !== '' ? distance <= threshold : '',
-        matched_service: matchedService(point, active.requests), duration_ms: duration });
-      console.log(`[localization] ${rows.length}/98 ${city}: ${place.name}: ${point ? 'found' : 'not found'}`);
+let attempted = false;
+async function runAttempt(city: string, name: string, nr: number, attempt: number): Promise<AttemptResult> {
+  if (attempted) await sleep(pauseMs);
+  attempted = true;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [root + 'node_modules/vite-node/dist/cli.mjs', fileURLToPath(import.meta.url)], {
+      cwd: root, env: { ...process.env, LOCALIZATION_WORKER: JSON.stringify({ city, name, nr, attempt }) },
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+    });
+    let result: AttemptResult | undefined;
+    let stderr = '';
+    child.stderr.on('data', data => { stderr += redact(String(data)); });
+    child.on('message', message => { result = message as AttemptResult; });
+    child.on('error', reject);
+    child.on('exit', code => {
+      if (code === 0 && result) resolve(result);
+      else reject(new Error(`Worker failed (${code}): ${stderr}`));
+    });
+  });
+}
+for (const [cityKey, city] of Object.entries(cities)) {
+  const list = fallbackAttractions[cityKey];
+  const records = list.map((place, index) => ({ city, nr: index + 1, name: place.name, attempts: [] as AttemptResult[] }));
+  responses.push(...records);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const pending = records.filter(r => attempt === 1 || r.attempts.at(-1)?.final_status === 'service_error');
+    if (!pending.length) break;
+    if (attempt > 1) {
+      console.log(`[localization] ${city}: cooling down 60s before attempt ${attempt} for ${pending.length} places`);
+      await sleep(cooldownMs);
+    }
+    for (const record of pending) {
+      const result = await runAttempt(city, record.name, record.nr, attempt);
+      record.attempts.push(result);
+      console.log(`[localization] ${city} ${record.nr}/${list.length} attempt ${attempt}: ${record.name}: ${result.final_status}`);
     }
   }
-} finally { globalThis.fetch = originalFetch; }
+  for (const record of records) {
+    const place = list[record.nr - 1], last = record.attempts.at(-1)!, point = last.point;
+    const type = noArticle.has(place.name) ? 'Pa artikull' : areas.has(place.name) ? 'Zonë' : 'Atraksion';
+    const threshold = type === 'Pa artikull' ? '' : type === 'Zonë' ? 1000 : 300;
+    const distance = point ? haversineKm(place.lat!, place.lon!, point.lat, point.lon) * 1000 : null;
+    rows.push({ city, nr: record.nr, name: place.name, type, excursion: excursions.has(place.name),
+      ref_lat: place.lat!, ref_lon: place.lon!, found: point !== null, found_lat: point?.lat ?? '', found_lon: point?.lon ?? '',
+      distance_m: distance ?? '', threshold_m: threshold,
+      within_threshold: distance !== null && threshold !== '' ? distance <= threshold : '',
+      matched_service: matchedService(point, last.requests), duration_ms: last.duration_ms,
+      attempts: record.attempts.length, final_status: last.final_status });
+  }
+}
 assert.equal(rows.length, 98);
-const requests = responses.flatMap(p => p.requests);
+const requests = responses.flatMap(p => p.attempts.flatMap(a => a.requests));
 const countType = (type: string) => ({ total: rows.filter(r => r.type === type).length,
   found: rows.filter(r => r.type === type && r.found).length,
   within_threshold: rows.filter(r => r.type === type && r.within_threshold === true).length });
@@ -143,27 +194,34 @@ const meta = {
   started_at: startedAt, ended_at: new Date().toISOString(), git_commit: gitCommit,
   runner_sha256: createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex'),
   node_version: process.version, os: { platform: platform(), release: release(), arch: arch() }, mode,
-  keys_present: keysPresent,
+  keys_present: keysPresent, network_used: process.env.LOCALIZATION_NETWORK || null, preflight,
   protocol: { input: 'locateSight(name, cityName), two arguments only; all 98 entries including Beach',
     city_order: Object.values(cities), place_order: 'original curated list order within each city; nr is 1-based per city',
-    cache: 'fresh process and initially empty in-memory localStorage; app caches and anchors accumulate during the run',
+    cache: 'fresh worker process and empty in-memory localStorage for EVERY attempt; no cross-place anchors or cached results',
     city_centers: 'unmodified app cityCenter; uses built-in table for these five cities',
-    retries: 'no runner retries; app Photon 429/503 retries and original timeouts/queues retained',
+    pause_ms: pauseMs, cooldown_ms: cooldownMs, max_attempts: maxAttempts,
+    retries: 'after each city, retry service_error places in list order in up to two cooldown rounds; retain LAST attempt; app retries/timeouts remain',
+    final_status: 'service_error if any request has HTTP >=400, network/body-read error or lookup exception, even when coordinates were returned; otherwise found or not_found',
     classification: 'user-supplied thesis appendix; Pa artikull looked up but excluded from threshold checks',
     matched_service: 'final successful recorded response must contain returned coordinates; otherwise empty',
     duration: 'locateSight wall time, including app queues/retries; excludes response-clone drain and output',
   },
-  summary: { total: rows.length, found: rows.filter(r => r.found).length, requests: requests.length,
+  summary: { total: rows.length, found: rows.filter(r => r.final_status === 'found').length,
+    not_found: rows.filter(r => r.final_status === 'not_found').length,
+    service_error: rows.filter(r => r.final_status === 'service_error').length,
+    total_attempts: responses.reduce((n, r) => n + r.attempts.length, 0), requests: requests.length,
+    http_403: requests.filter(r => r.status === 403).length,
+    http_5xx: requests.filter(r => r.status !== null && r.status >= 500).length,
     http_errors: requests.filter(r => r.status !== null && r.status >= 400).length,
     rate_limit_responses: requests.filter(r => r.status === 429).length,
     network_errors: requests.filter(r => r.error).length,
     body_read_errors: requests.filter(r => r.body_error).length,
-    lookup_errors: responses.filter(r => r.lookup_error).length,
+    lookup_errors: responses.flatMap(r => r.attempts).filter(r => r.lookup_error).length,
     by_type: { Atraksion: countType('Atraksion'), 'Zonë': countType('Zonë'), 'Pa artikull': countType('Pa artikull') },
     excursions: rows.filter(r => r.excursion).map(r => ({ name: r.name, found: r.found })),
   },
 };
-const columns = ['city','nr','name','type','excursion','ref_lat','ref_lon','found','found_lat','found_lon','distance_m','threshold_m','within_threshold','matched_service','duration_ms'];
+const columns = ['city','nr','name','type','excursion','ref_lat','ref_lon','found','found_lat','found_lon','distance_m','threshold_m','within_threshold','matched_service','duration_ms','attempts','final_status'];
 const csv = (value: unknown) => '"' + String(value).replaceAll('"', '""') + '"';
 mkdirSync(output, { recursive: true });
 writeFileSync(output + files[0], [columns.join(','), ...rows.map(row => columns.map(c => csv(row[c])).join(','))].join('\n') + '\n');

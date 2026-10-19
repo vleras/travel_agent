@@ -1,0 +1,106 @@
+{
+  "started_at": "2026-10-19T18:17:27.615Z",
+  "ended_at": "2026-10-19T18:23:55.599Z",
+  "git_commit": "b8d512a63b331dc012c9fc93627d915523ea9445",
+  "runner_sha256": "99b7fbe3004c9b88c364992f991933a2f9865f9484ca61293763ef17da874970",
+  "node_version": "v26.0.0",
+  "os": {
+    "platform": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64"
+  },
+  "mode": "development",
+  "keys_present": {
+    "VITE_GEOAPIFY_KEY": true,
+    "VITE_GEMINI_API_KEY": false,
+    "VITE_PEXELS_API_KEY": true,
+    "VITE_TOMTOM_KEY": true
+  },
+  "network_used": null,
+  "preflight": {
+    "started_at": "2026-10-19T18:16:00.599Z",
+    "network_used": null,
+    "requests_per_provider": 1,
+    "user_agent": "travel_agent-thesis/1.0 (+https://github.com/vleras/travel_agent)",
+    "results": [
+      {
+        "service": "Nominatim",
+        "status": 200,
+        "first100": "[{\"place_id\":81103336,\"licence\":\"Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyrig"
+      },
+      {
+        "service": "Photon",
+        "status": 200,
+        "first100": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"osm_type\":\"R\",\"osm_id\":1167"
+      },
+      {
+        "service": "Geoapify",
+        "status": 200,
+        "first100": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"datasource\":{\"sourcename\":\""
+      }
+    ]
+  },
+  "protocol": {
+    "input": "locateSight(name, cityName), two arguments only; all 98 entries including Beach",
+    "city_order": [
+      "Rome",
+      "Paris",
+      "Barcelona",
+      "Tokyo",
+      "Bangkok"
+    ],
+    "place_order": "original curated list order within each city; nr is 1-based per city",
+    "cache": "fresh worker process and empty in-memory localStorage for EVERY attempt; no cross-place anchors or cached results",
+    "city_centers": "unmodified app cityCenter; uses built-in table for these five cities",
+    "pause_ms": 3000,
+    "cooldown_ms": 60000,
+    "max_attempts": 3,
+    "retries": "after each city, retry service_error places in list order in up to two cooldown rounds; retain LAST attempt; app retries/timeouts remain",
+    "final_status": "service_error if any request has HTTP >=400, network/body-read error or lookup exception, even when coordinates were returned; otherwise found or not_found",
+    "classification": "user-supplied thesis appendix; Pa artikull looked up but excluded from threshold checks",
+    "matched_service": "final successful recorded response must contain returned coordinates; otherwise empty",
+    "duration": "locateSight wall time, including app queues/retries; excludes response-clone drain and output"
+  },
+  "summary": {
+    "total": 98,
+    "found": 81,
+    "not_found": 17,
+    "service_error": 0,
+    "total_attempts": 98,
+    "requests": 156,
+    "http_403": 0,
+    "http_5xx": 0,
+    "http_errors": 0,
+    "rate_limit_responses": 0,
+    "network_errors": 0,
+    "body_read_errors": 0,
+    "lookup_errors": 0,
+    "by_type": {
+      "Atraksion": {
+        "total": 56,
+        "found": 54,
+        "within_threshold": 45
+      },
+      "Zonë": {
+        "total": 39,
+        "found": 25,
+        "within_threshold": 24
+      },
+      "Pa artikull": {
+        "total": 3,
+        "found": 2,
+        "within_threshold": 0
+      }
+    },
+    "excursions": [
+      {
+        "name": "Damnoen Saduak Floating Market",
+        "found": false
+      },
+      {
+        "name": "Ayutthaya Day Trip Hub",
+        "found": false
+      }
+    ]
+  }
+}
