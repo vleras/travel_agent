@@ -1,0 +1,73 @@
+{
+  "started_at": "2026-10-19T07:53:34.266Z",
+  "ended_at": "2026-10-19T07:56:43.462Z",
+  "git_commit": "c14a51ba63efce1247603de80ee3ea47c240c1e2",
+  "runner_sha256": "0179021f4998c6aa80765daee536d7a90f1d84596b423de93cd2e2ff6f7b54c9",
+  "node_version": "v26.0.0",
+  "os": {
+    "platform": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64"
+  },
+  "mode": "development",
+  "keys_present": {
+    "VITE_GEOAPIFY_KEY": true,
+    "VITE_GEMINI_API_KEY": false,
+    "VITE_PEXELS_API_KEY": true,
+    "VITE_TOMTOM_KEY": true
+  },
+  "protocol": {
+    "input": "locateSight(name, cityName), two arguments only; all 98 entries including Beach",
+    "city_order": [
+      "Rome",
+      "Paris",
+      "Barcelona",
+      "Tokyo",
+      "Bangkok"
+    ],
+    "place_order": "original curated list order within each city; nr is 1-based per city",
+    "cache": "fresh process and initially empty in-memory localStorage; app caches and anchors accumulate during the run",
+    "city_centers": "unmodified app cityCenter; uses built-in table for these five cities",
+    "retries": "no runner retries; app Photon 429/503 retries and original timeouts/queues retained",
+    "classification": "user-supplied thesis appendix; Pa artikull looked up but excluded from threshold checks",
+    "matched_service": "final successful recorded response must contain returned coordinates; otherwise empty",
+    "duration": "locateSight wall time, including app queues/retries; excludes response-clone drain and output"
+  },
+  "summary": {
+    "total": 98,
+    "found": 77,
+    "requests": 242,
+    "http_errors": 41,
+    "rate_limit_responses": 0,
+    "network_errors": 85,
+    "body_read_errors": 0,
+    "lookup_errors": 0,
+    "by_type": {
+      "Atraksion": {
+        "total": 56,
+        "found": 53,
+        "within_threshold": 47
+      },
+      "Zonë": {
+        "total": 39,
+        "found": 22,
+        "within_threshold": 21
+      },
+      "Pa artikull": {
+        "total": 3,
+        "found": 2,
+        "within_threshold": 0
+      }
+    },
+    "excursions": [
+      {
+        "name": "Damnoen Saduak Floating Market",
+        "found": false
+      },
+      {
+        "name": "Ayutthaya Day Trip Hub",
+        "found": false
+      }
+    ]
+  }
+}
