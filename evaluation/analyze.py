@@ -32,7 +32,7 @@ AN = OUT / 'analysis'
 EPS = 1e-9
 METHODS = ['P', 'B4', 'B3', 'B2', 'B1']
 NAMES = {'P': 'Metoda e propozuar', 'B4': 'Ndarja pa rishikim', 'B3': 'k-means++',
-         'B2': 'Renditja në listë', 'B1': 'Ndarja rastësore'}
+         'B2': 'Ndarja sipas renditjes së vendeve në listë', 'B1': 'Ndarja rastësore'}
 USER_AGENT = 'travel_agent-thesis/1.0 (+https://github.com/vleras/travel_agent)'
 summary: list[str] = []
 
@@ -88,6 +88,9 @@ def e1(d1: pd.DataFrame) -> pd.DataFrame:
     table = describe(dist)
     table.round(2).to_csv(AN / 'e1_table.csv', index=False)
     say(table.round(2).to_string(index=False))
+    by_city = dist.pivot_table(index='city', columns='method', values=['mean_K', 'max_L'], aggfunc='mean').round(1)
+    by_city.to_csv(AN / 'e1_by_city.csv')
+    say('E1 by city (mean): ' + str(by_city.to_dict()))
     return dist
 
 
@@ -96,7 +99,7 @@ def figure_compactness(dist: pd.DataFrame) -> None:
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     labels = {'P': 'Metoda e\npropozuar', 'B4': 'Ndarja pa\nrishikim', 'B3': 'k-means++',
-              'B2': 'Renditja\nnë listë', 'B1': 'Ndarja\nrastësore'}
+              'B2': 'Ndarja sipas\nrenditjes së\nvendeve në listë', 'B1': 'Ndarja\nrastësore'}
     data = [dist[dist.method == m].mean_K.values for m in METHODS]
     fig, ax = plt.subplots(figsize=(7.2, 3.6), dpi=200)
     bp = ax.boxplot(data, patch_artist=True, widths=0.55, showmeans=True,
@@ -174,6 +177,9 @@ def e2(d2: pd.DataFrame) -> None:
     table = describe(d2)
     table.round(2).to_csv(AN / 'e2_table.csv', index=False)
     say(table.round(2).to_string(index=False))
+    by_city = d2.pivot_table(index='city', columns='method', values=['mean_K', 'max_L'], aggfunc='mean').round(1)
+    by_city.to_csv(AN / 'e2_by_city.csv')
+    say('E2 by city (mean): ' + str(by_city.to_dict()))
     K = d2.pivot(index='scenario_id', columns='method', values='mean_K')
     for b in ['B1', 'B2', 'B3', 'B4']:
         diff = K.P - K[b]
@@ -279,7 +285,7 @@ def map_example(no_map: bool) -> None:
     xs, ys = zip(*points)
     pad = 650
     fig, axes = plt.subplots(1, 2, figsize=(10, 5.2), dpi=200)
-    titles = {'B2': '(a) Renditja në listë', 'P': '(b) Metoda e propozuar'}
+    titles = {'B2': '(a) Ndarja sipas renditjes së vendeve në listë', 'P': '(b) Metoda e propozuar'}
     say('\n## Map example (E1-rome-D3-balanced-r5)')
     for ax, m in zip(axes, ['B2', 'P']):
         days = example['methods'][m]

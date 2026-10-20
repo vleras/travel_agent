@@ -2,5 +2,5 @@ metoda,K_mesatare,K_mediana,L_totale_km,L_max_mesatare_km,L_max_mediana_km,sigma
 Metoda e propozuar,48.79,55.0,99.15,73.1,18.64,1.16,32.42,0.48,1.12
 Ndarja pa rishikim,46.09,51.25,98.39,69.56,18.13,1.16,27.64,0.47,1.07
 k-means++,41.04,44.34,101.58,46.52,23.79,3.72,23.77,0.01,0.03
-Renditja në listë,29.13,23.62,121.02,58.7,29.08,0.33,9.36,0.0,0.0
+Ndarja sipas renditjes së vendeve në listë,29.13,23.62,121.02,58.7,29.08,0.33,9.36,0.0,0.0
 Ndarja rastësore,30.55,27.01,118.77,57.84,25.59,0.33,9.27,0.0,0.0

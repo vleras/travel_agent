@@ -35,6 +35,6 @@
   "keeps plain negative numbers": "loc_coordinates",
   "reads full Google Maps links": "loc_map_links",
   "resolves short links to coordinates": "loc_map_links",
-  "handles failed short-link requests": "loc_short_link_fails",
+  "handles failed short-link requests": "loc_map_links",
   "rejects names, out-of-range values and single numbers": "loc_not_coordinates"
 }
