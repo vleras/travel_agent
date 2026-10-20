@@ -227,6 +227,8 @@ def localization() -> None:
     rows = [row(main, 'të gjitha'), row(main[main.type == 'Atraksion'], 'atraksione (300 m)'),
             row(main[main.type == 'Zonë'], 'zona (1 km)')]
     rows += [row(main[main.city == c], c) for c in ['Rome', 'Paris', 'Barcelona', 'Tokyo', 'Bangkok']]
+    # Reported separately (Ch4 4.10): the two Bangkok excursions and the three places without an article
+    rows += [row(L[excursion], 'ekskursionet e Bangkokut'), row(L[no_article], 'vendet pa artikull')]
     table = pd.DataFrame(rows)
     table.round(1).to_csv(AN / 'localization_summary.csv', index=False)
     say(table.round(1).to_string(index=False))

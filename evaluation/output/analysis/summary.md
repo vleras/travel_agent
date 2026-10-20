@@ -82,15 +82,17 @@ experiment               step  median_ms  p95_ms  max_ms
 KJ3: proposed method run twice per scenario, identical in 660 of 660 (the runner asserts equality; a mismatch stops the run)
 
 ## Localization test (run 2026-10-19T18:17:27.615Z – 2026-10-19T18:23:55.599Z, code b8d512a)
-             grupi  n  gjetur  gjetur_pct  largesia_mediane_m  brenda_pragut  brenda_pragut_pct  brenda_pragut_pct_e_gjeturave
-         të gjitha 93      79        84.9               132.2             69               74.2                           87.3
-atraksione (300 m) 55      54        98.2                73.7             45               81.8                           83.3
-       zona (1 km) 38      25        65.8               251.0             24               63.2                           96.0
-              Rome 20      16        80.0               145.9             13               65.0                           81.2
-             Paris 20      19        95.0                59.9             18               90.0                           94.7
-         Barcelona 19      17        89.5               145.5             14               73.7                           82.4
-             Tokyo 18      14        77.8               167.3             13               72.2                           92.9
-           Bangkok 16      13        81.2               147.5             11               68.8                           84.6
+                   grupi  n  gjetur  gjetur_pct  largesia_mediane_m  brenda_pragut  brenda_pragut_pct  brenda_pragut_pct_e_gjeturave
+               të gjitha 93      79        84.9               132.2             69               74.2                           87.3
+      atraksione (300 m) 55      54        98.2                73.7             45               81.8                           83.3
+             zona (1 km) 38      25        65.8               251.0             24               63.2                           96.0
+                    Rome 20      16        80.0               145.9             13               65.0                           81.2
+                   Paris 20      19        95.0                59.9             18               90.0                           94.7
+               Barcelona 19      17        89.5               145.5             14               73.7                           82.4
+                   Tokyo 18      14        77.8               167.3             13               72.2                           92.9
+                 Bangkok 16      13        81.2               147.5             11               68.8                           84.6
+ekskursionet e Bangkokut  2       0         0.0                 NaN              0                0.0                            0.0
+      vendet pa artikull  3       2        66.7               110.7              0                0.0                            0.0
 excursions: [{'name': 'Damnoen Saduak Floating Market', 'found': False}, {'name': 'Ayutthaya Day Trip Hub', 'found': False}]
 no article: [{'name': "Caffè Sant'Eustachio", 'found': True, 'distance_m': 165.0}, {'name': 'Roscioli Salumeria', 'found': True, 'distance_m': 57.0}, {'name': 'Seine River Cruise', 'found': False, 'distance_m': nan}]
 not found (main): Trastevere Food Walk, Appian Way Park, Ostiense Street Art, Monti Neighborhood, Latin Quarter Food Walk, El Born Tapas Crawl, Gràcia Neighborhood, Senso-ji Temple, Koenji Vintage District, Sumida River Cruise, Nakameguro Canal, Chatuchak Weekend Market, Thonglor Cafés, Talad Noi Heritage Walk
