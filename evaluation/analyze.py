@@ -254,6 +254,27 @@ def input_tests(skip_tests: bool) -> None:
     table = (pd.DataFrame([dict(category=categories[t], passed=s == 'passed') for t, s in results])
              .groupby('category', sort=False).agg(raste=('passed', 'size'), te_sakta=('passed', 'sum')).reset_index())
     table.to_csv(AN / 'input_tests.csv', index=False)
+    # Ch6 Tabela 21: report by the inputs actually tested, in the categories of Ch4 4.10
+    inputs = json.loads((ROOT / 'evaluation' / 'input_test_inputs.json').read_text())
+    status = dict(results)
+    names = {'known': 'Formate të njohura', 'relative': 'Data relative', 'no_date': 'Përgjigje pa datë',
+             'impossible': 'Data të pamundura', 'past': 'Data në të kaluarën',
+             'to_model': 'Formate që i kalojnë modelit gjuhësor', 'coordinates': 'Koordinata në formate të ndryshme',
+             'map_links': 'Lidhje hartash', 'out_of_range': 'Vlera jashtë kufijve',
+             'not_coordinates': 'Tekste që nuk janë koordinata'}
+    rows = []
+    for group, label in [('date', 'Datat'), ('location', 'Vendndodhja')]:
+        for key in [k for k in names if any(k in i['categories'] for i in inputs[group])]:
+            members = [i for i in inputs[group] if key in i['categories']]
+            ok = [i for i in members if all(status.get(t) == 'passed' for t in i['tests'])]
+            rows.append(dict(grupi=label, kategoria=names[key], hyrje=len(members), te_sakta=len(ok),
+                             hyrjet='; '.join(i['input'] for i in members)))
+    by_input = pd.DataFrame(rows)
+    by_input.to_csv(AN / 'input_tests_by_input.csv', index=False)
+    flow = sum(1 for t, _ in results if categories[t] == 'date_flow')
+    say(f"by input: {len(inputs['date'])} date inputs, {len(inputs['location'])} location inputs, "
+        f"{flow} flow checks without an input format")
+    say(by_input[['grupi', 'kategoria', 'hyrje', 'te_sakta']].to_string(index=False))
     say(f'\n## Input interpretation: {len(results)} cases, {sum(s == "passed" for _, s in results)} correct')
     say(table.to_string(index=False))
 
