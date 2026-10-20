@@ -1145,8 +1145,16 @@
 
 .place-pace-picker legend {
   padding: 0;
-  margin-bottom: 0.65rem;
+  margin-bottom: 1rem;
   font-weight: 600;
+}
+
+.place-pace-picker .chip-row {
+  gap: 1rem;
+}
+
+.place-pace-picker .hint {
+  margin-top: 1rem;
 }
 
 .place-pace-picker .chip {

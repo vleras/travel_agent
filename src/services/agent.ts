@@ -425,6 +425,35 @@ export function distributeFoodPlaces(
   return clusters;
 }
 
+/** Balance counts first, choosing the least geographic cost for each transfer. */
+export function balanceDayCounts(
+  clusters: ScoredAttraction[][],
+  revisions: Revision[] = [],
+): ScoredAttraction[][] {
+  const next = clusters.map(day => [...day]);
+  while (next.length > 1) {
+    let best: { from: number; to: number; index: number; cost: number } | undefined;
+    for (let from = 0; from < next.length; from++) {
+      for (let to = 0; to < next.length; to++) {
+        if (next[from].length <= next[to].length + 1) continue;
+        const before = clusterSpreadKm(next[from]) + clusterSpreadKm(next[to]);
+        next[from].forEach((place, index) => {
+          const cost = clusterSpreadKm(next[from].filter((_, i) => i !== index))
+            + clusterSpreadKm([...next[to], place]) - before;
+          if (!best || cost < best.cost) best = { from, to, index, cost };
+        });
+      }
+    }
+    if (!best) break;
+    const { from, to, index } = best;
+    const [place] = next[from].splice(index, 1);
+    next[to].push(place);
+    revisions.push({ day_from: from + 1, day_to: to + 1,
+      stop_name: place.name, reason: 'balance the number of places across days' });
+  }
+  return refineClustersBySwap(next);
+}
+
 export function clusterByProximity(
   attractions: ScoredAttraction[],
   days: number,
@@ -451,7 +480,7 @@ export function clusterByProximity(
   );
 
   while (clusters.length < days) clusters.push([]);
-  return clusters.sort((a, b) => {
+  return balanceDayCounts(clusters).sort((a, b) => {
     const ca = clusterCentroid(a);
     const cb = clusterCentroid(b);
     if (!ca && !cb) return 0;
@@ -706,7 +735,7 @@ export function reviseClusters(
   pace: Pace,
 ): { clusters: ScoredAttraction[][]; revisions: Revision[] } {
   const revisions: Revision[] = [];
-  const next = clusters.map((c) => [...c]);
+  const next = balanceDayCounts(clusters, revisions);
   const threshold = 70;
 
   for (let dayIdx = 0; dayIdx < next.length; dayIdx++) {
@@ -734,6 +763,8 @@ export function reviseClusters(
 
     for (let other = 0; other < next.length; other++) {
       if (other === dayIdx) continue;
+      // A transfer must not turn balanced days into an uneven workload.
+      if (day.length <= next[other].length) continue;
       if (next[other].length >= paceStopsPerDay(pace) + 1) continue;
       if (
         next[other].length > 0 &&
