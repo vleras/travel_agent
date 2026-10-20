@@ -259,7 +259,7 @@ def input_tests(skip_tests: bool) -> None:
     status = dict(results)
     names = {'known': 'Formate të njohura', 'relative': 'Data relative', 'no_date': 'Përgjigje pa datë',
              'impossible': 'Data të pamundura', 'past': 'Data në të kaluarën',
-             'to_model': 'Formate që i kalojnë modelit gjuhësor', 'coordinates': 'Koordinata në formate të ndryshme',
+             'to_model': 'Formate që duhet t’i kalojnë modelit gjuhësor', 'coordinates': 'Koordinata në formate të ndryshme',
              'map_links': 'Lidhje hartash', 'out_of_range': 'Vlera jashtë kufijve',
              'not_coordinates': 'Tekste që nuk janë koordinata'}
     rows = []

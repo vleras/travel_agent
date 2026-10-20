@@ -4,7 +4,7 @@ Datat,Data relative,2,2,today; tomorrow
 Datat,Përgjigje pa datë,7,7,no; I don't know; not sure; no preference; skip; yes; I need to decide on dates later
 Datat,Data të pamundura,2,2,31 February; 2026-02-30
 Datat,Data në të kaluarën,4,4,7 september; September 7; 2026-09-07; last Monday
-Datat,Formate që i kalojnë modelit gjuhësor,3,3,I need to decide on dates later; last Monday; October 5
+Datat,Formate që duhet t’i kalojnë modelit gjuhësor,3,3,I need to decide on dates later; last Monday; October 5
 Vendndodhja,Koordinata në formate të ndryshme,15,15,"35.8974, 14.5147; 35.8974 14.5147; Latitude: 35.8974° N, Longitude: 14.5147° E; • Latitude: 35.8974° N / • Longitude: 14.5147° E; - Latitude: 35.8974° N / - Longitude: 14.5147° E; 35.8974°N 14.5147°E; 35°53'50.6""N 14°30'52.9""E; 35°53′50.6″N 14°30′52.9″E; lat 35.8974 lng 14.5147; lat: 35.8974, lon: 14.5147; 33.8688° S, 151.2093° E; 40.7128°N 74.0060°W; 22°54'30""S 43°11'47""W; 14.5147°E 35.8974°N; -33.8688, 151.2093"
 Vendndodhja,Lidhje hartash,4,4,"https://www.google.com/maps/place/X/@35.89,14.51,17z/...; https://maps.google.com/?q=35.8974,14.5147; https://maps.app.goo.gl/abc123 (lidhja hapet); https://maps.app.goo.gl/abc123 (lidhja dështon)"
 Vendndodhja,Vlera jashtë kufijve,2,2,"95.1, 14.5; 35°61'00""N 14°30'00""E"

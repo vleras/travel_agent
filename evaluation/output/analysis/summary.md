@@ -97,17 +97,17 @@ not found (main): Trastevere Food Walk, Appian Way Park, Ostiense Street Art, Mo
 found outside threshold: Trevi Fountain (528 m), Vatican Museums (565 m), St. Peter's Basilica (622 m), Montmartre & Sacré-Cœur (451 m), Park Güell (497 m), Casa Batlló (365 m), Barceloneta Beach (1054 m), Tokyo National Museum (10310 m), Grand Palace (313 m), Wat Pho (2285 m)
 matched service: {'photon': 77, 'geoapify': 2}
 by input: 17 date inputs, 24 location inputs, 7 flow checks without an input format
-      grupi                             kategoria  hyrje  te_sakta
-      Datat                    Formate të njohura      4         4
-      Datat                         Data relative      2         2
-      Datat                     Përgjigje pa datë      7         7
-      Datat                     Data të pamundura      2         2
-      Datat                   Data në të kaluarën      4         4
-      Datat Formate që i kalojnë modelit gjuhësor      3         3
-Vendndodhja     Koordinata në formate të ndryshme     15        15
-Vendndodhja                        Lidhje hartash      4         4
-Vendndodhja                  Vlera jashtë kufijve      2         2
-Vendndodhja         Tekste që nuk janë koordinata      3         3
+      grupi                                     kategoria  hyrje  te_sakta
+      Datat                            Formate të njohura      4         4
+      Datat                                 Data relative      2         2
+      Datat                             Përgjigje pa datë      7         7
+      Datat                             Data të pamundura      2         2
+      Datat                           Data në të kaluarën      4         4
+      Datat Formate që duhet t’i kalojnë modelit gjuhësor      3         3
+Vendndodhja             Koordinata në formate të ndryshme     15        15
+Vendndodhja                                Lidhje hartash      4         4
+Vendndodhja                          Vlera jashtë kufijve      2         2
+Vendndodhja                 Tekste që nuk janë koordinata      3         3
 
 ## Input interpretation: 37 cases, 37 correct
            category  raste  te_sakta
