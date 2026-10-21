@@ -4,7 +4,7 @@ import type { GeocodeResult } from '../services/nominatim';
 /** Hardcoded centers for curated destinations when Nominatim is rate-limited. */
 const CITY_CENTERS: Record<string, GeocodeResult> = {
   rome: { lat: 41.9028, lon: 12.4964, display_name: 'Rome, Italy' },
-  tokyo: { lat: 35.6762, lon: 139.6503, display_name: 'Tokyo, Japan' },
+  tokyo: { lat: 35.6769, lon: 139.7639, display_name: 'Tokyo, Japan' },
   barcelona: { lat: 41.3874, lon: 2.1686, display_name: 'Barcelona, Spain' },
   bangkok: { lat: 13.7563, lon: 100.5018, display_name: 'Bangkok, Thailand' },
   paris: { lat: 48.8566, lon: 2.3522, display_name: 'Paris, France' },
