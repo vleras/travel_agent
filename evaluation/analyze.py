@@ -8,6 +8,8 @@ evaluation/output/. Run from the repository root:
     python3 evaluation/analyze.py --no-map   # skip the map example (needs Node + internet for tiles)
 
 Outputs go to evaluation/output/analysis/.
+Localization: run 3 (after the Tokyo centre fix) is the main result; run 2 is compared and wrong matches are
+traced (see evaluation/replayLocalization.ts for the cause of each change).
 Method (Ch4 4.10): 516 distinct E1 scenarios (identical scenarios counted once), paired two-sided
 Wilcoxon signed-rank tests on mean compactness per scenario, alpha = 0.05, pairs with zero difference
 dropped, Holm correction within each hypothesis over all its tests (H1: 4, H2: 2, H3: 36).
@@ -238,6 +240,68 @@ def localization() -> None:
     outside = main[main.found & ~is_true(main.within_threshold)]
     say('found outside threshold: ' + ', '.join(f'{r.name} ({r.distance_m:.0f} m)' for r in outside.itertuples()))
     say('matched service: ' + str(main[main.found].matched_service.value_counts().to_dict()))
+
+    # Run 2 vs run 3 (run 3 = after the Tokyo centre fix, commit eeb6f44); run 3 is the main result.
+    run2_path = OUT / 'localization_results_run2.csv'
+    if run2_path.exists():
+        L2 = pd.read_csv(run2_path)
+        main2 = L2[~is_true(L2.excursion) & ~L2.type.eq('Pa artikull')]
+        runs = []
+        for label, df in [('run 2', main2), ('run 3', main)]:
+            for g, sub in [('të gjitha', df), ('atraksione (300 m)', df[df.type == 'Atraksion']), ('zona (1 km)', df[df.type == 'Zonë'])]:
+                runs.append(dict(ekzekutimi=label, **row(sub, g)))
+        runs_table = pd.DataFrame(runs)
+        runs_table.round(1).to_csv(AN / 'localization_runs.csv', index=False)
+        say('\nrun 2 vs run 3:')
+        say(runs_table[['ekzekutimi', 'grupi', 'n', 'gjetur', 'largesia_mediane_m', 'brenda_pragut']].round(1).to_string(index=False))
+        changes = AN / 'localization_changes_run2_run3.csv'
+        if changes.exists():
+            say('changes between runs (from evaluation/replayLocalization.ts): '
+                + str(pd.read_csv(changes)[['city', 'name', 'cause']].to_dict('records')))
+
+    # Wrong matches: found, but outside the threshold -> the accepted object is another place.
+    # The accepted object is traced in the recorded service answers, as evidence.
+    def accepted_object(responses: list, r) -> tuple[str, str]:
+        place = next(p for p in responses if p['name'] == r['name'])
+        for request in place['attempts'][-1]['requests']:
+            try:
+                body = json.loads(request.get('body') or '')
+            except (ValueError, TypeError):
+                continue
+            for f in (body.get('features') if isinstance(body, dict) else body) or []:
+                if 'geometry' in f:
+                    lon, lat = f['geometry']['coordinates'][:2]
+                    props = f.get('properties') or {}
+                    name, kind = props.get('name') or '', props.get('osm_value') or ''
+                else:
+                    lat, lon = float(f.get('lat', 0)), float(f.get('lon', 0))
+                    name, kind = (f.get('display_name') or '').split(',')[0], f.get('type') or ''
+                d = 2 * 6371000 * math.asin(math.sqrt(math.sin(math.radians(lat - r['found_lat']) / 2) ** 2
+                    + math.cos(math.radians(lat)) * math.cos(math.radians(r['found_lat']))
+                    * math.sin(math.radians(lon - r['found_lon']) / 2) ** 2))
+                if d < 40:
+                    return name, kind
+        return '', ''
+
+    wrong = []
+    for label, results, responses_file in [('run 2', run2_path, 'localization_responses_run2.json'),
+                                           ('run 3', OUT / 'localization_results.csv', 'localization_responses.json')]:
+        if not results.exists():
+            continue
+        df = pd.read_csv(results)
+        df = df[~is_true(df.excursion) & ~df.type.eq('Pa artikull')]
+        responses = json.loads((OUT / responses_file).read_text())
+        found = df[df.found]
+        for _, r in found[~is_true(found.within_threshold)].iterrows():
+            name, kind = accepted_object(responses, r)
+            wrong.append(dict(ekzekutimi=label, qyteti=r.city, vendi=r['name'], lloji=r.type, largesia_m=round(r.distance_m),
+                              objekti_i_pranuar=name, lloji_i_objektit=kind, mbi_2_km=r.distance_m > 2000))
+        n_wrong = sum(1 for w in wrong if w['ekzekutimi'] == label)
+        n_far = sum(1 for w in wrong if w['ekzekutimi'] == label and w['mbi_2_km'])
+        say(f'wrong matches ({label}): {n_wrong} of {len(found)} found, {n_far} of them more than 2 km away')
+    wrong_table = pd.DataFrame(wrong)
+    wrong_table.to_csv(AN / 'localization_wrong_matches.csv', index=False)
+    say(wrong_table.to_string(index=False))
 
 
 def input_tests(skip_tests: bool) -> None:

@@ -1,0 +1,22 @@
+ekzekutimi,qyteti,vendi,lloji,largesia_m,objekti_i_pranuar,lloji_i_objektit,mbi_2_km
+run 2,Rome,Trevi Fountain,Atraksion,528,Triton Fountain,water,False
+run 2,Rome,Vatican Museums,Atraksion,565,Vatican Museums Shop,religion,False
+run 2,Rome,St. Peter's Basilica,Atraksion,622,Sapta Luggage Storage and Transfers – Vatican & St. Peter’s Basilica,storage_rental,False
+run 2,Paris,Montmartre & Sacré-Cœur,Atraksion,451,Montmartre - Sacré-Cœur,bus_stop,False
+run 2,Barcelona,Park Güell,Atraksion,497,Park Güell Souvenirs,gift,False
+run 2,Barcelona,Casa Batlló,Atraksion,365,Casa Pia Batlló,attraction,False
+run 2,Barcelona,Barceloneta Beach,Zonë,1054,Desigual Barceloneta Beach,clothes,False
+run 2,Tokyo,Tokyo National Museum,Atraksion,10310,"Institute for Nature Study, National Museum of Nature and Science",garden,True
+run 2,Bangkok,Grand Palace,Atraksion,313,Grand Palace Ticket Office,ticket,False
+run 2,Bangkok,Wat Pho,Atraksion,2285,Wat Pho Riang School,school,True
+run 3,Rome,Trevi Fountain,Atraksion,528,Triton Fountain,water,False
+run 3,Rome,Vatican Museums,Atraksion,565,Vatican Museums Shop,religion,False
+run 3,Rome,St. Peter's Basilica,Atraksion,622,Sapta Luggage Storage and Transfers – Vatican & St. Peter’s Basilica,storage_rental,False
+run 3,Paris,Montmartre & Sacré-Cœur,Atraksion,451,Montmartre - Sacré-Cœur,bus_stop,False
+run 3,Barcelona,Park Güell,Atraksion,497,Park Güell Souvenirs,gift,False
+run 3,Barcelona,Casa Batlló,Atraksion,365,Casa Pia Batlló,attraction,False
+run 3,Barcelona,Barceloneta Beach,Zonë,1054,Desigual Barceloneta Beach,clothes,False
+run 3,Tokyo,Meiji Shrine,Atraksion,520,Meiji Shrine Museum,museum,False
+run 3,Tokyo,Tokyo National Museum,Atraksion,3724,"National Museum of Modern Art, Tokyo",museum,True
+run 3,Bangkok,Grand Palace,Atraksion,313,Grand Palace Ticket Office,ticket,False
+run 3,Bangkok,Wat Pho,Atraksion,2285,Wat Pho Riang School,school,True

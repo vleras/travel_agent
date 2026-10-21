@@ -81,23 +81,57 @@ experiment               step  median_ms  p95_ms  max_ms
         E2 ndarja + rishikimi      0.477   1.014   1.117
 KJ3: proposed method run twice per scenario, identical in 660 of 660 (the runner asserts equality; a mismatch stops the run)
 
-## Localization test (run 2026-10-19T18:17:27.615Z – 2026-10-19T18:23:55.599Z, code b8d512a)
+## Localization test (run 2026-10-21T13:30:36.271Z – 2026-10-21T13:49:01.615Z, code eeb6f44)
                    grupi  n  gjetur  gjetur_pct  largesia_mediane_m  brenda_pragut  brenda_pragut_pct  brenda_pragut_pct_e_gjeturave
-               të gjitha 93      79        84.9               132.2             69               74.2                           87.3
-      atraksione (300 m) 55      54        98.2                73.7             45               81.8                           83.3
+               të gjitha 93      78        83.9               131.8             67               72.0                           85.9
+      atraksione (300 m) 55      53        96.4                63.4             43               78.2                           81.1
              zona (1 km) 38      25        65.8               251.0             24               63.2                           96.0
                     Rome 20      16        80.0               145.9             13               65.0                           81.2
                    Paris 20      19        95.0                59.9             18               90.0                           94.7
-               Barcelona 19      17        89.5               145.5             14               73.7                           82.4
-                   Tokyo 18      14        77.8               167.3             13               72.2                           92.9
+               Barcelona 19      16        84.2               120.7             13               68.4                           81.2
+                   Tokyo 18      14        77.8               177.3             12               66.7                           85.7
                  Bangkok 16      13        81.2               147.5             11               68.8                           84.6
 ekskursionet e Bangkokut  2       0         0.0                 NaN              0                0.0                            0.0
       vendet pa artikull  3       2        66.7               110.7              0                0.0                            0.0
 excursions: [{'name': 'Damnoen Saduak Floating Market', 'found': False}, {'name': 'Ayutthaya Day Trip Hub', 'found': False}]
 no article: [{'name': "Caffè Sant'Eustachio", 'found': True, 'distance_m': 165.0}, {'name': 'Roscioli Salumeria', 'found': True, 'distance_m': 57.0}, {'name': 'Seine River Cruise', 'found': False, 'distance_m': nan}]
-not found (main): Trastevere Food Walk, Appian Way Park, Ostiense Street Art, Monti Neighborhood, Latin Quarter Food Walk, El Born Tapas Crawl, Gràcia Neighborhood, Senso-ji Temple, Koenji Vintage District, Sumida River Cruise, Nakameguro Canal, Chatuchak Weekend Market, Thonglor Cafés, Talad Noi Heritage Walk
-found outside threshold: Trevi Fountain (528 m), Vatican Museums (565 m), St. Peter's Basilica (622 m), Montmartre & Sacré-Cœur (451 m), Park Güell (497 m), Casa Batlló (365 m), Barceloneta Beach (1054 m), Tokyo National Museum (10310 m), Grand Palace (313 m), Wat Pho (2285 m)
-matched service: {'photon': 77, 'geoapify': 2}
+not found (main): Trastevere Food Walk, Appian Way Park, Ostiense Street Art, Monti Neighborhood, Latin Quarter Food Walk, El Born Tapas Crawl, Gràcia Neighborhood, Bunkers del Carmel, Senso-ji Temple, Koenji Vintage District, Sumida River Cruise, Nakameguro Canal, Chatuchak Weekend Market, Thonglor Cafés, Talad Noi Heritage Walk
+found outside threshold: Trevi Fountain (528 m), Vatican Museums (565 m), St. Peter's Basilica (622 m), Montmartre & Sacré-Cœur (451 m), Park Güell (497 m), Casa Batlló (365 m), Barceloneta Beach (1054 m), Meiji Shrine (520 m), Tokyo National Museum (3724 m), Grand Palace (313 m), Wat Pho (2285 m)
+matched service: {'photon': 77, 'geoapify': 1}
+
+run 2 vs run 3:
+ekzekutimi              grupi  n  gjetur  largesia_mediane_m  brenda_pragut
+     run 2          të gjitha 93      79               132.2             69
+     run 2 atraksione (300 m) 55      54                73.7             45
+     run 2        zona (1 km) 38      25               251.0             24
+     run 3          të gjitha 93      78               131.8             67
+     run 3 atraksione (300 m) 55      53                63.4             43
+     run 3        zona (1 km) 38      25               251.0             24
+changes between runs (from evaluation/replayLocalization.ts): [{'city': 'Barcelona', 'name': 'Bunkers del Carmel', 'cause': 'shërbimet'}, {'city': 'Tokyo', 'name': 'Shibuya Crossing', 'cause': 'qendra'}, {'city': 'Tokyo', 'name': 'Meiji Shrine', 'cause': 'qendra'}, {'city': 'Tokyo', 'name': 'Omoide Yokocho', 'cause': 'qendra'}, {'city': 'Tokyo', 'name': 'Roppongi Hills', 'cause': 'qendra'}, {'city': 'Tokyo', 'name': 'Tokyo National Museum', 'cause': 'qendra'}]
+wrong matches (run 2): 10 of 79 found, 2 of them more than 2 km away
+wrong matches (run 3): 11 of 78 found, 2 of them more than 2 km away
+ekzekutimi    qyteti                   vendi     lloji  largesia_m                                                    objekti_i_pranuar lloji_i_objektit  mbi_2_km
+     run 2      Rome          Trevi Fountain Atraksion         528                                                      Triton Fountain            water     False
+     run 2      Rome         Vatican Museums Atraksion         565                                                 Vatican Museums Shop         religion     False
+     run 2      Rome    St. Peter's Basilica Atraksion         622 Sapta Luggage Storage and Transfers – Vatican & St. Peter’s Basilica   storage_rental     False
+     run 2     Paris Montmartre & Sacré-Cœur Atraksion         451                                              Montmartre - Sacré-Cœur         bus_stop     False
+     run 2 Barcelona              Park Güell Atraksion         497                                                 Park Güell Souvenirs             gift     False
+     run 2 Barcelona             Casa Batlló Atraksion         365                                                      Casa Pia Batlló       attraction     False
+     run 2 Barcelona       Barceloneta Beach      Zonë        1054                                           Desigual Barceloneta Beach          clothes     False
+     run 2     Tokyo   Tokyo National Museum Atraksion       10310    Institute for Nature Study, National Museum of Nature and Science           garden      True
+     run 2   Bangkok            Grand Palace Atraksion         313                                           Grand Palace Ticket Office           ticket     False
+     run 2   Bangkok                 Wat Pho Atraksion        2285                                                 Wat Pho Riang School           school      True
+     run 3      Rome          Trevi Fountain Atraksion         528                                                      Triton Fountain            water     False
+     run 3      Rome         Vatican Museums Atraksion         565                                                 Vatican Museums Shop         religion     False
+     run 3      Rome    St. Peter's Basilica Atraksion         622 Sapta Luggage Storage and Transfers – Vatican & St. Peter’s Basilica   storage_rental     False
+     run 3     Paris Montmartre & Sacré-Cœur Atraksion         451                                              Montmartre - Sacré-Cœur         bus_stop     False
+     run 3 Barcelona              Park Güell Atraksion         497                                                 Park Güell Souvenirs             gift     False
+     run 3 Barcelona             Casa Batlló Atraksion         365                                                      Casa Pia Batlló       attraction     False
+     run 3 Barcelona       Barceloneta Beach      Zonë        1054                                           Desigual Barceloneta Beach          clothes     False
+     run 3     Tokyo            Meiji Shrine Atraksion         520                                                  Meiji Shrine Museum           museum     False
+     run 3     Tokyo   Tokyo National Museum Atraksion        3724                                 National Museum of Modern Art, Tokyo           museum      True
+     run 3   Bangkok            Grand Palace Atraksion         313                                           Grand Palace Ticket Office           ticket     False
+     run 3   Bangkok                 Wat Pho Atraksion        2285                                                 Wat Pho Riang School           school      True
 by input: 17 date inputs, 24 location inputs, 7 flow checks without an input format
       grupi                                     kategoria  hyrje  te_sakta
       Datat                            Formate të njohura      4         4

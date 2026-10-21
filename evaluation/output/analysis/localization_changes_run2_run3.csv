@@ -1,0 +1,7 @@
+city,name,run2_found,run2_distance_m,run3_found,run3_distance_m,replay_found,replay_matches,cause
+Barcelona,"Bunkers del Carmel",true,153.4999857391524,false,,true,run2,shërbimet
+Tokyo,"Shibuya Crossing",true,106.49921480049234,true,15.69324930286499,true,run3,qendra
+Tokyo,"Meiji Shrine",true,175.7684407342494,true,519.6665083048332,true,run3,qendra
+Tokyo,"Omoide Yokocho",true,77.12761857236879,true,81.81074437814412,true,run3,qendra
+Tokyo,"Roppongi Hills",true,94.71028356990358,true,33.489666689740275,true,run3,qendra
+Tokyo,"Tokyo National Museum",true,10309.543817602607,true,3723.893502396964,true,run3,qendra
