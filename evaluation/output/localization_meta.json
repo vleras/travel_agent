@@ -1,7 +1,7 @@
 {
-  "started_at": "2026-10-19T18:17:27.615Z",
-  "ended_at": "2026-10-19T18:23:55.599Z",
-  "git_commit": "b8d512a63b331dc012c9fc93627d915523ea9445",
+  "started_at": "2026-10-21T13:30:36.271Z",
+  "ended_at": "2026-10-21T13:49:01.615Z",
+  "git_commit": "eeb6f448556df714963028bcde98f106e3910099",
   "runner_sha256": "99b7fbe3004c9b88c364992f991933a2f9865f9484ca61293763ef17da874970",
   "node_version": "v26.0.0",
   "os": {
@@ -18,7 +18,7 @@
   },
   "network_used": null,
   "preflight": {
-    "started_at": "2026-10-19T18:16:00.599Z",
+    "started_at": "2026-10-21T13:30:16.565Z",
     "network_used": null,
     "requests_per_provider": 1,
     "user_agent": "travel_agent-thesis/1.0 (+https://github.com/vleras/travel_agent)",
@@ -26,17 +26,17 @@
       {
         "service": "Nominatim",
         "status": 200,
-        "first100": "[{\"place_id\":81103336,\"licence\":\"Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyrig"
+        "first100": "[{\"place_id\":258778524,\"licence\":\"Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyri"
       },
       {
         "service": "Photon",
         "status": 200,
-        "first100": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"osm_type\":\"R\",\"osm_id\":1167"
+        "first100": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"osm_type\":\"R\",\"osm_id\":1543"
       },
       {
         "service": "Geoapify",
         "status": 200,
-        "first100": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"datasource\":{\"sourcename\":\""
+        "first100": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"country\":\"Japan\",\"country_c"
       }
     ]
   },
@@ -63,23 +63,23 @@
   },
   "summary": {
     "total": 98,
-    "found": 81,
-    "not_found": 17,
+    "found": 80,
+    "not_found": 18,
     "service_error": 0,
-    "total_attempts": 98,
-    "requests": 156,
+    "total_attempts": 100,
+    "requests": 162,
     "http_403": 0,
     "http_5xx": 0,
     "http_errors": 0,
     "rate_limit_responses": 0,
-    "network_errors": 0,
+    "network_errors": 2,
     "body_read_errors": 0,
     "lookup_errors": 0,
     "by_type": {
       "Atraksion": {
         "total": 56,
-        "found": 54,
-        "within_threshold": 45
+        "found": 53,
+        "within_threshold": 43
       },
       "Zonë": {
         "total": 39,
